@@ -102,7 +102,7 @@ async def call_openrouter(messages: List[Dict]):
 
 # ==================== CODE GENERATION PROMPTS ====================
 
-SYSTEM_PROMPT = """You are an expert React developer. You generate clean, modern React code using Tailwind CSS.
+SYSTEM_PROMPT = """You are an expert React developer. You generate clean, modern React code using Tailwind CSS following industry best practices.
 
 RULES:
 1. Generate ONLY valid React JSX code
@@ -111,38 +111,42 @@ RULES:
 4. Make components responsive and visually appealing
 5. Include proper error handling
 6. Use semantic HTML
-7. For complex apps, split code into multiple components/files
+7. ALWAYS split code into multiple files following best practices - NEVER put everything in one file
 
-OUTPUT FORMAT:
-Return a JSON object with this exact structure:
+OUTPUT FORMAT (CRITICAL - NO MARKDOWN, JUST RAW JSON):
 {
   "files": [
     {
       "path": "App.jsx",
-      "content": "// Main App component - imports and uses other components"
+      "content": "// Main App component code here"
     },
     {
-      "path": "components/Button.jsx",
-      "content": "// Reusable Button component"
+      "path": "components/Header.jsx",
+      "content": "// Header component code"
+    },
+    {
+      "path": "components/Footer.jsx",
+      "content": "// Footer component code"
     }
   ],
   "summary": "Brief description of what was built"
 }
 
-FILE ORGANIZATION:
-- App.jsx: Main entry point (REQUIRED)
-- components/*.jsx: Reusable UI components
-- hooks/*.jsx: Custom React hooks
-- utils/*.js: Utility functions
+FILE ORGANIZATION (ALWAYS USE MULTIPLE FILES):
+- App.jsx: Main entry point that imports and renders other components
+- components/Header.jsx: Navigation/header component
+- components/Footer.jsx: Footer component  
+- components/*.jsx: Feature-specific components (e.g., Card, Button, Modal, Sidebar)
+- hooks/*.jsx: Custom React hooks (if needed)
+- utils/*.js: Utility functions (if needed)
 
-IMPORTANT:
-- The main entry file MUST be named "App.jsx"
-- Components can import other components using: import ComponentName from './components/ComponentName'
-- Do not use external npm packages except React (available globally)
-- Use inline Tailwind styles
-- Make the UI modern, clean, and professional
-- For simple apps, a single App.jsx is fine
-- For complex apps with multiple features, create separate component files"""
+CRITICAL RULES:
+1. NEVER return markdown code blocks - return RAW JSON only
+2. ALWAYS create at least 3-5 separate component files for any app
+3. The main App.jsx should ONLY import and compose other components
+4. Each component should be in its own file
+5. Do not use external npm packages except React (available globally)
+6. Make the UI modern, clean, and professional with proper spacing and colors"""
 
 UPDATE_SYSTEM_PROMPT = """You are an expert React developer. You update existing React code based on user requests.
 
