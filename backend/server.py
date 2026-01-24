@@ -300,35 +300,62 @@ async def generate_code(project_id: str, request: PromptRequest):
         try:
             # Try to find JSON in the response - handle nested braces
             import re
-            # Look for JSON block possibly wrapped in markdown code fences
-            json_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', content)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                # Find outermost JSON object
+            
+            # First, try to find JSON in markdown code blocks
+            code_block_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content)
+            if code_block_match:
+                potential_json = code_block_match.group(1).strip()
+                if potential_json.startswith('{'):
+                    try:
+                        result = json.loads(potential_json)
+                    except json.JSONDecodeError:
+                        pass
+            
+            # If no code block or parsing failed, find JSON object in content
+            if 'result' not in dir() or not isinstance(result, dict):
                 json_start = content.find("{")
                 if json_start != -1:
-                    # Count braces to find proper end
+                    # Count braces to find proper end - handle nested objects and strings
                     brace_count = 0
+                    in_string = False
+                    escape_next = False
                     json_end = json_start
+                    
                     for i, char in enumerate(content[json_start:], json_start):
-                        if char == "{":
-                            brace_count += 1
-                        elif char == "}":
-                            brace_count -= 1
-                            if brace_count == 0:
-                                json_end = i + 1
-                                break
+                        if escape_next:
+                            escape_next = False
+                            continue
+                        if char == '\\' and in_string:
+                            escape_next = True
+                            continue
+                        if char == '"' and not escape_next:
+                            in_string = not in_string
+                            continue
+                        if not in_string:
+                            if char == "{":
+                                brace_count += 1
+                            elif char == "}":
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    json_end = i + 1
+                                    break
+                    
                     json_str = content[json_start:json_end]
+                    result = json.loads(json_str)
                 else:
-                    raise ValueError("No JSON found")
+                    raise ValueError("No JSON found in response")
             
-            result = json.loads(json_str)
         except (json.JSONDecodeError, ValueError) as e:
-            logger.warning(f"JSON parse failed: {e}, using raw content")
-            # If JSON parsing fails, create a simple response with raw code
+            logger.warning(f"JSON parse failed: {e}, using raw content as code")
+            # If JSON parsing fails, try to extract code from markdown or use raw content
+            import re
+            code_match = re.search(r'```(?:jsx?|tsx?|javascript|typescript)?\s*([\s\S]*?)\s*```', content)
+            if code_match:
+                code_content = code_match.group(1).strip()
+            else:
+                code_content = content
             result = {
-                "files": [{"path": "App.jsx", "content": content}],
+                "files": [{"path": "App.jsx", "content": code_content}],
                 "summary": "Generated code"
             }
         
