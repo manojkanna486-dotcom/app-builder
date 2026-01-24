@@ -151,6 +151,12 @@ export default function BuilderPage() {
   const [selectedFile, setSelectedFile] = useState("App.jsx");
   const [viewMode, setViewMode] = useState("preview");
   const [copied, setCopied] = useState(false);
+  
+  // Clarification state
+  const [clarificationQuestions, setClarificationQuestions] = useState(null);
+  const [clarificationAnswers, setClarificationAnswers] = useState({});
+  const [originalPrompt, setOriginalPrompt] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     fetchProjectData();
@@ -158,7 +164,7 @@ export default function BuilderPage() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, clarificationQuestions]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -196,8 +202,90 @@ export default function BuilderPage() {
     return file?.content || "// No file selected";
   };
 
+  // Analyze prompt for clarification
+  const analyzePrompt = async (userPrompt) => {
+    try {
+      setAnalyzing(true);
+      const res = await axios.post(`${API}/projects/${projectId}/analyze`, {
+        prompt: userPrompt,
+      });
+      
+      if (res.data.needs_clarification && res.data.questions?.length > 0) {
+        setClarificationQuestions(res.data);
+        setOriginalPrompt(userPrompt);
+        setClarificationAnswers({});
+        return true; // Needs clarification
+      }
+      return false; // Proceed with generation
+    } catch (err) {
+      console.error("Analysis error:", err);
+      return false; // On error, proceed without clarification
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  // Handle clarification answer selection
+  const handleClarificationAnswer = (questionId, answer) => {
+    setClarificationAnswers((prev) => ({
+      ...prev,
+      [questionId]: answer,
+    }));
+  };
+
+  // Submit clarification answers and generate
+  const handleSubmitClarification = async () => {
+    // Build enhanced prompt
+    const answers = Object.values(clarificationAnswers).filter(Boolean);
+    const enhancedPrompt = `${originalPrompt}\n\nAdditional context:\n${answers.map(a => `- ${a}`).join('\n')}`;
+    
+    setClarificationQuestions(null);
+    setClarificationAnswers({});
+    setOriginalPrompt("");
+    
+    // Proceed with generation
+    await doGenerate(enhancedPrompt);
+  };
+
+  // Skip clarification and generate with original prompt
+  const handleSkipClarification = async () => {
+    const promptToUse = originalPrompt;
+    setClarificationQuestions(null);
+    setClarificationAnswers({});
+    setOriginalPrompt("");
+    
+    await doGenerate(promptToUse);
+  };
+
   const handleGenerate = async () => {
-    if (!prompt.trim() || generating) return;
+    if (!prompt.trim() || generating || analyzing) return;
+
+    const userPrompt = prompt.trim();
+    setPrompt("");
+    
+    // Add user message immediately
+    const tempUserMsg = {
+      id: `temp-${Date.now()}`,
+      role: "user",
+      content: userPrompt,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempUserMsg]);
+    
+    // Check if clarification is needed (only for new projects without existing code)
+    const needsClarification = await analyzePrompt(userPrompt);
+    
+    if (!needsClarification) {
+      await doGenerate(userPrompt);
+    }
+    // If needs clarification, the UI will show the questions
+  };
+
+  const doGenerate = async (userPrompt) => {
+    setGenerating(true);
+    setGenerationStatus("Starting...");
+    setStreamingCode("");
+    setViewMode("code"); // Switch to code view to show streaming
 
     const userPrompt = prompt.trim();
     setPrompt("");
