@@ -430,12 +430,9 @@ async def fix_project_code(project_id: str):
         
         # Update project
         await database.update_project(project_id, {
-            {"id": project_id},
-            {"$set": {
-                "current_version": new_version_number,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }}
-        )
+            "current_version": new_version_number,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        })
         
         # Add chat message
         fix_msg = ChatMessage(
