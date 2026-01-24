@@ -644,38 +644,46 @@ export default function BuilderPage() {
 
           {/* Input Area */}
           <div className="chat-input-area">
-            <div className="relative">
-              <Textarea
-                data-testid="prompt-input"
-                placeholder="Describe what you want to build..."
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleGenerate();
-                  }
-                }}
-                disabled={generating}
-                className="min-h-[80px] resize-none pr-12 bg-card border-border focus:ring-primary"
-              />
-              <Button
-                data-testid="send-btn"
-                size="icon"
-                onClick={handleGenerate}
-                disabled={!prompt.trim() || generating}
-                className="absolute right-2 bottom-2 h-8 w-8 glow-blue-hover"
-              >
-                {generating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Press Enter to send, Shift+Enter for new line
-            </p>
+            {clarificationQuestions ? (
+              <div className="text-center py-2 text-xs text-muted-foreground">
+                Please answer the questions above or skip to generate
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <Textarea
+                    data-testid="prompt-input"
+                    placeholder={analyzing ? "Analyzing..." : "Describe what you want to build..."}
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleGenerate();
+                      }
+                    }}
+                    disabled={generating || analyzing}
+                    className="min-h-[80px] resize-none pr-12 bg-card border-border focus:ring-primary"
+                  />
+                  <Button
+                    data-testid="send-btn"
+                    size="icon"
+                    onClick={handleGenerate}
+                    disabled={!prompt.trim() || generating || analyzing}
+                    className="absolute right-2 bottom-2 h-8 w-8 glow-blue-hover"
+                  >
+                    {generating || analyzing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Press Enter to send, Shift+Enter for new line
+                </p>
+              </>
+            )}
           </div>
         </div>
 
