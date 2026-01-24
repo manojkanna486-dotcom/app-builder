@@ -426,7 +426,7 @@ export default function BuilderPage() {
                   title="App Preview"
                   srcDoc={previewHtml}
                   className="preview-iframe"
-                  sandbox="allow-scripts allow-modals"
+                  sandbox="allow-scripts allow-same-origin allow-modals allow-forms allow-popups"
                 />
               </div>
             ) : (
