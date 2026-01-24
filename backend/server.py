@@ -113,6 +113,7 @@ RULES:
 4. Make components responsive and visually appealing
 5. Include proper error handling
 6. Use semantic HTML
+7. For complex apps, split code into multiple components/files
 
 OUTPUT FORMAT:
 Return a JSON object with this exact structure:
@@ -120,22 +121,34 @@ Return a JSON object with this exact structure:
   "files": [
     {
       "path": "App.jsx",
-      "content": "// Full React component code here"
+      "content": "// Main App component - imports and uses other components"
+    },
+    {
+      "path": "components/Button.jsx",
+      "content": "// Reusable Button component"
     }
   ],
   "summary": "Brief description of what was built"
 }
 
+FILE ORGANIZATION:
+- App.jsx: Main entry point (REQUIRED)
+- components/*.jsx: Reusable UI components
+- hooks/*.jsx: Custom React hooks
+- utils/*.js: Utility functions
+
 IMPORTANT:
 - The main entry file MUST be named "App.jsx"
-- All code must be self-contained in the files provided
-- Do not use external imports except React (which is available globally)
-- Use inline Tailwind styles, no external CSS files needed
-- Make the UI modern, clean, and professional"""
+- Components can import other components using: import ComponentName from './components/ComponentName'
+- Do not use external npm packages except React (available globally)
+- Use inline Tailwind styles
+- Make the UI modern, clean, and professional
+- For simple apps, a single App.jsx is fine
+- For complex apps with multiple features, create separate component files"""
 
 UPDATE_SYSTEM_PROMPT = """You are an expert React developer. You update existing React code based on user requests.
 
-CURRENT CODE:
+CURRENT FILES:
 {current_code}
 
 USER REQUEST:
@@ -146,7 +159,8 @@ RULES:
 2. Keep all existing functionality intact
 3. Maintain the same code structure and patterns
 4. Use Tailwind CSS for styling
-5. Return the COMPLETE updated code
+5. Return ALL files (modified and unmodified)
+6. You can add new files if needed
 
 OUTPUT FORMAT:
 Return a JSON object with this exact structure:
@@ -154,12 +168,21 @@ Return a JSON object with this exact structure:
   "files": [
     {
       "path": "App.jsx", 
-      "content": "// Complete updated React component code"
+      "content": "// Complete App component code"
+    },
+    {
+      "path": "components/NewComponent.jsx",
+      "content": "// New or updated component"
     }
   ],
   "summary": "Brief description of changes made",
   "changes": ["List of specific changes made"]
-}"""
+}
+
+IMPORTANT:
+- Return ALL files, not just changed ones
+- Keep file paths consistent with existing structure
+- Components import other components using: import X from './components/X'"""
 
 INTENT_DIFF_PROMPT = """Analyze this update request and identify what needs to change.
 
