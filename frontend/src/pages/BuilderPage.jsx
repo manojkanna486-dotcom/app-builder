@@ -287,22 +287,6 @@ export default function BuilderPage() {
     setStreamingCode("");
     setViewMode("code"); // Switch to code view to show streaming
 
-    const userPrompt = prompt.trim();
-    setPrompt("");
-    setGenerating(true);
-    setGenerationStatus("Starting...");
-    setStreamingCode("");
-    setViewMode("code"); // Switch to code view to show streaming
-
-    // Optimistically add user message
-    const tempUserMsg = {
-      id: `temp-${Date.now()}`,
-      role: "user",
-      content: userPrompt,
-      created_at: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, tempUserMsg]);
-
     try {
       // Use streaming endpoint
       const response = await fetch(`${API}/projects/${projectId}/generate/stream`, {
