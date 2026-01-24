@@ -144,6 +144,8 @@ export default function BuilderPage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState("");
+  const [streamingCode, setStreamingCode] = useState("");
   const [previewHtml, setPreviewHtml] = useState("");
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState("App.jsx");
