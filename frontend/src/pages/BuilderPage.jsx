@@ -202,6 +202,9 @@ export default function BuilderPage() {
     const userPrompt = prompt.trim();
     setPrompt("");
     setGenerating(true);
+    setGenerationStatus("Starting...");
+    setStreamingCode("");
+    setViewMode("code"); // Switch to code view to show streaming
 
     // Optimistically add user message
     const tempUserMsg = {
@@ -213,39 +216,82 @@ export default function BuilderPage() {
     setMessages((prev) => [...prev, tempUserMsg]);
 
     try {
-      const res = await axios.post(`${API}/projects/${projectId}/generate`, {
-        prompt: userPrompt,
+      // Use streaming endpoint
+      const response = await fetch(`${API}/projects/${projectId}/generate/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt: userPrompt }),
       });
 
-      // Update preview
-      const previewRes = await axios.get(`${API}/projects/${projectId}/preview`);
-      setPreviewHtml(previewRes.data.html);
-
-      // Update files
-      if (res.data.files?.length > 0) {
-        setFiles(res.data.files);
-        // Keep selected file if it still exists, otherwise select first file
-        const stillExists = res.data.files.some((f) => f.path === selectedFile);
-        if (!stillExists) {
-          setSelectedFile(res.data.files[0].path);
-        }
+      if (!response.ok) {
+        throw new Error("Generation failed");
       }
 
-      // Refresh messages and versions
-      const [messagesRes, versionsRes] = await Promise.all([
-        axios.get(`${API}/projects/${projectId}/messages`),
-        axios.get(`${API}/projects/${projectId}/versions`),
-      ]);
-      setMessages(messagesRes.data);
-      setVersions(versionsRes.data);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-      toast.success(`Version ${res.data.version} generated!`);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === "status") {
+                setGenerationStatus(data.message);
+              } else if (data.type === "code") {
+                setStreamingCode((prev) => prev + data.content);
+              } else if (data.type === "complete") {
+                // Generation complete
+                if (data.files?.length > 0) {
+                  setFiles(data.files);
+                  const stillExists = data.files.some((f) => f.path === selectedFile);
+                  if (!stillExists) {
+                    setSelectedFile(data.files[0].path);
+                  }
+                }
+                
+                // Update preview
+                const previewRes = await axios.get(`${API}/projects/${projectId}/preview`);
+                setPreviewHtml(previewRes.data.html);
+
+                // Refresh messages and versions
+                const [messagesRes, versionsRes] = await Promise.all([
+                  axios.get(`${API}/projects/${projectId}/messages`),
+                  axios.get(`${API}/projects/${projectId}/versions`),
+                ]);
+                setMessages(messagesRes.data);
+                setVersions(versionsRes.data);
+                setProject((prev) => ({ ...prev, current_version: data.version }));
+
+                toast.success(`Version ${data.version} generated with ${data.files?.length || 0} files!`);
+                setViewMode("preview");
+              } else if (data.type === "error") {
+                throw new Error(data.message);
+              }
+            } catch (parseErr) {
+              // Ignore JSON parse errors for incomplete chunks
+            }
+          }
+        }
+      }
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Generation failed");
+      toast.error(err.message || "Generation failed");
       // Remove optimistic message on error
       setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
     } finally {
       setGenerating(false);
+      setGenerationStatus("");
+      setStreamingCode("");
     }
   };
 
