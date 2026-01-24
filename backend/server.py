@@ -606,6 +606,22 @@ async def generate_code(project_id: str, request: PromptRequest):
         if not files:
             raise ValueError("No files in parsed result")
         
+        # Check if we only got 1 file and the content looks like it has embedded JSON with multiple files
+        # This handles cases where JSON parsing partially failed
+        if len(files) == 1 and files[0].get("content", "").startswith("```"):
+            content_check = files[0]["content"]
+            # Try to extract JSON from markdown in the content
+            json_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?"files"[\s\S]*?\})\s*```', content_check)
+            if json_match:
+                try:
+                    extracted = json.loads(json_match.group(1), strict=False)
+                    if extracted.get("files") and len(extracted["files"]) > 1:
+                        files = extracted["files"]
+                        summary = extracted.get("summary", summary)
+                        logger.info(f"Extracted {len(files)} files from embedded JSON")
+                except:
+                    pass
+        
         # Validate files structure
         for i, f in enumerate(files):
             if not isinstance(f, dict):
