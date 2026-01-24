@@ -617,10 +617,20 @@ export default function BuilderPage() {
                     <span className="text-xs text-muted-foreground font-mono">
                       {selectedFile}
                     </span>
+                    {generating && (
+                      <span className="ml-2 text-xs text-primary flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        {generationStatus}
+                      </span>
+                    )}
                   </div>
                   <ScrollArea className="h-[calc(100%-32px)]">
                     <pre className="code-view">
-                      <code>{getSelectedFileContent()}</code>
+                      <code>
+                        {generating && streamingCode 
+                          ? streamingCode 
+                          : getSelectedFileContent()}
+                      </code>
                     </pre>
                   </ScrollArea>
                 </div>
