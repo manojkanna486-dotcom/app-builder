@@ -566,7 +566,6 @@ def generate_preview_html_multifile(files: list) -> str:
         all_code_parts.append(f"// === File: {f['path']} ===\n{cleaned}")
     
     all_code = "\n\n".join(all_code_parts)
-    escaped_code = cleaned_code.replace("</script>", "<\\/script>")
     
     # Build HTML template with string concatenation to avoid f-string brace issues
     html_template = """<!DOCTYPE html>
