@@ -564,6 +564,75 @@ async def get_latest_version(project_id: str):
         return {"version": None, "files": []}
     return version
 
+# ==================== PROMPT ANALYSIS ====================
+
+@api_router.post("/projects/{project_id}/analyze")
+async def analyze_prompt(project_id: str, request: PromptRequest):
+    """Analyze a prompt and determine if clarification is needed"""
+    
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check if this is an update (existing code) or new generation
+    latest_version = await database.get_latest_version(project_id)
+    is_update = latest_version and latest_version.get("files")
+    
+    # For updates, we generally don't need clarification
+    if is_update:
+        return {
+            "needs_clarification": False,
+            "message": "Ready to update existing code"
+        }
+    
+    # Analyze the prompt
+    messages = [
+        {"role": "system", "content": CLARIFICATION_PROMPT.replace("{prompt}", request.prompt)},
+        {"role": "user", "content": f"Analyze this request: {request.prompt}"}
+    ]
+    
+    try:
+        response = await call_openrouter(messages)
+        content = response["choices"][0]["message"]["content"]
+        
+        # Parse response
+        try:
+            result = json.loads(content, strict=False)
+        except json.JSONDecodeError:
+            # Try to extract JSON
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if json_match:
+                result = json.loads(json_match.group(), strict=False)
+            else:
+                result = {"needs_clarification": False}
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Prompt analysis error: {e}")
+        # On error, proceed without clarification
+        return {"needs_clarification": False}
+
+class ClarificationResponse(BaseModel):
+    original_prompt: str
+    answers: Dict[str, str]  # question_id -> answer
+
+@api_router.post("/projects/{project_id}/generate-with-context")
+async def generate_with_context(project_id: str, data: ClarificationResponse):
+    """Generate code with additional context from clarification answers"""
+    
+    # Build enhanced prompt from original + answers
+    enhanced_prompt = data.original_prompt + "\n\nAdditional context:\n"
+    for q_id, answer in data.answers.items():
+        enhanced_prompt += f"- {answer}\n"
+    
+    # Use the regular generate endpoint logic
+    request = PromptRequest(prompt=enhanced_prompt)
+    
+    # Forward to streaming generation
+    return await generate_code_stream(project_id, request)
+
 # ==================== CHAT ROUTES ====================
 
 @api_router.get("/projects/{project_id}/messages", response_model=List[ChatMessage])
