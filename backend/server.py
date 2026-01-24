@@ -89,11 +89,11 @@ async def call_openrouter(messages: List[Dict]):
         "model": "anthropic/claude-sonnet-4",
         "messages": messages,
         "stream": False,
-        "max_tokens": 8000,
+        "max_tokens": 16000,  # Increased for multi-file responses
         "temperature": 0.7
     }
     
-    async with httpx.AsyncClient(timeout=120.0) as http_client:
+    async with httpx.AsyncClient(timeout=180.0) as http_client:
         response = await http_client.post(f"{OPENROUTER_BASE_URL}/chat/completions", json=payload, headers=headers)
         if response.status_code != 200:
             logger.error(f"OpenRouter error: {response.text}")
