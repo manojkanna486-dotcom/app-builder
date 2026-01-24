@@ -295,10 +295,11 @@ async def generate_code(project_id: str, request: PromptRequest):
         
         # Parse response
         content = response["choices"][0]["message"]["content"]
+        logger.info(f"LLM response length: {len(content)}")
         
         # Extract JSON from response
+        result = None
         try:
-            # Try to find JSON in the response - handle nested braces
             import re
             
             # First, try to find JSON in markdown code blocks
@@ -308,11 +309,12 @@ async def generate_code(project_id: str, request: PromptRequest):
                 if potential_json.startswith('{'):
                     try:
                         result = json.loads(potential_json)
-                    except json.JSONDecodeError:
-                        pass
+                        logger.info("Parsed JSON from code block")
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Code block JSON parse failed: {e}")
             
             # If no code block or parsing failed, find JSON object in content
-            if 'result' not in dir() or not isinstance(result, dict):
+            if result is None:
                 json_start = content.find("{")
                 if json_start != -1:
                     # Count braces to find proper end - handle nested objects and strings
@@ -341,19 +343,22 @@ async def generate_code(project_id: str, request: PromptRequest):
                                     break
                     
                     json_str = content[json_start:json_end]
+                    logger.info(f"Attempting to parse JSON: {json_str[:100]}...")
                     result = json.loads(json_str)
                 else:
                     raise ValueError("No JSON found in response")
             
         except (json.JSONDecodeError, ValueError) as e:
-            logger.warning(f"JSON parse failed: {e}, using raw content as code")
+            logger.warning(f"JSON parse failed: {e}, extracting code from content")
             # If JSON parsing fails, try to extract code from markdown or use raw content
             import re
             code_match = re.search(r'```(?:jsx?|tsx?|javascript|typescript)?\s*([\s\S]*?)\s*```', content)
             if code_match:
                 code_content = code_match.group(1).strip()
+                logger.info("Extracted code from markdown block")
             else:
                 code_content = content
+                logger.info("Using raw content as code")
             result = {
                 "files": [{"path": "App.jsx", "content": code_content}],
                 "summary": "Generated code"
