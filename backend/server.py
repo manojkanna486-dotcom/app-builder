@@ -652,12 +652,10 @@ async def generate_code(project_id: str, request: PromptRequest):
             status="success",
             delta_plan={"summary": summary, "changes": result.get("changes", [])}
         )
-        await db.versions.insert_one(version.model_dump())
+        await database.create_version(version.model_dump())
         
         # Update project
-        await db.projects.update_one(
-            {"id": project_id},
-            {"$set": {
+        await database.update_project(project_id, {
                 "current_version": new_version_number,
                 "summary": summary or project.get("summary", ""),
                 "updated_at": datetime.now(timezone.utc).isoformat()
