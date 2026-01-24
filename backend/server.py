@@ -461,8 +461,9 @@ def generate_preview_html(react_code: str) -> str:
     cleaned_code = re.sub(r'^export\s+default\s+', '', cleaned_code, flags=re.MULTILINE)
     cleaned_code = re.sub(r'^export\s+', '', cleaned_code, flags=re.MULTILINE)
     
-    # Escape backticks and special chars for embedding in template literal
-    escaped_code = cleaned_code.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+    # Don't over-escape - the code should work as-is in the script tag
+    # Only need to escape the script closing tag if present
+    escaped_code = cleaned_code.replace("</script>", "<\\/script>")
     
     return f"""<!DOCTYPE html>
 <html>
