@@ -380,6 +380,91 @@ async def auto_fix_code(files: List[dict], errors: List[str], project_summary: s
 
 # ==================== VERSION ROUTES ====================
 
+@api_router.get("/projects/{project_id}/validate")
+async def validate_project_code(project_id: str):
+    """Validate the latest version's code and return any errors"""
+    version = await db.versions.find_one(
+        {"project_id": project_id, "status": "success"},
+        {"_id": 0},
+        sort=[("version_number", -1)]
+    )
+    
+    if not version or not version.get("files"):
+        return {"valid": True, "errors": [], "message": "No code to validate"}
+    
+    errors = validate_react_code(version["files"])
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "message": "Code is valid" if not errors else f"Found {len(errors)} issue(s)"
+    }
+
+@api_router.post("/projects/{project_id}/fix")
+async def fix_project_code(project_id: str):
+    """Attempt to auto-fix the latest version's code errors"""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    version = await db.versions.find_one(
+        {"project_id": project_id, "status": "success"},
+        {"_id": 0},
+        sort=[("version_number", -1)]
+    )
+    
+    if not version or not version.get("files"):
+        return {"fixed": False, "message": "No code to fix"}
+    
+    errors = validate_react_code(version["files"])
+    if not errors:
+        return {"fixed": False, "message": "No errors to fix"}
+    
+    # Attempt auto-fix
+    fixed_files, fix_summary = await auto_fix_code(
+        version["files"], 
+        errors, 
+        project.get("summary", "")
+    )
+    
+    if fixed_files:
+        # Create new version with fixed code
+        new_version_number = version["version_number"] + 1
+        new_version = Version(
+            project_id=project_id,
+            version_number=new_version_number,
+            prompt="Auto-fix: " + fix_summary,
+            files=[VersionFile(**f) for f in fixed_files],
+            status="success",
+            delta_plan={"summary": fix_summary, "auto_fixed": True}
+        )
+        await db.versions.insert_one(new_version.model_dump())
+        
+        # Update project
+        await db.projects.update_one(
+            {"id": project_id},
+            {"$set": {
+                "current_version": new_version_number,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        # Add chat message
+        fix_msg = ChatMessage(
+            project_id=project_id,
+            role="assistant",
+            content=f"🔧 Auto-fixed: {fix_summary}"
+        )
+        await db.chat_messages.insert_one(fix_msg.model_dump())
+        
+        return {
+            "fixed": True,
+            "message": fix_summary,
+            "new_version": new_version_number,
+            "files": fixed_files
+        }
+    
+    return {"fixed": False, "message": "Could not auto-fix the errors"}
+
 @api_router.get("/projects/{project_id}/versions", response_model=List[Version])
 async def get_versions(project_id: str):
     versions = await db.versions.find({"project_id": project_id}, {"_id": 0}).sort("version_number", -1).to_list(100)
@@ -392,6 +477,7 @@ async def get_latest_version(project_id: str):
         {"_id": 0},
         sort=[("version_number", -1)]
     )
+    
     if not version:
         return {"version": None, "files": []}
     return version
