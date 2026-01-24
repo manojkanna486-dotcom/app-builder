@@ -459,13 +459,20 @@ export default function BuilderPage() {
                   <div className="w-8 h-8 rounded-lg bg-card border border-border flex items-center justify-center">
                     <Bot className="w-4 h-4 text-muted-foreground" />
                   </div>
-                  <div className="chat-bubble-ai px-4 py-3">
-                    <div className="flex items-center gap-2">
+                  <div className="chat-bubble-ai px-4 py-3 min-w-[200px]">
+                    <div className="flex items-center gap-2 mb-2">
                       <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                      <span className="text-sm text-muted-foreground">
-                        Generating code...
+                      <span className="text-sm font-medium text-foreground">
+                        {generationStatus || "Generating..."}
                       </span>
                     </div>
+                    {streamingCode && (
+                      <div className="mt-2 p-2 bg-background/50 rounded text-xs font-mono text-muted-foreground max-h-24 overflow-hidden">
+                        <code className="whitespace-pre-wrap">
+                          {streamingCode.slice(-200)}
+                        </code>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
