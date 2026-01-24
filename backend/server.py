@@ -199,35 +199,34 @@ Return JSON:
 
 @api_router.get("/")
 async def root():
-    return {"message": "App Builder API v1"}
+    return {"message": "App Builder API v1", "db_type": os.environ.get('DB_TYPE', 'mongodb')}
 
 @api_router.post("/projects", response_model=Project)
 async def create_project(data: ProjectCreate):
     project = Project(name=data.name, description=data.description)
     doc = project.model_dump()
-    await db.projects.insert_one(doc)
+    await database.create_project(doc)
     return project
 
 @api_router.get("/projects", response_model=List[Project])
 async def get_projects():
-    projects = await db.projects.find({}, {"_id": 0}).to_list(100)
+    projects = await database.get_projects()
     return projects
 
 @api_router.get("/projects/{project_id}", response_model=Project)
 async def get_project(project_id: str):
-    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    project = await database.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
 
 @api_router.delete("/projects/{project_id}")
 async def delete_project(project_id: str):
-    result = await db.projects.delete_one({"id": project_id})
-    if result.deleted_count == 0:
+    project = await database.get_project(project_id)
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    # Also delete related data
-    await db.versions.delete_many({"project_id": project_id})
-    await db.chat_messages.delete_many({"project_id": project_id})
+    await database.delete_project_data(project_id)
+    await database.delete_project(project_id)
     return {"status": "deleted"}
 
 # ==================== CODE VALIDATION & AUTO-FIX ====================
