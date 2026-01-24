@@ -276,11 +276,11 @@ async def generate_code(project_id: str, request: PromptRequest):
             for f in latest_version["files"]:
                 current_code += f"// File: {f['path']}\n{f['content']}\n\n"
             
+            # Use string replacement instead of .format() to avoid issues with { } in code
+            system_content = UPDATE_SYSTEM_PROMPT.replace("{current_code}", current_code).replace("{user_request}", request.prompt)
+            
             messages = [
-                {"role": "system", "content": UPDATE_SYSTEM_PROMPT.format(
-                    current_code=current_code,
-                    user_request=request.prompt
-                )},
+                {"role": "system", "content": system_content},
                 {"role": "user", "content": f"Update the code based on this request: {request.prompt}"}
             ]
         else:
