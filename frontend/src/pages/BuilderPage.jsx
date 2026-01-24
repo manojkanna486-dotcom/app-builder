@@ -206,16 +206,20 @@ export default function BuilderPage() {
   const analyzePrompt = async (userPrompt) => {
     try {
       setAnalyzing(true);
+      console.log("Analyzing prompt:", userPrompt);
       const res = await axios.post(`${API}/projects/${projectId}/analyze`, {
         prompt: userPrompt,
       });
+      console.log("Analysis response:", res.data);
       
       if (res.data.needs_clarification && res.data.questions?.length > 0) {
+        console.log("Setting clarification questions:", res.data);
         setClarificationQuestions(res.data);
         setOriginalPrompt(userPrompt);
         setClarificationAnswers({});
         return true; // Needs clarification
       }
+      console.log("No clarification needed");
       return false; // Proceed with generation
     } catch (err) {
       console.error("Analysis error:", err);
