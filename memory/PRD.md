@@ -13,17 +13,18 @@ Create an App Builder App (v0 clone) that allows users to build React applicatio
 
 ### Backend (FastAPI)
 - **Framework**: FastAPI with async support
-- **Database**: MongoDB (Motor async driver)
+- **Database**: MongoDB (default) or Supabase PostgreSQL (configurable via DB_TYPE)
 - **LLM Provider**: OpenRouter (Claude Sonnet 4)
 - **Key Files**:
-  - `/app/backend/server.py` - Main API server with all endpoints
+  - `/app/backend/server.py` - Main API server
+  - `/app/backend/database.py` - Database abstraction layer
 
 ### Frontend (React)
 - **Framework**: React 19 with React Router
 - **Styling**: Tailwind CSS + shadcn/ui components
 - **Key Files**:
   - `/app/frontend/src/pages/HomePage.jsx` - Project list page
-  - `/app/frontend/src/pages/BuilderPage.jsx` - Builder with chat + preview
+  - `/app/frontend/src/pages/BuilderPage.jsx` - Builder with chat + preview + file tree
 
 ### API Endpoints
 - `GET /api/projects` - List projects
@@ -36,6 +37,8 @@ Create an App Builder App (v0 clone) that allows users to build React applicatio
 - `POST /api/projects/{id}/messages` - Add message
 - `POST /api/projects/{id}/generate` - Generate code via LLM
 - `GET /api/projects/{id}/preview` - Get preview HTML
+- `GET /api/projects/{id}/validate` - Validate code for errors
+- `POST /api/projects/{id}/fix` - Auto-fix code errors
 
 ## User Personas
 1. **Non-technical Users**: Build apps via natural language
@@ -59,6 +62,13 @@ Create an App Builder App (v0 clone) that allows users to build React applicatio
   - Modern dark theme UI
   - Chat interface with message history
 
+- **Jan 24, 2026**: Feature Updates
+  - **Multi-file project support**: Generate apps with multiple component files
+  - **File tree navigator**: Browse files in Code view sidebar
+  - **Code validation**: Detect syntax errors, unmatched brackets, missing components
+  - **Auto-fix**: LLM-powered automatic code repair
+  - **Database abstraction**: Supports MongoDB (default) and Supabase PostgreSQL
+
 ## Prioritized Backlog
 
 ### P0 (Critical) - ✅ Complete
@@ -66,28 +76,32 @@ Create an App Builder App (v0 clone) that allows users to build React applicatio
 - [x] Chat interface
 - [x] Code generation
 - [x] Preview rendering
+- [x] Multi-file support
+- [x] Code validation
 
 ### P1 (Important) - Next Phase
 - [ ] Streaming code generation (show code as it generates)
-- [ ] Code validation/linting before preview
-- [ ] Auto-fix broken code
-- [ ] Multi-file project support
+- [ ] User authentication (Supabase Auth)
+- [ ] Project templates
 
 ### P2 (Nice to Have)
-- [ ] User authentication (Supabase Auth)
 - [ ] Export project as ZIP
 - [ ] Share projects publicly
 - [ ] Custom component library
 - [ ] AI-assisted debugging
 
-## Next Tasks
-1. Add streaming support for real-time code generation feedback
-2. Implement code validation with TypeScript/ESLint
-3. Add multi-file support with file tree navigator
-4. Migrate to Supabase PostgreSQL (user provided Transaction Pooler URI)
-5. Add user authentication
+## Database Configuration
+To switch to Supabase PostgreSQL:
+1. Get Transaction Pooler URI from Supabase Dashboard -> Connect -> Transaction Pooler
+2. Set in `/app/backend/.env`:
+   ```
+   DB_TYPE="supabase"
+   SUPABASE_DB_URL="postgresql://postgres.[REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres"
+   ```
+3. Restart backend
 
-## Technical Notes
-- Preview uses Babel standalone for JSX transformation
-- Import statements are stripped from generated code (React provided globally)
-- Uses sandbox with allow-scripts and allow-same-origin for iframe security
+## Next Tasks
+1. Get Supabase Transaction Pooler URI to enable PostgreSQL
+2. Add streaming support for real-time code generation feedback
+3. Implement user authentication
+
