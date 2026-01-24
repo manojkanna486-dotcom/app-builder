@@ -380,11 +380,7 @@ async def auto_fix_code(files: List[dict], errors: List[str], project_summary: s
 @api_router.get("/projects/{project_id}/validate")
 async def validate_project_code(project_id: str):
     """Validate the latest version's code and return any errors"""
-    version = await db.versions.find_one(
-        {"project_id": project_id, "status": "success"},
-        {"_id": 0},
-        sort=[("version_number", -1)]
-    )
+    version = await database.get_latest_version(project_id)
     
     if not version or not version.get("files"):
         return {"valid": True, "errors": [], "message": "No code to validate"}
@@ -399,15 +395,11 @@ async def validate_project_code(project_id: str):
 @api_router.post("/projects/{project_id}/fix")
 async def fix_project_code(project_id: str):
     """Attempt to auto-fix the latest version's code errors"""
-    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    project = await database.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    version = await db.versions.find_one(
-        {"project_id": project_id, "status": "success"},
-        {"_id": 0},
-        sort=[("version_number", -1)]
-    )
+    version = await database.get_latest_version(project_id)
     
     if not version or not version.get("files"):
         return {"fixed": False, "message": "No code to fix"}
@@ -434,10 +426,10 @@ async def fix_project_code(project_id: str):
             status="success",
             delta_plan={"summary": fix_summary, "auto_fixed": True}
         )
-        await db.versions.insert_one(new_version.model_dump())
+        await database.create_version(new_version.model_dump())
         
         # Update project
-        await db.projects.update_one(
+        await database.update_project(project_id, {
             {"id": project_id},
             {"$set": {
                 "current_version": new_version_number,
