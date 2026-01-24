@@ -302,32 +302,31 @@ async def generate_code(project_id: str, request: PromptRequest):
         import re
         
         try:
-            # Method 1: Try direct JSON parse of the whole response
+            # Method 1: Try direct JSON parse of the whole response (with strict=False for newlines)
             try:
-                result = json.loads(content)
+                result = json.loads(content, strict=False)
                 logger.info("Direct JSON parse successful")
             except json.JSONDecodeError:
                 pass
             
             # Method 2: Try to find JSON in markdown code blocks
             if result is None:
-                code_block_match = re.search(r'```json\s*([\s\S]*?)\s*```', content)
+                code_block_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content)
                 if code_block_match:
                     try:
-                        result = json.loads(code_block_match.group(1).strip())
-                        logger.info("Parsed JSON from ```json``` block")
+                        json_content = code_block_match.group(1).strip()
+                        result = json.loads(json_content, strict=False)
+                        logger.info("Parsed JSON from code block")
                     except json.JSONDecodeError as e:
                         logger.warning(f"JSON block parse failed: {e}")
             
-            # Method 3: Find the last complete JSON object
+            # Method 3: Find JSON object by looking for {"files"
             if result is None:
-                # Find all potential JSON starts
                 json_starts = [m.start() for m in re.finditer(r'\{\s*"files"', content)]
                 if json_starts:
-                    # Try from the first occurrence
                     for start_idx in json_starts:
                         try:
-                            # Use a simple approach - find balanced braces
+                            # Find balanced braces
                             depth = 0
                             in_string = False
                             escape = False
@@ -354,8 +353,8 @@ async def generate_code(project_id: str, request: PromptRequest):
                             
                             if end_idx > start_idx:
                                 json_str = content[start_idx:end_idx]
-                                result = json.loads(json_str)
-                                logger.info(f"Parsed JSON using brace matching from position {start_idx}")
+                                result = json.loads(json_str, strict=False)
+                                logger.info(f"Parsed JSON using brace matching")
                                 break
                         except json.JSONDecodeError as e:
                             logger.warning(f"Brace matching JSON parse failed: {e}")
@@ -366,13 +365,12 @@ async def generate_code(project_id: str, request: PromptRequest):
                 
         except Exception as e:
             logger.warning(f"All JSON parse methods failed: {e}, extracting code from content")
-            # Fallback: try to extract code from markdown or use raw content
+            # Fallback: extract code from markdown or use raw content
             code_match = re.search(r'```(?:jsx?|tsx?|javascript|typescript)?\s*([\s\S]*?)\s*```', content)
             if code_match:
                 code_content = code_match.group(1).strip()
                 logger.info("Extracted code from markdown block")
             else:
-                # Last resort - use the raw content
                 code_content = content
                 logger.info("Using raw content as code")
             result = {
