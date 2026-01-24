@@ -127,7 +127,14 @@ class MongoDatabase(DatabaseInterface):
 
 
 class SupabaseDatabase(DatabaseInterface):
-    """Supabase PostgreSQL implementation using asyncpg"""
+    """
+    Supabase PostgreSQL implementation using asyncpg.
+    
+    IMPORTANT: Use Transaction Pooler connection string (port 6543), NOT Direct Connection (5432).
+    Get it from: Supabase Dashboard -> Project -> Connect -> Transaction Pooler
+    
+    Example: postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
+    """
     
     def __init__(self, database_url: str):
         self.database_url = database_url
