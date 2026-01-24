@@ -497,14 +497,10 @@ async def generate_code(project_id: str, request: PromptRequest):
     
     # Save user message
     user_msg = ChatMessage(project_id=project_id, role="user", content=request.prompt)
-    await db.chat_messages.insert_one(user_msg.model_dump())
+    await database.create_message(user_msg.model_dump())
     
     # Get latest successful version
-    latest_version = await db.versions.find_one(
-        {"project_id": project_id, "status": "success"},
-        {"_id": 0},
-        sort=[("version_number", -1)]
-    )
+    latest_version = await database.get_latest_version(project_id)
     
     new_version_number = (latest_version["version_number"] + 1) if latest_version else 1
     
