@@ -78,7 +78,7 @@ class PromptRequest(BaseModel):
 
 # ==================== OPENROUTER LLM ====================
 
-async def call_openrouter(messages: List[Dict], stream: bool = False):
+async def call_openrouter(messages: List[Dict]):
     """Call OpenRouter API"""
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -90,25 +90,17 @@ async def call_openrouter(messages: List[Dict], stream: bool = False):
     payload = {
         "model": "anthropic/claude-sonnet-4",
         "messages": messages,
-        "stream": stream,
+        "stream": False,
         "max_tokens": 8000,
         "temperature": 0.7
     }
     
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        if stream:
-            async with client.stream("POST", f"{OPENROUTER_BASE_URL}/chat/completions", json=payload, headers=headers) as response:
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data = line[6:]
-                        if data != "[DONE]":
-                            yield data
-        else:
-            response = await client.post(f"{OPENROUTER_BASE_URL}/chat/completions", json=payload, headers=headers)
-            if response.status_code != 200:
-                logger.error(f"OpenRouter error: {response.text}")
-                raise HTTPException(status_code=500, detail=f"LLM error: {response.text}")
-            return response.json()
+    async with httpx.AsyncClient(timeout=120.0) as http_client:
+        response = await http_client.post(f"{OPENROUTER_BASE_URL}/chat/completions", json=payload, headers=headers)
+        if response.status_code != 200:
+            logger.error(f"OpenRouter error: {response.text}")
+            raise HTTPException(status_code=500, detail=f"LLM error: {response.text}")
+        return response.json()
 
 # ==================== CODE GENERATION PROMPTS ====================
 
