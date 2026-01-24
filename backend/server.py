@@ -232,6 +232,152 @@ async def delete_project(project_id: str):
     await db.chat_messages.delete_many({"project_id": project_id})
     return {"status": "deleted"}
 
+# ==================== CODE VALIDATION & AUTO-FIX ====================
+
+def validate_react_code(files: List[dict]) -> List[str]:
+    """
+    Validate React/JSX code for common errors.
+    Returns a list of error messages if issues are found.
+    """
+    errors = []
+    import re
+    
+    for f in files:
+        content = f.get("content", "")
+        path = f.get("path", "unknown")
+        
+        # Check for common syntax errors
+        
+        # 1. Unmatched JSX tags (basic check)
+        opening_tags = re.findall(r'<([A-Z][a-zA-Z0-9]*)[^/>]*(?<!/)>', content)
+        closing_tags = re.findall(r'</([A-Z][a-zA-Z0-9]*)>', content)
+        self_closing = re.findall(r'<([A-Z][a-zA-Z0-9]*)[^>]*/>', content)
+        
+        # Count tags (simplified - doesn't handle all cases)
+        open_count = {}
+        for tag in opening_tags:
+            open_count[tag] = open_count.get(tag, 0) + 1
+        for tag in closing_tags:
+            open_count[tag] = open_count.get(tag, 0) - 1
+        
+        for tag, count in open_count.items():
+            if count > 0:
+                errors.append(f"{path}: Possibly unclosed <{tag}> tag")
+            elif count < 0:
+                errors.append(f"{path}: Extra closing </{tag}> tag")
+        
+        # 2. Check for common mistakes
+        if 'className="' not in content and 'className={' not in content and 'class=' in content:
+            errors.append(f"{path}: Using 'class=' instead of 'className=' in JSX")
+        
+        # 3. Check for undefined main component (only for App.jsx)
+        if path == "App.jsx" or path.endswith("/App.jsx"):
+            if "function App" not in content and "const App" not in content:
+                errors.append(f"{path}: Missing App component definition")
+        
+        # 4. Check for return statement in function components
+        if "function" in content or "const" in content:
+            # Very basic check - if it looks like a component but has no return
+            component_match = re.search(r'(function|const)\s+([A-Z][a-zA-Z0-9]*)\s*[=\(]', content)
+            if component_match:
+                component_name = component_match.group(2)
+                # Check if there's a return with JSX
+                if f"function {component_name}" in content or f"const {component_name}" in content:
+                    # Look for return statement
+                    if 'return' not in content and '=>' not in content:
+                        errors.append(f"{path}: Component {component_name} may be missing return statement")
+        
+        # 5. Check for unclosed brackets/braces (basic)
+        open_parens = content.count('(') - content.count(')')
+        open_braces = content.count('{') - content.count('}')
+        open_brackets = content.count('[') - content.count(']')
+        
+        if open_parens != 0:
+            errors.append(f"{path}: Unmatched parentheses (diff: {open_parens})")
+        if open_braces != 0:
+            errors.append(f"{path}: Unmatched curly braces (diff: {open_braces})")
+        if open_brackets != 0:
+            errors.append(f"{path}: Unmatched square brackets (diff: {open_brackets})")
+    
+    return errors
+
+AUTO_FIX_PROMPT = """You are a code repair specialist. Fix the following React/JSX code errors.
+
+ERRORS FOUND:
+{errors}
+
+CURRENT CODE:
+{current_code}
+
+Fix ONLY the specific errors listed. Return the corrected files in JSON format:
+{{
+  "files": [
+    {{"path": "filename.jsx", "content": "corrected code"}}
+  ],
+  "fix_summary": "Brief description of fixes applied"
+}}
+
+IMPORTANT:
+- Fix only the reported errors
+- Keep all other code unchanged
+- Ensure JSX syntax is valid
+- Ensure all brackets/braces are matched
+- Use className instead of class"""
+
+async def auto_fix_code(files: List[dict], errors: List[str], project_summary: str) -> tuple:
+    """
+    Attempt to auto-fix code errors using LLM.
+    Returns (fixed_files, fix_summary) or (None, None) if fix fails.
+    """
+    if not errors:
+        return None, None
+    
+    # Build current code representation
+    current_code = ""
+    for f in files:
+        current_code += f"// File: {f['path']}\n{f['content']}\n\n"
+    
+    # Prepare the fix prompt
+    error_list = "\n".join(f"- {e}" for e in errors[:10])  # Limit to 10 errors
+    system_content = AUTO_FIX_PROMPT.replace("{errors}", error_list).replace("{current_code}", current_code)
+    
+    messages = [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": "Fix the code errors and return the corrected files."}
+    ]
+    
+    try:
+        response = await call_openrouter(messages)
+        content = response["choices"][0]["message"]["content"]
+        
+        # Parse the response
+        import re
+        code_block_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content)
+        if code_block_match:
+            json_content = code_block_match.group(1).strip()
+            result = json.loads(json_content, strict=False)
+        else:
+            result = json.loads(content, strict=False)
+        
+        fixed_files = result.get("files", [])
+        fix_summary = result.get("fix_summary", "Auto-fixed code errors")
+        
+        if fixed_files:
+            # Validate the fix
+            new_errors = validate_react_code(fixed_files)
+            if len(new_errors) < len(errors):
+                logger.info(f"Auto-fix reduced errors from {len(errors)} to {len(new_errors)}")
+                return fixed_files, fix_summary
+            else:
+                logger.warning("Auto-fix did not improve the code")
+                return None, None
+        
+        return None, None
+        
+    except Exception as e:
+        logger.error(f"Auto-fix failed: {e}")
+        return None, None
+
 # ==================== VERSION ROUTES ====================
 
 @api_router.get("/projects/{project_id}/versions", response_model=List[Version])
