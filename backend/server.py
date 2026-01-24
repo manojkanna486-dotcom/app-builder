@@ -443,7 +443,7 @@ async def fix_project_code(project_id: str):
             role="assistant",
             content=f"🔧 Auto-fixed: {fix_summary}"
         )
-        await db.chat_messages.insert_one(fix_msg.model_dump())
+        await database.create_message(fix_msg.model_dump())
         
         return {
             "fixed": True,
@@ -456,17 +456,12 @@ async def fix_project_code(project_id: str):
 
 @api_router.get("/projects/{project_id}/versions", response_model=List[Version])
 async def get_versions(project_id: str):
-    versions = await db.versions.find({"project_id": project_id}, {"_id": 0}).sort("version_number", -1).to_list(100)
+    versions = await database.get_versions(project_id)
     return versions
 
 @api_router.get("/projects/{project_id}/versions/latest")
 async def get_latest_version(project_id: str):
-    version = await db.versions.find_one(
-        {"project_id": project_id, "status": "success"},
-        {"_id": 0},
-        sort=[("version_number", -1)]
-    )
-    
+    version = await database.get_latest_version(project_id)
     if not version:
         return {"version": None, "files": []}
     return version
@@ -475,7 +470,7 @@ async def get_latest_version(project_id: str):
 
 @api_router.get("/projects/{project_id}/messages", response_model=List[ChatMessage])
 async def get_messages(project_id: str):
-    messages = await db.chat_messages.find({"project_id": project_id}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    messages = await database.get_messages(project_id)
     return messages
 
 @api_router.post("/projects/{project_id}/messages")
@@ -486,7 +481,7 @@ async def add_message(project_id: str, data: dict):
         content=data.get("content", "")
     )
     doc = message.model_dump()
-    await db.chat_messages.insert_one(doc)
+    await database.create_message(doc)
     return message
 
 # ==================== CODE GENERATION ====================
@@ -496,7 +491,7 @@ async def generate_code(project_id: str, request: PromptRequest):
     """Generate or update code based on user prompt"""
     
     # Get project
-    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    project = await database.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
