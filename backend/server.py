@@ -297,66 +297,82 @@ async def generate_code(project_id: str, request: PromptRequest):
         content = response["choices"][0]["message"]["content"]
         logger.info(f"LLM response length: {len(content)}")
         
-        # Extract JSON from response
+        # Extract JSON from response - use a robust approach
         result = None
+        import re
+        
         try:
-            import re
+            # Method 1: Try direct JSON parse of the whole response
+            try:
+                result = json.loads(content)
+                logger.info("Direct JSON parse successful")
+            except json.JSONDecodeError:
+                pass
             
-            # First, try to find JSON in markdown code blocks
-            code_block_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content)
-            if code_block_match:
-                potential_json = code_block_match.group(1).strip()
-                if potential_json.startswith('{'):
-                    try:
-                        result = json.loads(potential_json)
-                        logger.info("Parsed JSON from code block")
-                    except json.JSONDecodeError as e:
-                        logger.warning(f"Code block JSON parse failed: {e}")
-            
-            # If no code block or parsing failed, find JSON object in content
+            # Method 2: Try to find JSON in markdown code blocks
             if result is None:
-                json_start = content.find("{")
-                if json_start != -1:
-                    # Count braces to find proper end - handle nested objects and strings
-                    brace_count = 0
-                    in_string = False
-                    escape_next = False
-                    json_end = json_start
-                    
-                    for i, char in enumerate(content[json_start:], json_start):
-                        if escape_next:
-                            escape_next = False
-                            continue
-                        if char == '\\' and in_string:
-                            escape_next = True
-                            continue
-                        if char == '"' and not escape_next:
-                            in_string = not in_string
-                            continue
-                        if not in_string:
-                            if char == "{":
-                                brace_count += 1
-                            elif char == "}":
-                                brace_count -= 1
-                                if brace_count == 0:
-                                    json_end = i + 1
-                                    break
-                    
-                    json_str = content[json_start:json_end]
-                    logger.info(f"Attempting to parse JSON: {json_str[:100]}...")
-                    result = json.loads(json_str)
-                else:
-                    raise ValueError("No JSON found in response")
+                code_block_match = re.search(r'```json\s*([\s\S]*?)\s*```', content)
+                if code_block_match:
+                    try:
+                        result = json.loads(code_block_match.group(1).strip())
+                        logger.info("Parsed JSON from ```json``` block")
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"JSON block parse failed: {e}")
             
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.warning(f"JSON parse failed: {e}, extracting code from content")
-            # If JSON parsing fails, try to extract code from markdown or use raw content
-            import re
+            # Method 3: Find the last complete JSON object
+            if result is None:
+                # Find all potential JSON starts
+                json_starts = [m.start() for m in re.finditer(r'\{\s*"files"', content)]
+                if json_starts:
+                    # Try from the first occurrence
+                    for start_idx in json_starts:
+                        try:
+                            # Use a simple approach - find balanced braces
+                            depth = 0
+                            in_string = False
+                            escape = False
+                            end_idx = start_idx
+                            
+                            for i, c in enumerate(content[start_idx:], start_idx):
+                                if escape:
+                                    escape = False
+                                    continue
+                                if c == '\\' and in_string:
+                                    escape = True
+                                    continue
+                                if c == '"' and not escape:
+                                    in_string = not in_string
+                                    continue
+                                if not in_string:
+                                    if c == '{':
+                                        depth += 1
+                                    elif c == '}':
+                                        depth -= 1
+                                        if depth == 0:
+                                            end_idx = i + 1
+                                            break
+                            
+                            if end_idx > start_idx:
+                                json_str = content[start_idx:end_idx]
+                                result = json.loads(json_str)
+                                logger.info(f"Parsed JSON using brace matching from position {start_idx}")
+                                break
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"Brace matching JSON parse failed: {e}")
+                            continue
+            
+            if result is None:
+                raise ValueError("Could not parse JSON from response")
+                
+        except Exception as e:
+            logger.warning(f"All JSON parse methods failed: {e}, extracting code from content")
+            # Fallback: try to extract code from markdown or use raw content
             code_match = re.search(r'```(?:jsx?|tsx?|javascript|typescript)?\s*([\s\S]*?)\s*```', content)
             if code_match:
                 code_content = code_match.group(1).strip()
                 logger.info("Extracted code from markdown block")
             else:
+                # Last resort - use the raw content
                 code_content = content
                 logger.info("Using raw content as code")
             result = {
