@@ -656,11 +656,10 @@ async def generate_code(project_id: str, request: PromptRequest):
         
         # Update project
         await database.update_project(project_id, {
-                "current_version": new_version_number,
-                "summary": summary or project.get("summary", ""),
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }}
-        )
+            "current_version": new_version_number,
+            "summary": summary or project.get("summary", ""),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        })
         
         # Save assistant message
         assistant_msg = ChatMessage(
@@ -668,7 +667,7 @@ async def generate_code(project_id: str, request: PromptRequest):
             role="assistant",
             content=f"✓ {summary or 'Code generated successfully'}"
         )
-        await db.chat_messages.insert_one(assistant_msg.model_dump())
+        await database.create_message(assistant_msg.model_dump())
         
         return {
             "status": "success",
@@ -688,7 +687,7 @@ async def generate_code(project_id: str, request: PromptRequest):
             status="failed",
             delta_plan={"error": str(e)}
         )
-        await db.versions.insert_one(version.model_dump())
+        await database.create_version(version.model_dump())
         
         # Save error message
         error_msg = ChatMessage(
@@ -696,7 +695,7 @@ async def generate_code(project_id: str, request: PromptRequest):
             role="assistant", 
             content=f"❌ Error: {str(e)}"
         )
-        await db.chat_messages.insert_one(error_msg.model_dump())
+        await database.create_message(error_msg.model_dump())
         
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -706,11 +705,7 @@ async def generate_code(project_id: str, request: PromptRequest):
 async def get_preview_html(project_id: str):
     """Generate HTML for iframe preview"""
     
-    version = await db.versions.find_one(
-        {"project_id": project_id, "status": "success"},
-        {"_id": 0},
-        sort=[("version_number", -1)]
-    )
+    version = await database.get_latest_version(project_id)
     
     if not version or not version.get("files"):
         # Return placeholder
