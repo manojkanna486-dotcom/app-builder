@@ -198,6 +198,85 @@ class AppBuilderAPITester:
             message_data
         )
 
+    def test_analyze_vague_prompt(self):
+        """Test prompt analysis for vague prompts (should need clarification)"""
+        if not self.project_id:
+            print("❌ Skipped - No project ID available")
+            return False, {}
+        
+        vague_prompt_data = {
+            "prompt": "Build a dashboard for my business"
+        }
+        
+        success, response = self.run_test(
+            "Analyze Vague Prompt", 
+            "POST", 
+            f"/projects/{self.project_id}/analyze", 
+            200, 
+            vague_prompt_data
+        )
+        
+        if success and response.get("needs_clarification"):
+            print(f"   ✅ Correctly identified need for clarification")
+            if response.get("questions"):
+                print(f"   ✅ Generated {len(response['questions'])} clarification questions")
+            return True, response
+        elif success and not response.get("needs_clarification"):
+            print(f"   ⚠️  Expected clarification but got none")
+            return False, response
+        return success, response
+
+    def test_analyze_clear_prompt(self):
+        """Test prompt analysis for clear prompts (should skip clarification)"""
+        if not self.project_id:
+            print("❌ Skipped - No project ID available")
+            return False, {}
+        
+        clear_prompt_data = {
+            "prompt": "Create a Facebook clone app with posts, likes, and comments"
+        }
+        
+        success, response = self.run_test(
+            "Analyze Clear Prompt", 
+            "POST", 
+            f"/projects/{self.project_id}/analyze", 
+            200, 
+            clear_prompt_data
+        )
+        
+        if success and not response.get("needs_clarification"):
+            print(f"   ✅ Correctly skipped clarification for clear prompt")
+            return True, response
+        elif success and response.get("needs_clarification"):
+            print(f"   ⚠️  Unexpected clarification request for clear prompt")
+            return False, response
+        return success, response
+
+    def test_generate_with_context(self):
+        """Test code generation with clarification context"""
+        if not self.project_id:
+            print("❌ Skipped - No project ID available")
+            return False, {}
+        
+        context_data = {
+            "original_prompt": "Build a dashboard",
+            "answers": {
+                "q1": "Sales and revenue metrics",
+                "q2": "Professional corporate style",
+                "q3": "Desktop-first design"
+            }
+        }
+        
+        print("   ⚠️  This test may take 30-60 seconds due to LLM processing...")
+        return self.run_test(
+            "Generate with Context", 
+            "POST", 
+            f"/projects/{self.project_id}/generate-with-context", 
+            200, 
+            context_data,
+            timeout=90
+        )
+
     def test_delete_project(self):
         """Test deleting a project"""
         if not self.project_id:
