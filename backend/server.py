@@ -420,6 +420,17 @@ async def generate_code(project_id: str, request: PromptRequest):
                 raise ValueError(f"File {i} missing 'content': {f.keys()}")
             logger.info(f"File {i}: {f['path']} ({len(f['content'])} chars)")
         
+        # Validate code and auto-fix if needed
+        validation_errors = validate_react_code(files)
+        if validation_errors:
+            logger.warning(f"Code validation errors found: {validation_errors}")
+            # Attempt auto-fix
+            fixed_files, fix_summary = await auto_fix_code(files, validation_errors, project.get("summary", ""))
+            if fixed_files:
+                files = fixed_files
+                summary = f"{summary}. Auto-fixed: {fix_summary}"
+                logger.info("Code auto-fixed successfully")
+        
         # Create version
         version = Version(
             project_id=project_id,
