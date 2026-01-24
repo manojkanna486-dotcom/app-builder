@@ -216,36 +216,10 @@ COLOR PALETTE EXAMPLES (choose based on app type):
 
 CRITICAL: Return ONLY raw JSON. No markdown code blocks."""
 
-SYSTEM_PROMPT = """You are an expert React developer. Generate multi-file React applications using Tailwind CSS.
+# Use the best UI prompt as the main system prompt
+SYSTEM_PROMPT = BEST_UI_SYSTEM_PROMPT
 
-CRITICAL OUTPUT RULES:
-1. Return ONLY raw JSON - NO markdown code blocks (no ```)
-2. ALWAYS create 4-8 separate component files
-3. Never put all code in a single file
-
-REQUIRED JSON FORMAT:
-{"files":[{"path":"App.jsx","content":"code here"},{"path":"components/Header.jsx","content":"code here"}],"summary":"description"}
-
-FILE STRUCTURE (REQUIRED):
-- App.jsx: Main entry - imports and composes components only
-- components/Header.jsx: Header/navbar
-- components/Sidebar.jsx: Sidebar navigation (if applicable)
-- components/Feed.jsx or components/Main.jsx: Main content area
-- components/Card.jsx: Reusable card component
-- components/Footer.jsx: Footer component
-
-CODE RULES:
-1. Use Tailwind CSS for all styling
-2. Use functional components with hooks
-3. Each component exports default function
-4. App.jsx imports all components using: import Header from './components/Header'
-5. React is available globally - no need to import React
-6. Make UI modern, professional, responsive
-
-EXAMPLE OUTPUT:
-{"files":[{"path":"App.jsx","content":"import Header from './components/Header';\\nimport Feed from './components/Feed';\\n\\nfunction App() {\\n  return (\\n    <div className=\\"min-h-screen bg-gray-100\\">\\n      <Header />\\n      <Feed />\\n    </div>\\n  );\\n}\\n\\nexport default App;"},{"path":"components/Header.jsx","content":"function Header() {\\n  return <header className=\\"bg-white shadow p-4\\">Header</header>;\\n}\\nexport default Header;"},{"path":"components/Feed.jsx","content":"function Feed() {\\n  return <main className=\\"p-4\\">Content</main>;\\n}\\nexport default Feed;"}],"summary":"Created app with header and feed"}"""
-
-UPDATE_SYSTEM_PROMPT = """You are an expert React developer. You update existing React code based on user requests.
+UPDATE_SYSTEM_PROMPT = """You are an elite frontend developer. Update existing React code while maintaining design excellence.
 
 CURRENT FILES:
 {current_code}
