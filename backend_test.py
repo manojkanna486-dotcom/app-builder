@@ -306,6 +306,11 @@ class AppBuilderAPITester:
             self.test_get_project_messages,
             self.test_get_project_versions,
             self.test_get_project_preview,
+            # Test new clarification features
+            self.test_analyze_vague_prompt,
+            self.test_analyze_clear_prompt,
+            self.test_generate_with_context,
+            # Original generation test
             self.test_generate_code,
             self.test_get_latest_version,
             self.test_add_message,
