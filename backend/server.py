@@ -381,6 +381,21 @@ async def generate_code(project_id: str, request: PromptRequest):
         files = result.get("files", [])
         summary = result.get("summary", "")
         
+        logger.info(f"Parsed result - files count: {len(files)}, summary: {summary[:50] if summary else 'N/A'}")
+        
+        if not files:
+            raise ValueError("No files in parsed result")
+        
+        # Validate files structure
+        for i, f in enumerate(files):
+            if not isinstance(f, dict):
+                raise ValueError(f"File {i} is not a dict: {type(f)}")
+            if "path" not in f:
+                raise ValueError(f"File {i} missing 'path': {f.keys()}")
+            if "content" not in f:
+                raise ValueError(f"File {i} missing 'content': {f.keys()}")
+            logger.info(f"File {i}: {f['path']} ({len(f['content'])} chars)")
+        
         # Create version
         version = Version(
             project_id=project_id,
