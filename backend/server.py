@@ -296,6 +296,7 @@ async def generate_code(project_id: str, request: PromptRequest):
         # Parse response
         content = response["choices"][0]["message"]["content"]
         logger.info(f"LLM response length: {len(content)}")
+        logger.info(f"LLM response preview: {content[:300]}")
         
         # Extract JSON from response - use a robust approach
         result = None
