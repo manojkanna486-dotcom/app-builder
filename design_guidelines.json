@@ -1,0 +1,135 @@
+{
+  "identity": {
+    "name": "E1",
+    "role": "Creative Designer",
+    "principles": [
+      "Fusion over Imitation",
+      "Emotion First",
+      "Content is King",
+      "Zoom In",
+      "Negative Space",
+      "Contrast"
+    ]
+  },
+  "theme": {
+    "mode": "dark",
+    "archetype": "Electric & Neon (Grounded)",
+    "description": "Deep void backgrounds with electric blue accents and subtle gradients. High contrast for code readability."
+  },
+  "typography": {
+    "fonts": {
+      "heading": {
+        "family": "Outfit, sans-serif",
+        "weights": ["500", "700"],
+        "usage": "Main headings, section titles, modal headers"
+      },
+      "body": {
+        "family": "Inter, sans-serif",
+        "weights": ["400", "500"],
+        "usage": "General text, labels, inputs"
+      },
+      "code": {
+        "family": "JetBrains Mono, monospace",
+        "weights": ["400"],
+        "usage": "Code snippets, terminal outputs, generated code preview"
+      }
+    },
+    "scale": {
+      "h1": "text-4xl md:text-5xl font-bold tracking-tight",
+      "h2": "text-3xl font-semibold tracking-tight",
+      "h3": "text-2xl font-semibold",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm text-muted-foreground"
+    }
+  },
+  "colors": {
+    "palette": {
+      "background": "#09090b",
+      "foreground": "#fafafa",
+      "card": "#18181b",
+      "card_foreground": "#fafafa",
+      "popover": "#09090b",
+      "popover_foreground": "#fafafa",
+      "primary": "#2563eb",
+      "primary_foreground": "#fafafa",
+      "secondary": "#27272a",
+      "secondary_foreground": "#fafafa",
+      "muted": "#27272a",
+      "muted_foreground": "#a1a1aa",
+      "accent": "#facc15",
+      "accent_foreground": "#09090b",
+      "destructive": "#ef4444",
+      "destructive_foreground": "#fafafa",
+      "border": "#27272a",
+      "input": "#27272a",
+      "ring": "#2563eb"
+    },
+    "gradients": {
+      "hero": "bg-gradient-to-r from-blue-600 to-indigo-600",
+      "glow": "bg-blue-500/20 blur-xl"
+    }
+  },
+  "layout": {
+    "spacing": {
+      "container_padding": "p-6 md:p-8 lg:p-12",
+      "section_gap": "gap-8 md:gap-12",
+      "component_gap": "gap-4"
+    },
+    "grid": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6",
+      "builder": "flex flex-col lg:flex-row h-screen overflow-hidden"
+    },
+    "containers": {
+      "main": "max-w-7xl mx-auto w-full",
+      "narrow": "max-w-3xl mx-auto w-full"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 rounded-md transition-all shadow-[0_0_15px_rgba(37,99,235,0.3)] hover:shadow-[0_0_25px_rgba(37,99,235,0.5)]",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 h-10 px-4 py-2 rounded-md transition-all",
+      "ghost": "hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 rounded-md transition-all"
+    },
+    "cards": {
+      "project": "bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all hover:shadow-lg group relative overflow-hidden",
+      "chat_bubble_user": "bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-4 py-3 max-w-[85%]",
+      "chat_bubble_ai": "bg-muted text-foreground rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%] border border-border"
+    },
+    "inputs": {
+      "chat": "bg-background border-border focus:ring-primary rounded-xl min-h-[60px] resize-none p-4 shadow-inner"
+    },
+    "preview_frame": {
+      "container": "w-full h-full bg-white rounded-lg border border-border shadow-2xl overflow-hidden relative",
+      "header": "h-10 bg-gray-100 border-b border-gray-200 flex items-center px-4 gap-2"
+    }
+  },
+  "assets": {
+    "images": {
+      "hero_bg": "https://images.unsplash.com/photo-1767727239273-5ed97a1986b4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNDR8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGRhcmslMjBnZW9tZXRyaWMlMjB0ZWNobm9sb2d5JTIwYmFja2dyb3VuZHxlbnwwfHx8fDE3NjkyNjU2NjF8MA&ixlib=rb-4.1.0&q=85",
+      "login_bg": "https://images.unsplash.com/photo-1759159347827-de3a54002de7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNDR8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMGRhcmslMjBnZW9tZXRyaWMlMjB0ZWNobm9sb2d5JTIwYmFja2dyb3VuZHxlbnwwfHx8fDE3NjkyNjU2NjF8MA&ixlib=rb-4.1.0&q=85",
+      "empty_state": "https://images.unsplash.com/photo-1759956445479-ab537a9b2f12?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNDR8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMGRhcmslMjBnZW9tZXRyaWMlMjB0ZWNobm9sb2d5JTIwYmFja2dyb3VuZHxlbnwwfHx8fDE3NjkyNjU2NjF8MA&ixlib=rb-4.1.0&q=85"
+    },
+    "icons": {
+      "library": "lucide-react",
+      "usage": "Use Lucide icons for all UI elements. Use simple, clean strokes."
+    }
+  },
+  "motion": {
+    "transitions": "transition-all duration-200 ease-in-out",
+    "hover_lift": "hover:-translate-y-1",
+    "fade_in": "animate-in fade-in duration-500",
+    "slide_up": "animate-in slide-in-from-bottom-4 duration-500"
+  },
+  "universal_guidelines": [
+    "Avoid 'AI slop' - no generic gradients or centered layouts without purpose.",
+    "Use 'Outfit' font for headings to give a modern tech feel.",
+    "Ensure high contrast for code blocks (JetBrains Mono).",
+    "Use 'sonner' for toast notifications.",
+    "All interactive elements must have 'data-testid'.",
+    "Do not use transparent backgrounds for dropdowns or overlays.",
+    "Use 'lucide-react' for icons.",
+    "Implement a 'Split View' for the builder: Chat on Left (25%), Preview on Right (75%).",
+    "The Preview pane should look like a browser window (address bar, controls)."
+  ],
+  "instructions_to_main_agent": "1. Install 'lucide-react' and 'sonner'. 2. Update 'tailwind.config.js' with the new colors and fonts. 3. Create the 'ProjectCard', 'ChatInterface', and 'PreviewFrame' components first. 4. Use the provided image URLs for backgrounds. 5. Ensure the 'Builder' page has a resizable or fixed split layout."
+}
