@@ -595,7 +595,7 @@ def generate_preview_html_multifile(files: list) -> str:
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useEffect, useRef, useCallback, useMemo } = React;
+        const { useState, useEffect, useRef, useCallback, useMemo, useContext, createContext, useReducer } = React;
         
         // Error Boundary Component
         class ErrorBoundary extends React.Component {
@@ -619,8 +619,8 @@ def generate_preview_html_multifile(files: list) -> str:
             }
         }
         
-        // User's Generated Code
-        """ + escaped_code + """
+        // User's Generated Components and Code
+        """ + all_code + """
         
         // Render
         const container = document.getElementById('root');
