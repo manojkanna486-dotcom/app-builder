@@ -298,16 +298,35 @@ async def generate_code(project_id: str, request: PromptRequest):
         
         # Extract JSON from response
         try:
-            # Try to find JSON in the response
-            json_start = content.find("{")
-            json_end = content.rfind("}") + 1
-            if json_start != -1 and json_end > json_start:
-                json_str = content[json_start:json_end]
-                result = json.loads(json_str)
+            # Try to find JSON in the response - handle nested braces
+            import re
+            # Look for JSON block possibly wrapped in markdown code fences
+            json_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', content)
+            if json_match:
+                json_str = json_match.group(1)
             else:
-                raise ValueError("No JSON found")
-        except json.JSONDecodeError:
-            # If JSON parsing fails, create a simple response
+                # Find outermost JSON object
+                json_start = content.find("{")
+                if json_start != -1:
+                    # Count braces to find proper end
+                    brace_count = 0
+                    json_end = json_start
+                    for i, char in enumerate(content[json_start:], json_start):
+                        if char == "{":
+                            brace_count += 1
+                        elif char == "}":
+                            brace_count -= 1
+                            if brace_count == 0:
+                                json_end = i + 1
+                                break
+                    json_str = content[json_start:json_end]
+                else:
+                    raise ValueError("No JSON found")
+            
+            result = json.loads(json_str)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"JSON parse failed: {e}, using raw content")
+            # If JSON parsing fails, create a simple response with raw code
             result = {
                 "files": [{"path": "App.jsx", "content": content}],
                 "summary": "Generated code"
