@@ -13,6 +13,10 @@ import {
   Bot,
   Copy,
   Check,
+  FileCode,
+  FolderOpen,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
@@ -35,6 +39,99 @@ import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// File Tree Component
+const FileTree = ({ files, selectedFile, onSelectFile }) => {
+  const [expandedFolders, setExpandedFolders] = useState(new Set(["components", "hooks", "utils"]));
+
+  // Build tree structure from flat file list
+  const buildTree = (files) => {
+    const tree = { name: "root", children: {}, files: [] };
+    
+    files.forEach((file) => {
+      const parts = file.path.split("/");
+      let current = tree;
+      
+      for (let i = 0; i < parts.length - 1; i++) {
+        const folder = parts[i];
+        if (!current.children[folder]) {
+          current.children[folder] = { name: folder, children: {}, files: [] };
+        }
+        current = current.children[folder];
+      }
+      
+      current.files.push({ name: parts[parts.length - 1], path: file.path });
+    });
+    
+    return tree;
+  };
+
+  const toggleFolder = (folder) => {
+    const newExpanded = new Set(expandedFolders);
+    if (newExpanded.has(folder)) {
+      newExpanded.delete(folder);
+    } else {
+      newExpanded.add(folder);
+    }
+    setExpandedFolders(newExpanded);
+  };
+
+  const renderTree = (node, depth = 0) => {
+    const folders = Object.values(node.children);
+    const sortedFiles = [...node.files].sort((a, b) => a.name.localeCompare(b.name));
+    
+    return (
+      <>
+        {folders.map((folder) => (
+          <div key={folder.name}>
+            <button
+              onClick={() => toggleFolder(folder.name)}
+              className="w-full flex items-center gap-1 px-2 py-1 hover:bg-muted/50 rounded text-sm text-muted-foreground hover:text-foreground transition-colors"
+              style={{ paddingLeft: `${depth * 12 + 8}px` }}
+            >
+              {expandedFolders.has(folder.name) ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronRight className="w-3 h-3" />
+              )}
+              <FolderOpen className="w-4 h-4 text-primary/70" />
+              <span>{folder.name}</span>
+            </button>
+            {expandedFolders.has(folder.name) && renderTree(folder, depth + 1)}
+          </div>
+        ))}
+        {sortedFiles.map((file) => (
+          <button
+            key={file.path}
+            onClick={() => onSelectFile(file.path)}
+            data-testid={`file-${file.path.replace(/[/.]/g, "-")}`}
+            className={`w-full flex items-center gap-2 px-2 py-1 rounded text-sm transition-colors ${
+              selectedFile === file.path
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            }`}
+            style={{ paddingLeft: `${depth * 12 + 20}px` }}
+          >
+            <FileCode className="w-4 h-4" />
+            <span className="truncate">{file.name}</span>
+          </button>
+        ))}
+      </>
+    );
+  };
+
+  const tree = buildTree(files);
+
+  return (
+    <div className="py-2">
+      {files.length === 0 ? (
+        <div className="px-4 py-2 text-sm text-muted-foreground">No files</div>
+      ) : (
+        renderTree(tree)
+      )}
+    </div>
+  );
+};
+
 export default function BuilderPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -48,7 +145,8 @@ export default function BuilderPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [previewHtml, setPreviewHtml] = useState("");
-  const [currentCode, setCurrentCode] = useState("");
+  const [files, setFiles] = useState([]);
+  const [selectedFile, setSelectedFile] = useState("App.jsx");
   const [viewMode, setViewMode] = useState("preview");
   const [copied, setCopied] = useState(false);
 
@@ -78,9 +176,10 @@ export default function BuilderPage() {
       setPreviewHtml(previewRes.data.html);
       setVersions(versionsRes.data);
 
-      // Extract code from latest version
+      // Extract files from latest version
       if (versionsRes.data.length > 0 && versionsRes.data[0].files?.length > 0) {
-        setCurrentCode(versionsRes.data[0].files[0].content);
+        setFiles(versionsRes.data[0].files);
+        setSelectedFile(versionsRes.data[0].files[0].path);
       }
     } catch (err) {
       toast.error("Failed to load project");
@@ -88,6 +187,11 @@ export default function BuilderPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getSelectedFileContent = () => {
+    const file = files.find((f) => f.path === selectedFile);
+    return file?.content || "// No file selected";
   };
 
   const handleGenerate = async () => {
@@ -115,9 +219,14 @@ export default function BuilderPage() {
       const previewRes = await axios.get(`${API}/projects/${projectId}/preview`);
       setPreviewHtml(previewRes.data.html);
 
-      // Update code
+      // Update files
       if (res.data.files?.length > 0) {
-        setCurrentCode(res.data.files[0].content);
+        setFiles(res.data.files);
+        // Keep selected file if it still exists, otherwise select first file
+        const stillExists = res.data.files.some((f) => f.path === selectedFile);
+        if (!stillExists) {
+          setSelectedFile(res.data.files[0].path);
+        }
       }
 
       // Refresh messages and versions
@@ -151,7 +260,7 @@ export default function BuilderPage() {
 
   const copyCode = async () => {
     try {
-      await navigator.clipboard.writeText(currentCode);
+      await navigator.clipboard.writeText(getSelectedFileContent());
       setCopied(true);
       toast.success("Code copied!");
       setTimeout(() => setCopied(false), 2000);
@@ -163,7 +272,8 @@ export default function BuilderPage() {
   const loadVersion = async (version) => {
     try {
       if (version.files?.length > 0) {
-        setCurrentCode(version.files[0].content);
+        setFiles(version.files);
+        setSelectedFile(version.files[0].path);
         // Regenerate preview HTML
         const previewRes = await axios.get(`${API}/projects/${projectId}/preview`);
         setPreviewHtml(previewRes.data.html);
@@ -204,7 +314,7 @@ export default function BuilderPage() {
                 </h2>
                 {project?.current_version > 0 && (
                   <span className="text-xs text-muted-foreground">
-                    v{project.current_version}
+                    v{project.current_version} • {files.length} file{files.length !== 1 ? "s" : ""}
                   </span>
                 )}
               </div>
@@ -430,12 +540,35 @@ export default function BuilderPage() {
                 />
               </div>
             ) : (
-              <div className="h-full rounded-lg overflow-hidden border border-border">
-                <ScrollArea className="h-full">
-                  <pre className="code-view">
-                    <code>{currentCode || "// No code generated yet"}</code>
-                  </pre>
-                </ScrollArea>
+              <div className="h-full flex rounded-lg overflow-hidden border border-border">
+                {/* File Tree Sidebar */}
+                <div className="w-48 bg-card border-r border-border flex-shrink-0">
+                  <div className="p-2 border-b border-border">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Files
+                    </span>
+                  </div>
+                  <ScrollArea className="h-[calc(100%-36px)]">
+                    <FileTree
+                      files={files}
+                      selectedFile={selectedFile}
+                      onSelectFile={setSelectedFile}
+                    />
+                  </ScrollArea>
+                </div>
+                {/* Code View */}
+                <div className="flex-1 overflow-hidden">
+                  <div className="h-8 px-4 bg-muted/30 border-b border-border flex items-center">
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {selectedFile}
+                    </span>
+                  </div>
+                  <ScrollArea className="h-[calc(100%-32px)]">
+                    <pre className="code-view">
+                      <code>{getSelectedFileContent()}</code>
+                    </pre>
+                  </ScrollArea>
+                </div>
               </div>
             )}
           </div>
