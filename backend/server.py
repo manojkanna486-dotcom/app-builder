@@ -465,7 +465,8 @@ def generate_preview_html(react_code: str) -> str:
     # Only need to escape the script closing tag if present
     escaped_code = cleaned_code.replace("</script>", "<\\/script>")
     
-    return f"""<!DOCTYPE html>
+    # Build HTML template with string concatenation to avoid f-string brace issues
+    html_template = """<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -476,47 +477,47 @@ def generate_preview_html(react_code: str) -> str:
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ font-family: 'Inter', sans-serif; }}
-        #root {{ min-height: 100vh; }}
-        .error-boundary {{ 
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; }
+        #root { min-height: 100vh; }
+        .error-boundary { 
             padding: 20px; 
             background: #fef2f2; 
             color: #dc2626;
             border-radius: 8px;
             margin: 20px;
-        }}
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const {{ useState, useEffect, useRef, useCallback, useMemo }} = React;
+        const { useState, useEffect, useRef, useCallback, useMemo } = React;
         
         // Error Boundary Component
-        class ErrorBoundary extends React.Component {{
-            constructor(props) {{
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
                 super(props);
-                this.state = {{ hasError: false, error: null }};
-            }}
-            static getDerivedStateFromError(error) {{
-                return {{ hasError: true, error }};
-            }}
-            render() {{
-                if (this.state.hasError) {{
+                this.state = { hasError: false, error: null };
+            }
+            static getDerivedStateFromError(error) {
+                return { hasError: true, error };
+            }
+            render() {
+                if (this.state.hasError) {
                     return (
                         <div className="error-boundary">
                             <h3 className="font-semibold mb-2">Something went wrong</h3>
-                            <pre className="text-sm overflow-auto">{{this.state.error?.message}}</pre>
+                            <pre className="text-sm overflow-auto">{this.state.error?.message}</pre>
                         </div>
                     );
-                }}
+                }
                 return this.props.children;
-            }}
-        }}
+            }
+        }
         
         // User's Generated Code
-        {escaped_code}
+        """ + escaped_code + """
         
         // Render
         const container = document.getElementById('root');
@@ -529,6 +530,8 @@ def generate_preview_html(react_code: str) -> str:
     </script>
 </body>
 </html>"""
+    
+    return html_template
 
 # Include router and middleware
 app.include_router(api_router)
