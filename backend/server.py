@@ -862,6 +862,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_db_client():
+    global database
+    database = get_database()
+    await database.init()
+    logger.info(f"Database initialized: {os.environ.get('DB_TYPE', 'mongodb')}")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    if database:
+        await database.close()
+
