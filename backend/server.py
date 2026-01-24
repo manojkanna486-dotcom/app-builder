@@ -735,6 +735,195 @@ async def generate_code(project_id: str, request: PromptRequest):
         
         raise HTTPException(status_code=500, detail=str(e))
 
+# ==================== STREAMING GENERATION ====================
+
+@api_router.post("/projects/{project_id}/generate/stream")
+async def generate_code_stream(project_id: str, request: PromptRequest):
+    """Generate code with streaming response for real-time updates"""
+    
+    # Get project
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Save user message
+    user_msg = ChatMessage(project_id=project_id, role="user", content=request.prompt)
+    await database.create_message(user_msg.model_dump())
+    
+    # Get latest successful version
+    latest_version = await database.get_latest_version(project_id)
+    new_version_number = (latest_version["version_number"] + 1) if latest_version else 1
+    
+    # Build messages
+    if latest_version and latest_version.get("files"):
+        current_code = ""
+        for f in latest_version["files"]:
+            current_code += f"// File: {f['path']}\n{f['content']}\n\n"
+        system_content = UPDATE_SYSTEM_PROMPT.replace("{current_code}", current_code).replace("{user_request}", request.prompt)
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": f"Update the code based on this request: {request.prompt}"}
+        ]
+        is_update = True
+    else:
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"Create a React application: {request.prompt}"}
+        ]
+        is_update = False
+    
+    async def stream_generator():
+        full_content = ""
+        current_file = None
+        files_detected = []
+        
+        try:
+            # Send initial status
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Analyzing request...'})}\n\n"
+            await asyncio.sleep(0.1)
+            
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Generating code structure...' if not is_update else 'Planning changes...'})}\n\n"
+            
+            # Stream from LLM
+            async for chunk in call_openrouter_stream(messages):
+                full_content += chunk
+                
+                # Detect file paths being written
+                if '"path":' in chunk or '"path"' in full_content[-50:]:
+                    # Try to extract current file being generated
+                    import re
+                    paths = re.findall(r'"path"\s*:\s*"([^"]+)"', full_content)
+                    if paths and paths[-1] not in files_detected:
+                        files_detected.append(paths[-1])
+                        yield f"data: {json.dumps({'type': 'status', 'message': f'Writing {paths[-1]}...'})}\n\n"
+                
+                # Send code chunk
+                yield f"data: {json.dumps({'type': 'code', 'content': chunk})}\n\n"
+            
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Processing generated code...'})}\n\n"
+            
+            # Parse the complete response
+            result = None
+            try:
+                result = json.loads(full_content, strict=False)
+            except json.JSONDecodeError:
+                # Try to extract from markdown
+                import re
+                code_block_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', full_content)
+                if code_block_match:
+                    try:
+                        result = json.loads(code_block_match.group(1).strip(), strict=False)
+                    except:
+                        pass
+                
+                if not result:
+                    # Find JSON by pattern
+                    json_starts = [m.start() for m in re.finditer(r'\{\s*"files"', full_content)]
+                    if json_starts:
+                        for start_idx in json_starts:
+                            depth = 0
+                            in_string = False
+                            escape = False
+                            end_idx = start_idx
+                            for i, c in enumerate(full_content[start_idx:], start_idx):
+                                if escape:
+                                    escape = False
+                                    continue
+                                if c == '\\' and in_string:
+                                    escape = True
+                                    continue
+                                if c == '"' and not escape:
+                                    in_string = not in_string
+                                    continue
+                                if not in_string:
+                                    if c == '{':
+                                        depth += 1
+                                    elif c == '}':
+                                        depth -= 1
+                                        if depth == 0:
+                                            end_idx = i + 1
+                                            break
+                            if end_idx > start_idx:
+                                try:
+                                    result = json.loads(full_content[start_idx:end_idx], strict=False)
+                                    break
+                                except:
+                                    continue
+            
+            if not result:
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Extracting code from response...'})}\n\n"
+                result = {
+                    "files": [{"path": "App.jsx", "content": full_content}],
+                    "summary": "Generated code"
+                }
+            
+            files = result.get("files", [])
+            summary = result.get("summary", "")
+            
+            yield f"data: {json.dumps({'type': 'status', 'message': f'Validating {len(files)} file(s)...'})}\n\n"
+            
+            # Validate and potentially auto-fix
+            validation_errors = validate_react_code(files)
+            if validation_errors:
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Auto-fixing code issues...'})}\n\n"
+                fixed_files, fix_summary = await auto_fix_code(files, validation_errors, project.get("summary", ""))
+                if fixed_files:
+                    files = fixed_files
+                    summary = f"{summary}. Auto-fixed: {fix_summary}"
+            
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Saving version...'})}\n\n"
+            
+            # Create version
+            version = Version(
+                project_id=project_id,
+                version_number=new_version_number,
+                prompt=request.prompt,
+                files=[VersionFile(**f) for f in files],
+                status="success",
+                delta_plan={"summary": summary}
+            )
+            await database.create_version(version.model_dump())
+            
+            # Update project
+            await database.update_project(project_id, {
+                "current_version": new_version_number,
+                "summary": summary or project.get("summary", ""),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            })
+            
+            # Save assistant message
+            assistant_msg = ChatMessage(
+                project_id=project_id,
+                role="assistant",
+                content=f"✓ {summary or 'Code generated successfully'}"
+            )
+            await database.create_message(assistant_msg.model_dump())
+            
+            # Send final result
+            yield f"data: {json.dumps({'type': 'complete', 'version': new_version_number, 'files': files, 'summary': summary})}\n\n"
+            
+        except Exception as e:
+            logger.error(f"Stream generation error: {str(e)}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            
+            # Save error
+            error_msg = ChatMessage(
+                project_id=project_id,
+                role="assistant", 
+                content=f"❌ Error: {str(e)}"
+            )
+            await database.create_message(error_msg.model_dump())
+    
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
 # ==================== PREVIEW GENERATION ====================
 
 @api_router.get("/projects/{project_id}/preview")
