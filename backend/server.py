@@ -495,17 +495,8 @@ async def get_preview_html(project_id: str):
         # Return placeholder
         return {"html": get_placeholder_html()}
     
-    # Get App.jsx content
-    app_content = ""
-    for f in version["files"]:
-        if f["path"] == "App.jsx" or f["path"].endswith("App.jsx"):
-            app_content = f["content"]
-            break
-    
-    if not app_content:
-        app_content = version["files"][0]["content"] if version["files"] else ""
-    
-    html = generate_preview_html(app_content)
+    # Pass all files to the preview generator
+    html = generate_preview_html_multifile(version["files"])
     return {"html": html}
 
 def get_placeholder_html():
@@ -532,22 +523,49 @@ def get_placeholder_html():
 </body>
 </html>"""
 
-def generate_preview_html(react_code: str) -> str:
-    """Generate HTML with embedded React code for preview"""
-    
-    # Strip import statements and export statements from the code
+def clean_component_code(code: str) -> str:
+    """Clean a single component's code for embedding"""
     import re
     
     # Remove import statements
-    cleaned_code = re.sub(r'^import\s+.*?[\'"].*?[\'"];?\s*$', '', react_code, flags=re.MULTILINE)
-    cleaned_code = re.sub(r'^import\s+\{[^}]*\}\s+from\s+[\'"].*?[\'"];?\s*$', '', cleaned_code, flags=re.MULTILINE)
+    cleaned = re.sub(r'^import\s+.*?[\'"].*?[\'"];?\s*$', '', code, flags=re.MULTILINE)
+    cleaned = re.sub(r'^import\s+\{[^}]*\}\s+from\s+[\'"].*?[\'"];?\s*$', '', cleaned, flags=re.MULTILINE)
     
     # Remove export statements but keep the content
-    cleaned_code = re.sub(r'^export\s+default\s+', '', cleaned_code, flags=re.MULTILINE)
-    cleaned_code = re.sub(r'^export\s+', '', cleaned_code, flags=re.MULTILINE)
+    cleaned = re.sub(r'^export\s+default\s+', '', cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r'^export\s+', '', cleaned, flags=re.MULTILINE)
     
-    # Don't over-escape - the code should work as-is in the script tag
-    # Only need to escape the script closing tag if present
+    # Escape script closing tags
+    cleaned = cleaned.replace("</script>", "<\\/script>")
+    
+    return cleaned.strip()
+
+def generate_preview_html_multifile(files: list) -> str:
+    """Generate HTML with multiple React components for preview"""
+    
+    # Sort files: components first, then App.jsx last (so it can use components)
+    sorted_files = []
+    app_file = None
+    
+    for f in files:
+        if f["path"] == "App.jsx" or f["path"].endswith("/App.jsx"):
+            app_file = f
+        else:
+            sorted_files.append(f)
+    
+    if app_file:
+        sorted_files.append(app_file)
+    elif files:
+        sorted_files = files
+    
+    # Build all component code
+    all_code_parts = []
+    for f in sorted_files:
+        cleaned = clean_component_code(f["content"])
+        # Add a comment marker for debugging
+        all_code_parts.append(f"// === File: {f['path']} ===\n{cleaned}")
+    
+    all_code = "\n\n".join(all_code_parts)
     escaped_code = cleaned_code.replace("</script>", "<\\/script>")
     
     # Build HTML template with string concatenation to avoid f-string brace issues
