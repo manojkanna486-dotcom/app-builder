@@ -546,6 +546,98 @@ export default function BuilderPage() {
                   </div>
                 </div>
               )}
+              
+              {/* Analyzing indicator */}
+              {analyzing && (
+                <div className="flex gap-3 animate-slide-up">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="chat-bubble-ai px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                      <span className="text-sm text-muted-foreground">
+                        Analyzing your request...
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Clarification Questions UI */}
+              {clarificationQuestions && clarificationQuestions.needs_clarification && (
+                <div className="flex gap-3 animate-slide-up">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                  </div>
+                  <div className="flex-1 max-w-[90%]">
+                    <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-foreground mb-1">
+                          Let me help you build the best app! 🎨
+                        </p>
+                        {clarificationQuestions.context && (
+                          <p className="text-xs text-muted-foreground">
+                            {clarificationQuestions.context}
+                          </p>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {clarificationQuestions.questions.map((q, idx) => (
+                          <div key={q.id || idx} className="space-y-2">
+                            <p className="text-sm text-foreground">{q.question}</p>
+                            {q.options ? (
+                              <div className="flex flex-wrap gap-2">
+                                {q.options.map((opt, optIdx) => (
+                                  <button
+                                    key={optIdx}
+                                    onClick={() => handleClarificationAnswer(q.id || `q${idx}`, opt)}
+                                    className={`px-3 py-1.5 text-xs rounded-full border transition-all ${
+                                      clarificationAnswers[q.id || `q${idx}`] === opt
+                                        ? "bg-primary text-primary-foreground border-primary"
+                                        : "bg-background border-border hover:border-primary/50 text-muted-foreground hover:text-foreground"
+                                    }`}
+                                  >
+                                    {opt}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <input
+                                type="text"
+                                placeholder="Type your answer..."
+                                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                                onChange={(e) => handleClarificationAnswer(q.id || `q${idx}`, e.target.value)}
+                                value={clarificationAnswers[q.id || `q${idx}`] || ""}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          onClick={handleSubmitClarification}
+                          disabled={Object.keys(clarificationAnswers).length === 0}
+                          className="flex-1"
+                        >
+                          Generate with these preferences
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleSkipClarification}
+                        >
+                          Skip & Generate
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
