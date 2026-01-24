@@ -450,8 +450,19 @@ def get_placeholder_html():
 def generate_preview_html(react_code: str) -> str:
     """Generate HTML with embedded React code for preview"""
     
+    # Strip import statements and export statements from the code
+    import re
+    
+    # Remove import statements
+    cleaned_code = re.sub(r'^import\s+.*?[\'"].*?[\'"];?\s*$', '', react_code, flags=re.MULTILINE)
+    cleaned_code = re.sub(r'^import\s+\{[^}]*\}\s+from\s+[\'"].*?[\'"];?\s*$', '', cleaned_code, flags=re.MULTILINE)
+    
+    # Remove export statements but keep the content
+    cleaned_code = re.sub(r'^export\s+default\s+', '', cleaned_code, flags=re.MULTILINE)
+    cleaned_code = re.sub(r'^export\s+', '', cleaned_code, flags=re.MULTILINE)
+    
     # Escape backticks and special chars for embedding in template literal
-    escaped_code = react_code.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+    escaped_code = cleaned_code.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
     
     return f"""<!DOCTYPE html>
 <html>
