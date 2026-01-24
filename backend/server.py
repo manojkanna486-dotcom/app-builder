@@ -77,7 +77,7 @@ class PromptRequest(BaseModel):
 # ==================== OPENROUTER LLM ====================
 
 async def call_openrouter(messages: List[Dict]):
-    """Call OpenRouter API"""
+    """Call OpenRouter API (non-streaming)"""
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
@@ -89,7 +89,7 @@ async def call_openrouter(messages: List[Dict]):
         "model": "anthropic/claude-sonnet-4",
         "messages": messages,
         "stream": False,
-        "max_tokens": 16000,  # Increased for multi-file responses
+        "max_tokens": 16000,
         "temperature": 0.7
     }
     
@@ -99,6 +99,42 @@ async def call_openrouter(messages: List[Dict]):
             logger.error(f"OpenRouter error: {response.text}")
             raise HTTPException(status_code=500, detail=f"LLM error: {response.text}")
         return response.json()
+
+async def call_openrouter_stream(messages: List[Dict]):
+    """Call OpenRouter API with streaming"""
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://appbuilder.emergent.sh",
+        "X-Title": "App Builder"
+    }
+    
+    payload = {
+        "model": "anthropic/claude-sonnet-4",
+        "messages": messages,
+        "stream": True,
+        "max_tokens": 16000,
+        "temperature": 0.7
+    }
+    
+    async with httpx.AsyncClient(timeout=180.0) as http_client:
+        async with http_client.stream("POST", f"{OPENROUTER_BASE_URL}/chat/completions", json=payload, headers=headers) as response:
+            if response.status_code != 200:
+                error_text = await response.aread()
+                logger.error(f"OpenRouter stream error: {error_text}")
+                raise HTTPException(status_code=500, detail=f"LLM error: {error_text}")
+            
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        if chunk.get("choices") and chunk["choices"][0].get("delta", {}).get("content"):
+                            yield chunk["choices"][0]["delta"]["content"]
+                    except json.JSONDecodeError:
+                        continue
 
 # ==================== CODE GENERATION PROMPTS ====================
 
