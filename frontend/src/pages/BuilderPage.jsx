@@ -358,8 +358,6 @@ export default function BuilderPage() {
       }
     } catch (err) {
       toast.error(err.message || "Generation failed");
-      // Remove optimistic message on error
-      setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
     } finally {
       setGenerating(false);
       setGenerationStatus("");
