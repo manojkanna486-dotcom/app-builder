@@ -486,6 +486,33 @@ export default function BuilderPage() {
     }
   };
 
+  // Deploy to Vercel
+  const handleDeployToVercel = async () => {
+    if (!vercelToken.trim()) {
+      toast.error("Vercel token is required");
+      return;
+    }
+
+    setDeploying(true);
+    try {
+      const res = await axios.post(`${API}/projects/${projectId}/deploy/vercel`, {
+        vercel_token: vercelToken.trim(),
+        project_name: project?.name?.toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'my-app'
+      });
+
+      if (res.data.success) {
+        setDeploymentUrl(res.data.url);
+        toast.success("Deployment started! Your app will be live shortly.");
+        // Don't close modal - show the URL
+      }
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || "Deployment failed";
+      toast.error(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
+    } finally {
+      setDeploying(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
