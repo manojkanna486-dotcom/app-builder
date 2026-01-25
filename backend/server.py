@@ -38,6 +38,14 @@ class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = ""
 
+class SupabaseConfig(BaseModel):
+    """Supabase configuration for a project"""
+    url: str
+    anon_key: str
+    service_role_key: Optional[str] = None
+    connected: bool = False
+    connected_at: Optional[str] = None
+
 class Project(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -47,10 +55,16 @@ class Project(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     current_version: int = 0
+    # Supabase integration
+    supabase_connected: bool = False
+    supabase_url: Optional[str] = None
+    supabase_anon_key: Optional[str] = None
+    supabase_service_key: Optional[str] = None
 
 class VersionFile(BaseModel):
     path: str
     content: str
+    file_type: str = "frontend"  # frontend, backend, database, edge_function, sql
 
 class Version(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -62,6 +76,9 @@ class Version(BaseModel):
     files: List[VersionFile] = []
     status: str = "pending"  # pending, success, failed
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    # Database schema tracking
+    database_schema: Optional[Dict[str, Any]] = None
+    migrations: List[str] = []
 
 class ChatMessage(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -73,6 +90,11 @@ class ChatMessage(BaseModel):
 
 class PromptRequest(BaseModel):
     prompt: str
+
+class SupabaseConnectRequest(BaseModel):
+    url: str
+    anon_key: str
+    service_role_key: Optional[str] = None
 
 # ==================== OPENROUTER LLM ====================
 
