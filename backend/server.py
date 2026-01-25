@@ -1085,22 +1085,46 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
     latest_version = await database.get_latest_version(project_id)
     new_version_number = (latest_version["version_number"] + 1) if latest_version else 1
     
-    # Build messages
+    # Check if Supabase is connected for full-stack generation
+    is_fullstack = project.get("supabase_connected", False)
+    supabase_url = project.get("supabase_url", "")
+    
+    # Build messages based on project type
     if latest_version and latest_version.get("files"):
         current_code = ""
         for f in latest_version["files"]:
-            current_code += f"// File: {f['path']}\n{f['content']}\n\n"
-        system_content = UPDATE_SYSTEM_PROMPT.replace("{current_code}", current_code).replace("{user_request}", request.prompt)
-        messages = [
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": f"Update the code based on this request: {request.prompt}"}
-        ]
+            file_type = f.get("file_type", "frontend")
+            current_code += f"// File: {f['path']} (type: {file_type})\n{f['content']}\n\n"
+        
+        if is_fullstack:
+            # Full-stack update
+            system_content = FULLSTACK_UPDATE_PROMPT.replace("{supabase_url}", supabase_url).replace("{current_code}", current_code).replace("{user_request}", request.prompt)
+            messages = [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": f"Update the full-stack application: {request.prompt}"}
+            ]
+        else:
+            # Frontend-only update
+            system_content = UPDATE_SYSTEM_PROMPT.replace("{current_code}", current_code).replace("{user_request}", request.prompt)
+            messages = [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": f"Update the code based on this request: {request.prompt}"}
+            ]
         is_update = True
     else:
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Create a React application: {request.prompt}"}
-        ]
+        if is_fullstack:
+            # New full-stack app
+            system_content = FULLSTACK_SYSTEM_PROMPT.replace("{supabase_url}", supabase_url)
+            messages = [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": f"Create a full-stack application with Supabase backend: {request.prompt}"}
+            ]
+        else:
+            # New frontend-only app
+            messages = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Create a React application: {request.prompt}"}
+            ]
         is_update = False
     
     async def stream_generator():
