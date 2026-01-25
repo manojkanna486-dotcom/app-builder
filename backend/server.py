@@ -292,6 +292,112 @@ Return JSON:
   "description": "Brief description of what needs to change"
 }"""
 
+# ==================== FULL-STACK GENERATION PROMPTS ====================
+
+FULLSTACK_SYSTEM_PROMPT = """You are an elite full-stack developer. Generate complete web applications with:
+- React frontend (JSX with Tailwind CSS)
+- Supabase Edge Functions backend (TypeScript/Deno)
+- PostgreSQL database schema (SQL)
+
+The user has connected their Supabase project. Generate production-ready code.
+
+SUPABASE PROJECT URL: {supabase_url}
+
+OUTPUT FORMAT (RAW JSON ONLY - NO MARKDOWN):
+{
+  "files": [
+    {"path": "App.jsx", "content": "...", "file_type": "frontend"},
+    {"path": "components/Header.jsx", "content": "...", "file_type": "frontend"},
+    {"path": "supabase/functions/api/index.ts", "content": "...", "file_type": "edge_function"},
+    {"path": "supabase/migrations/001_initial.sql", "content": "...", "file_type": "sql"}
+  ],
+  "summary": "Brief description",
+  "database_tables": ["table1", "table2"]
+}
+
+FILE STRUCTURE:
+1. Frontend (React/JSX):
+   - App.jsx: Main component with routing
+   - components/*.jsx: Feature components
+   - Use Supabase client for data fetching
+
+2. Edge Functions (TypeScript/Deno):
+   - supabase/functions/[name]/index.ts
+   - Use Deno.serve() pattern
+   - Handle CORS properly
+   
+3. Database (SQL):
+   - supabase/migrations/*.sql
+   - Include RLS (Row Level Security) policies
+   - Create indexes for performance
+
+FRONTEND CODE RULES:
+- Initialize Supabase client with the provided URL
+- Use environment variable for anon key: const supabaseUrl = '{supabase_url}'; const supabaseKey = 'SUPABASE_ANON_KEY';
+- Fetch data from Supabase tables directly using supabase.from('table').select()
+- Handle loading and error states
+- Use Tailwind CSS for styling
+
+EDGE FUNCTION TEMPLATE:
+```typescript
+import {{ createClient }} from 'https://esm.sh/@supabase/supabase-js@2'
+
+Deno.serve(async (req) => {{
+  // Handle CORS
+  if (req.method === 'OPTIONS') {{
+    return new Response('ok', {{ headers: corsHeaders }})
+  }}
+  
+  const supabaseClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+  )
+  
+  // Your logic here
+  
+  return new Response(JSON.stringify({{ data }}), {{
+    headers: {{ ...corsHeaders, 'Content-Type': 'application/json' }}
+  }})
+}})
+```
+
+SQL MIGRATION RULES:
+- Use IF NOT EXISTS for tables
+- Include created_at and updated_at timestamps
+- Add appropriate indexes
+- Include RLS policies for security
+
+CRITICAL: Return ONLY raw JSON. No markdown code blocks."""
+
+FULLSTACK_UPDATE_PROMPT = """You are an elite full-stack developer. Update the existing application.
+
+SUPABASE PROJECT URL: {supabase_url}
+
+CURRENT FILES:
+{current_code}
+
+USER REQUEST:
+{user_request}
+
+RULES:
+1. ONLY modify what the user asked for
+2. Keep all existing functionality intact
+3. Return ALL files (modified and unmodified)
+4. Add new Edge Functions or SQL migrations if needed
+5. Update frontend to integrate with any new backend features
+
+OUTPUT FORMAT (JSON only):
+{
+  "files": [
+    {"path": "filename", "content": "code", "file_type": "frontend|edge_function|sql"}
+  ],
+  "summary": "Brief description of changes",
+  "changes": ["List of specific changes made"],
+  "new_tables": ["Any new database tables created"]
+}
+
+IMPORTANT: Return ALL files, not just changed ones."""
+
 # ==================== PROJECT ROUTES ====================
 
 @api_router.get("/")
