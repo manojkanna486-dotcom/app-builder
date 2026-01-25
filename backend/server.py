@@ -1400,7 +1400,7 @@ def clean_component_code(code: str) -> str:
     
     return cleaned.strip()
 
-def generate_preview_html_multifile(files: list) -> str:
+def generate_preview_html_multifile(files: list, supabase_config: dict = None) -> str:
     """Generate HTML with multiple React components for preview"""
     
     # Check if this is a full-stack app (has Supabase files)
@@ -1439,18 +1439,31 @@ def generate_preview_html_multifile(files: list) -> str:
     
     all_code = "\n\n".join(all_code_parts)
     
-    # Add Supabase library if needed
+    # Add Supabase library and config if needed
     supabase_script = ""
     supabase_init = ""
-    if has_supabase:
+    if has_supabase or supabase_config:
         supabase_script = '<script src="https://unpkg.com/@supabase/supabase-js@2"></script>'
-        supabase_init = """
+        
+        # Get actual credentials or use placeholders
+        sb_url = supabase_config.get("url", "") if supabase_config else ""
+        sb_key = supabase_config.get("anon_key", "") if supabase_config else ""
+        
+        supabase_init = f"""
         // Supabase client setup for preview
-        const { createClient } = supabase;
+        const {{ createClient }} = supabase;
+        
+        // Inject Supabase credentials for preview
+        const PREVIEW_SUPABASE_URL = '{sb_url}';
+        const PREVIEW_SUPABASE_KEY = '{sb_key}';
+        
         // Mock process.env for preview
-        if (typeof process === 'undefined') {
-            window.process = { env: {} };
-        }
+        if (typeof process === 'undefined') {{
+            window.process = {{ env: {{
+                REACT_APP_SUPABASE_URL: PREVIEW_SUPABASE_URL,
+                REACT_APP_SUPABASE_ANON_KEY: PREVIEW_SUPABASE_KEY
+            }} }};
+        }}
         """
     
     # Build HTML template with string concatenation to avoid f-string brace issues
