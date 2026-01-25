@@ -98,6 +98,10 @@ class SupabaseConnectRequest(BaseModel):
     anon_key: str
     service_role_key: Optional[str] = None
 
+class VercelDeployRequest(BaseModel):
+    vercel_token: str
+    project_name: Optional[str] = None
+
 # ==================== OPENROUTER LLM ====================
 
 async def call_openrouter(messages: List[Dict]):
