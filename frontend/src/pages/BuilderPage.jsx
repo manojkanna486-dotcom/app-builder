@@ -182,6 +182,12 @@ export default function BuilderPage() {
   const [supabaseServiceKey, setSupabaseServiceKey] = useState("");
   const [connectingSupabase, setConnectingSupabase] = useState(false);
 
+  // Vercel deployment state
+  const [showVercelModal, setShowVercelModal] = useState(false);
+  const [vercelToken, setVercelToken] = useState("");
+  const [deploying, setDeploying] = useState(false);
+  const [deploymentUrl, setDeploymentUrl] = useState("");
+
   useEffect(() => {
     fetchProjectData();
   }, [projectId]);
