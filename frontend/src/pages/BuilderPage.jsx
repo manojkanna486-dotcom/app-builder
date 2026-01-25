@@ -916,6 +916,112 @@ export default function BuilderPage() {
           </div>
         </div>
       </div>
+
+      {/* Supabase Connection Modal */}
+      <Dialog open={showSupabaseModal} onOpenChange={setShowSupabaseModal}>
+        <DialogContent className="sm:max-w-[500px] bg-background border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Database className="w-5 h-5 text-primary" />
+              Connect Supabase
+            </DialogTitle>
+            <DialogDescription>
+              Connect your Supabase project to generate full-stack applications with a real database and Edge Functions backend.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="supabase-url">Project URL *</Label>
+              <Input
+                id="supabase-url"
+                data-testid="supabase-url-input"
+                placeholder="https://your-project.supabase.co"
+                value={supabaseUrl}
+                onChange={(e) => setSupabaseUrl(e.target.value)}
+                className="bg-card border-border"
+              />
+              <p className="text-xs text-muted-foreground">
+                Find this in Project Settings → API
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="supabase-anon-key">Anon / Public Key *</Label>
+              <Input
+                id="supabase-anon-key"
+                data-testid="supabase-anon-key-input"
+                placeholder="eyJhbGciOiJIUzI1NiIsInR..."
+                value={supabaseAnonKey}
+                onChange={(e) => setSupabaseAnonKey(e.target.value)}
+                className="bg-card border-border font-mono text-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Safe for frontend use
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="supabase-service-key">
+                Service Role Key <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="supabase-service-key"
+                data-testid="supabase-service-key-input"
+                type="password"
+                placeholder="eyJhbGciOiJIUzI1NiIsInR..."
+                value={supabaseServiceKey}
+                onChange={(e) => setSupabaseServiceKey(e.target.value)}
+                className="bg-card border-border font-mono text-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Required for admin operations (keep secret)
+              </p>
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5" />
+                <div className="text-xs text-amber-200">
+                  <p className="font-medium">How to get these credentials:</p>
+                  <ol className="list-decimal ml-4 mt-1 space-y-1 text-amber-200/80">
+                    <li>Go to your Supabase Dashboard</li>
+                    <li>Click Project Settings → API</li>
+                    <li>Copy the Project URL and keys</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowSupabaseModal(false)}
+              disabled={connectingSupabase}
+            >
+              Cancel
+            </Button>
+            <Button
+              data-testid="connect-supabase-submit-btn"
+              onClick={handleConnectSupabase}
+              disabled={connectingSupabase || !supabaseUrl.trim() || !supabaseAnonKey.trim()}
+            >
+              {connectingSupabase ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <Database className="w-4 h-4 mr-2" />
+                  Connect
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }
