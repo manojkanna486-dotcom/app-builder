@@ -1568,7 +1568,6 @@ build/
 @api_router.post("/projects/{project_id}/sandbox")
 async def create_codesandbox(project_id: str):
     """Create a CodeSandbox from the project code"""
-    import lzstring
     
     project = await database.get_project(project_id)
     if not project:
