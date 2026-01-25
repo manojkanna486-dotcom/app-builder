@@ -517,6 +517,22 @@ export default function BuilderPage() {
     }
   };
 
+  // Open in CodeSandbox
+  const handleOpenSandbox = async () => {
+    setCreatingSandbox(true);
+    try {
+      const res = await axios.post(`${API}/projects/${projectId}/sandbox`);
+      if (res.data.url) {
+        window.open(res.data.url, '_blank');
+        toast.success("CodeSandbox opened in new tab!");
+      }
+    } catch (err) {
+      toast.error("Failed to create sandbox");
+    } finally {
+      setCreatingSandbox(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
