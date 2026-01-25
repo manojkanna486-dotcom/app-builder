@@ -1338,14 +1338,25 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
 async def get_preview_html(project_id: str):
     """Generate HTML for iframe preview"""
     
+    # Get project for Supabase credentials
+    project = await database.get_project(project_id)
+    
     version = await database.get_latest_version(project_id)
     
     if not version or not version.get("files"):
         # Return placeholder
         return {"html": get_placeholder_html()}
     
-    # Pass all files to the preview generator
-    html = generate_preview_html_multifile(version["files"])
+    # Get Supabase config if connected
+    supabase_config = None
+    if project and project.get("supabase_connected"):
+        supabase_config = {
+            "url": project.get("supabase_url", ""),
+            "anon_key": project.get("supabase_anon_key", "")
+        }
+    
+    # Pass all files and supabase config to the preview generator
+    html = generate_preview_html_multifile(version["files"], supabase_config)
     return {"html": html}
 
 def get_placeholder_html():
