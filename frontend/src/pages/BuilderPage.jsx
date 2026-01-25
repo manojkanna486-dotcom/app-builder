@@ -832,19 +832,34 @@ export default function BuilderPage() {
                 </Tooltip>
               )}
               {viewMode === "preview" && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      data-testid="refresh-preview-btn"
-                      onClick={refreshPreview}
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Refresh preview</TooltipContent>
-                </Tooltip>
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        data-testid="open-preview-btn"
+                        onClick={() => window.open(`${API}/projects/${projectId}/preview/live`, '_blank')}
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Open in new tab</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        data-testid="refresh-preview-btn"
+                        onClick={refreshPreview}
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Refresh preview</TooltipContent>
+                  </Tooltip>
+                </>
               )}
             </div>
           </div>
@@ -860,7 +875,18 @@ export default function BuilderPage() {
                     <div className="browser-dot browser-dot-yellow" />
                     <div className="browser-dot browser-dot-green" />
                   </div>
-                  <div className="browser-address">localhost:3000</div>
+                  <div className="browser-address flex items-center gap-2">
+                    <span>localhost:3000</span>
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${API}/projects/${projectId}/preview/live`);
+                        toast.success("Preview URL copied!");
+                      }}
+                      className="text-xs text-blue-400 hover:text-blue-300 underline"
+                    >
+                      Copy URL
+                    </button>
+                  </div>
                 </div>
                 {/* Iframe */}
                 <iframe
