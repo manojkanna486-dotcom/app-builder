@@ -1565,6 +1565,108 @@ build/
         }
     )
 
+@api_router.post("/projects/{project_id}/sandbox")
+async def create_codesandbox(project_id: str):
+    """Create a CodeSandbox from the project code"""
+    import lzstring
+    
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    version = await database.get_latest_version(project_id)
+    if not version or not version.get("files"):
+        raise HTTPException(status_code=404, detail="No code to export")
+    
+    # Get Supabase config
+    supabase_url = project.get("supabase_url", "")
+    supabase_anon_key = project.get("supabase_anon_key", "")
+    
+    # Build files for CodeSandbox
+    sandbox_files = {}
+    
+    # Add frontend files
+    for f in version["files"]:
+        file_type = f.get("file_type", "frontend")
+        path = f.get("path", "")
+        content = f.get("content", "")
+        
+        if file_type == "frontend" or path.endswith(".jsx"):
+            # CodeSandbox uses src/ prefix
+            sandbox_files[f"src/{path}"] = {"content": content}
+    
+    # Add package.json
+    package_json = {
+        "name": project.get("name", "app").lower().replace(" ", "-"),
+        "version": "1.0.0",
+        "main": "src/index.js",
+        "dependencies": {
+            "react": "^18.2.0",
+            "react-dom": "^18.2.0",
+            "react-scripts": "5.0.1",
+            "@supabase/supabase-js": "^2.39.0"
+        },
+        "scripts": {
+            "start": "react-scripts start",
+            "build": "react-scripts build"
+        }
+    }
+    sandbox_files["package.json"] = {"content": json.dumps(package_json, indent=2)}
+    
+    # Add index.html
+    index_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{project.get("name", "App")}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>"""
+    sandbox_files["public/index.html"] = {"content": index_html}
+    
+    # Add src/index.js
+    index_js = f"""import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+
+// Supabase config (injected)
+window.SUPABASE_URL = '{supabase_url}';
+window.SUPABASE_ANON_KEY = '{supabase_anon_key}';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+"""
+    sandbox_files["src/index.js"] = {"content": index_js}
+    
+    # Create the parameters object for CodeSandbox
+    parameters = {"files": sandbox_files}
+    
+    # Use CodeSandbox define API
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            "https://codesandbox.io/api/v1/sandboxes/define?json=1",
+            json=parameters,
+            headers={"Content-Type": "application/json"}
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"CodeSandbox error: {response.text}")
+            raise HTTPException(status_code=500, detail="Failed to create sandbox")
+        
+        result = response.json()
+        sandbox_id = result.get("sandbox_id")
+        
+        return {
+            "sandbox_id": sandbox_id,
+            "url": f"https://codesandbox.io/s/{sandbox_id}",
+            "embed_url": f"https://codesandbox.io/embed/{sandbox_id}?fontsize=14&theme=dark&view=preview"
+        }
+
 @api_router.post("/projects/{project_id}/deploy/vercel")
 async def deploy_to_vercel(project_id: str, request: VercelDeployRequest):
     """Deploy project directly to Vercel"""
