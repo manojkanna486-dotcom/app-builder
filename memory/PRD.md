@@ -1,22 +1,22 @@
 # App Builder - Product Requirements Document
 
 ## Original Problem Statement
-Create an App Builder App (v0 clone) that allows users to build React applications using natural language prompts. Features include:
-- Project management with list and creation
-- Split-view interface (25% chat, 75% preview)
-- Real-time code generation via LLM
-- Live preview in sandboxed iframe
-- Version management and history
-- Modern minimalist dark theme
+Create an App Builder (v0 clone) that allows users to build React applications using natural language prompts. 
+
+**Latest Requirement (P0):** Upgrade to generate **full-stack applications** with:
+- React frontend
+- Supabase Edge Functions backend (TypeScript/Deno)
+- PostgreSQL database schema with migrations
+- Supabase Auth integration
 
 ## Architecture
 
 ### Backend (FastAPI)
 - **Framework**: FastAPI with async support
-- **Database**: MongoDB (default) or Supabase PostgreSQL (configurable via DB_TYPE)
+- **Database**: MongoDB for App Builder data (projects, versions, messages)
 - **LLM Provider**: OpenRouter (Claude Sonnet 4)
 - **Key Files**:
-  - `/app/backend/server.py` - Main API server
+  - `/app/backend/server.py` - Main API server with full-stack generation logic
   - `/app/backend/database.py` - Database abstraction layer
 
 ### Frontend (React)
@@ -24,7 +24,7 @@ Create an App Builder App (v0 clone) that allows users to build React applicatio
 - **Styling**: Tailwind CSS + shadcn/ui components
 - **Key Files**:
   - `/app/frontend/src/pages/HomePage.jsx` - Project list page
-  - `/app/frontend/src/pages/BuilderPage.jsx` - Builder with chat + preview + file tree
+  - `/app/frontend/src/pages/BuilderPage.jsx` - Builder with Supabase connection UI
 
 ### API Endpoints
 - `GET /api/projects` - List projects
@@ -36,72 +36,71 @@ Create an App Builder App (v0 clone) that allows users to build React applicatio
 - `GET /api/projects/{id}/messages` - Get chat messages
 - `POST /api/projects/{id}/messages` - Add message
 - `POST /api/projects/{id}/generate` - Generate code via LLM
+- `POST /api/projects/{id}/generate/stream` - Generate code with streaming
 - `GET /api/projects/{id}/preview` - Get preview HTML
 - `GET /api/projects/{id}/validate` - Validate code for errors
 - `POST /api/projects/{id}/fix` - Auto-fix code errors
-
-## User Personas
-1. **Non-technical Users**: Build apps via natural language
-2. **Developers**: Rapid prototyping and iteration
-3. **Designers**: Quick UI mockup generation
-
-## Core Requirements (Static)
-- [x] Project CRUD operations
-- [x] Chat-based prompt interface
-- [x] LLM code generation (OpenRouter)
-- [x] Real-time iframe preview
-- [x] Version tracking
-- [x] Code view/export
+- `POST /api/projects/{id}/analyze` - Analyze prompt for clarification
+- **NEW** `POST /api/projects/{id}/connect-supabase` - Connect Supabase project
+- **NEW** `POST /api/projects/{id}/disconnect-supabase` - Disconnect Supabase
+- **NEW** `GET /api/projects/{id}/supabase-status` - Get Supabase connection status
 
 ## What's Been Implemented
-- **Jan 24, 2026**: MVP Complete
-  - Full project management UI
-  - OpenRouter integration for code generation
-  - Sandboxed iframe preview with React/Tailwind
-  - Version history with success/failed states
-  - Modern dark theme UI
-  - Chat interface with message history
 
-- **Jan 24, 2026**: Feature Updates
-  - **Multi-file project support**: Generate apps with multiple component files
-  - **File tree navigator**: Browse files in Code view sidebar
-  - **Code validation**: Detect syntax errors, unmatched brackets, missing components
-  - **Auto-fix**: LLM-powered automatic code repair
-  - **Database abstraction**: Supports MongoDB (default) and Supabase PostgreSQL
+### Jan 25, 2026 - Phase 1: Full-Stack Supabase Integration
+- **Connect Supabase UI**: Button and modal to capture Supabase URL and keys
+- **Supabase Connection Endpoints**: Store credentials per project
+- **Full-Stack LLM Prompts**: Generate Edge Functions + SQL migrations
+- **File Type Detection**: Auto-detect `frontend`, `edge_function`, `sql` types
+- **Status Banner**: Shows "Supabase Connected" with disconnect option
+
+### Previous Sessions
+- MVP App Builder with frontend-only generation
+- Multi-file project support with file tree navigator
+- Code validation and auto-fix
+- Real-time streaming generation
+- Smart clarification system for vague prompts
 
 ## Prioritized Backlog
 
-### P0 (Critical) - ✅ Complete
-- [x] Project creation and management
-- [x] Chat interface
-- [x] Code generation
-- [x] Preview rendering
-- [x] Multi-file support
-- [x] Code validation
+### P0 (Critical) - In Progress
+- [x] Connect Supabase UI and backend
+- [x] Full-stack code generation prompts
+- [x] File type distinction (frontend/edge_function/sql)
+- [ ] Backend deployment to Supabase Edge Functions (research needed)
+- [ ] Supabase Auth integration in generated apps
 
-### P1 (Important) - Next Phase
-- [ ] Streaming code generation (show code as it generates)
-- [ ] User authentication (Supabase Auth)
-- [ ] Project templates
+### P1 (Important)
+- [ ] Execute SQL migrations on connected Supabase
+- [ ] Deploy Edge Functions programmatically
+- [ ] User authentication for App Builder itself
 
 ### P2 (Nice to Have)
 - [ ] Export project as ZIP
+- [ ] Syntax highlighting in code view
+- [ ] Cancel generation button
 - [ ] Share projects publicly
-- [ ] Custom component library
-- [ ] AI-assisted debugging
 
 ## Database Configuration
-To switch to Supabase PostgreSQL:
-1. Get Transaction Pooler URI from Supabase Dashboard -> Connect -> Transaction Pooler
-2. Set in `/app/backend/.env`:
-   ```
-   DB_TYPE="supabase"
-   SUPABASE_DB_URL="postgresql://postgres.[REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres"
-   ```
-3. Restart backend
+The App Builder uses MongoDB. Generated apps use Supabase PostgreSQL.
 
-## Next Tasks
-1. Get Supabase Transaction Pooler URI to enable PostgreSQL
-2. Add streaming support for real-time code generation feedback
-3. Implement user authentication
+### Supabase Connection (for generated apps)
+Users must provide:
+1. **Project URL**: `https://[project-ref].supabase.co`
+2. **Anon/Public Key**: Safe for frontend
+3. **Service Role Key** (optional): For admin operations
 
+## File Types in Generated Projects
+- `frontend` - React/JSX components
+- `edge_function` - Supabase Edge Functions (TypeScript/Deno)
+- `sql` - Database migrations
+
+## Testing Status
+- Backend: 100% (21/21 tests passed)
+- Frontend: 100%
+- Test Report: `/app/test_reports/iteration_4.json`
+
+## Known Limitations
+- Preview iframe is blank for full-stack apps (Supabase client can't load in sandbox)
+- Edge Functions must be deployed manually to Supabase (not automated yet)
+- SQL migrations must be run manually via Supabase Dashboard
