@@ -1009,7 +1009,7 @@ async def generate_code(project_id: str, request: PromptRequest):
                 except:
                     pass
         
-        # Validate files structure
+        # Validate files structure and fix file_type based on path
         for i, f in enumerate(files):
             if not isinstance(f, dict):
                 raise ValueError(f"File {i} is not a dict: {type(f)}")
@@ -1017,7 +1017,17 @@ async def generate_code(project_id: str, request: PromptRequest):
                 raise ValueError(f"File {i} missing 'path': {f.keys()}")
             if "content" not in f:
                 raise ValueError(f"File {i} missing 'content': {f.keys()}")
-            logger.info(f"File {i}: {f['path']} ({len(f['content'])} chars)")
+            
+            # Auto-detect file_type based on path if not set correctly
+            path = f.get("path", "")
+            if ".sql" in path:
+                f["file_type"] = "sql"
+            elif "supabase/functions" in path or path.endswith(".ts"):
+                f["file_type"] = "edge_function"
+            elif not f.get("file_type"):
+                f["file_type"] = "frontend"
+            
+            logger.info(f"File {i}: {f['path']} (type: {f.get('file_type')}, {len(f['content'])} chars)")
         
         # Validate code and auto-fix if needed
         validation_errors = validate_react_code(files)
