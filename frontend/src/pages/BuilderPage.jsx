@@ -871,6 +871,21 @@ export default function BuilderPage() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
+                        variant="default"
+                        size="sm"
+                        data-testid="deploy-vercel-btn"
+                        onClick={() => setShowVercelModal(true)}
+                        className="bg-black hover:bg-gray-800 text-white gap-1 h-8"
+                      >
+                        <Rocket className="w-3 h-3" />
+                        Deploy
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Deploy to Vercel</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
                         variant="ghost"
                         size="icon"
                         data-testid="download-zip-btn"
@@ -882,7 +897,7 @@ export default function BuilderPage() {
                         <Download className="w-4 h-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Download ZIP (deploy to Vercel/Netlify)</TooltipContent>
+                    <TooltipContent>Download ZIP</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
