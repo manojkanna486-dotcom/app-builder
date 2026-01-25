@@ -1133,11 +1133,14 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
         files_detected = []
         
         try:
-            # Send initial status
+            # Send initial status based on project type
             yield f"data: {json.dumps({'type': 'status', 'message': 'Analyzing request...'})}\n\n"
             await asyncio.sleep(0.1)
             
-            yield f"data: {json.dumps({'type': 'status', 'message': 'Generating code structure...' if not is_update else 'Planning changes...'})}\n\n"
+            if is_fullstack:
+                yield f"data: {json.dumps({'type': 'status', 'message': '🚀 Generating full-stack app (Frontend + Edge Functions + Database)...'})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Generating code structure...' if not is_update else 'Planning changes...'})}\n\n"
             
             # Stream from LLM
             async for chunk in call_openrouter_stream(messages):
@@ -1150,7 +1153,17 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                     paths = re.findall(r'"path"\s*:\s*"([^"]+)"', full_content)
                     if paths and paths[-1] not in files_detected:
                         files_detected.append(paths[-1])
-                        yield f"data: {json.dumps({'type': 'status', 'message': f'Writing {paths[-1]}...'})}\n\n"
+                        file_path = paths[-1]
+                        # Show more context for full-stack apps
+                        if is_fullstack:
+                            if 'functions' in file_path:
+                                yield f"data: {json.dumps({'type': 'status', 'message': f'⚡ Writing Edge Function: {file_path}...'})}\n\n"
+                            elif '.sql' in file_path:
+                                yield f"data: {json.dumps({'type': 'status', 'message': f'🗄️ Writing Database Migration: {file_path}...'})}\n\n"
+                            else:
+                                yield f"data: {json.dumps({'type': 'status', 'message': f'📝 Writing {file_path}...'})}\n\n"
+                        else:
+                            yield f"data: {json.dumps({'type': 'status', 'message': f'Writing {file_path}...'})}\n\n"
                 
                 # Send code chunk
                 yield f"data: {json.dumps({'type': 'code', 'content': chunk})}\n\n"
