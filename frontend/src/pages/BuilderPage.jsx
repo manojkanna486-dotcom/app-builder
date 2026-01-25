@@ -427,6 +427,56 @@ export default function BuilderPage() {
     }
   };
 
+  // Connect Supabase handler
+  const handleConnectSupabase = async () => {
+    if (!supabaseUrl.trim() || !supabaseAnonKey.trim()) {
+      toast.error("Project URL and Anon Key are required");
+      return;
+    }
+
+    setConnectingSupabase(true);
+    try {
+      const res = await axios.post(`${API}/projects/${projectId}/connect-supabase`, {
+        url: supabaseUrl.trim(),
+        anon_key: supabaseAnonKey.trim(),
+        service_role_key: supabaseServiceKey.trim() || null,
+      });
+
+      if (res.data.connected) {
+        toast.success("Supabase connected successfully!");
+        setProject((prev) => ({
+          ...prev,
+          supabase_connected: true,
+          supabase_url: supabaseUrl.trim(),
+        }));
+        setShowSupabaseModal(false);
+        // Reset form
+        setSupabaseUrl("");
+        setSupabaseAnonKey("");
+        setSupabaseServiceKey("");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to connect Supabase");
+    } finally {
+      setConnectingSupabase(false);
+    }
+  };
+
+  // Disconnect Supabase
+  const handleDisconnectSupabase = async () => {
+    try {
+      await axios.post(`${API}/projects/${projectId}/disconnect-supabase`);
+      setProject((prev) => ({
+        ...prev,
+        supabase_connected: false,
+        supabase_url: null,
+      }));
+      toast.success("Supabase disconnected");
+    } catch (err) {
+      toast.error("Failed to disconnect");
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
