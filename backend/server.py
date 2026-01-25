@@ -1565,6 +1565,147 @@ build/
         }
     )
 
+@api_router.post("/projects/{project_id}/deploy/vercel")
+async def deploy_to_vercel(project_id: str, request: VercelDeployRequest):
+    """Deploy project directly to Vercel"""
+    import hashlib
+    import base64
+    
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    version = await database.get_latest_version(project_id)
+    if not version or not version.get("files"):
+        raise HTTPException(status_code=404, detail="No code to deploy")
+    
+    # Get Supabase config
+    supabase_url = project.get("supabase_url", "")
+    supabase_anon_key = project.get("supabase_anon_key", "")
+    
+    project_name = request.project_name or project.get("name", "app").lower().replace(" ", "-").replace("(", "").replace(")", "")
+    
+    # Build files for Vercel deployment
+    vercel_files = []
+    
+    # Add frontend files
+    for f in version["files"]:
+        file_type = f.get("file_type", "frontend")
+        path = f.get("path", "")
+        content = f.get("content", "")
+        
+        if file_type == "frontend" or path.endswith(".jsx"):
+            vercel_files.append({
+                "file": f"src/{path}",
+                "data": content
+            })
+        elif file_type == "sql" or path.endswith(".sql"):
+            # Include SQL for reference
+            vercel_files.append({
+                "file": path if path.startswith("supabase/") else f"supabase/migrations/{path}",
+                "data": content
+            })
+    
+    # Add package.json
+    package_json = json.dumps({
+        "name": project_name,
+        "version": "1.0.0",
+        "private": True,
+        "dependencies": {
+            "react": "^18.2.0",
+            "react-dom": "^18.2.0",
+            "react-scripts": "5.0.1",
+            "@supabase/supabase-js": "^2.39.0"
+        },
+        "scripts": {
+            "start": "react-scripts start",
+            "build": "react-scripts build"
+        },
+        "browserslist": {
+            "production": [">0.2%", "not dead"],
+            "development": ["last 1 chrome version"]
+        }
+    }, indent=2)
+    vercel_files.append({"file": "package.json", "data": package_json})
+    
+    # Add index.html
+    index_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{project.get("name", "App")}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>"""
+    vercel_files.append({"file": "public/index.html", "data": index_html})
+    
+    # Add src/index.js
+    index_js = """import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+"""
+    vercel_files.append({"file": "src/index.js", "data": index_js})
+    
+    # Prepare Vercel API request
+    vercel_payload = {
+        "name": project_name,
+        "files": vercel_files,
+        "projectSettings": {
+            "framework": "create-react-app",
+            "buildCommand": "npm run build",
+            "outputDirectory": "build"
+        },
+        "target": "production"
+    }
+    
+    # Add environment variables if Supabase is connected
+    if supabase_url and supabase_anon_key:
+        vercel_payload["env"] = {
+            "REACT_APP_SUPABASE_URL": supabase_url,
+            "REACT_APP_SUPABASE_ANON_KEY": supabase_anon_key
+        }
+    
+    # Deploy to Vercel
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            "https://api.vercel.com/v13/deployments",
+            json=vercel_payload,
+            headers={
+                "Authorization": f"Bearer {request.vercel_token}",
+                "Content-Type": "application/json"
+            }
+        )
+        
+        if response.status_code not in [200, 201]:
+            error_detail = response.json() if response.text else "Unknown error"
+            logger.error(f"Vercel deployment failed: {error_detail}")
+            raise HTTPException(status_code=400, detail=f"Vercel deployment failed: {error_detail}")
+        
+        result = response.json()
+        
+        # Save deployment info to project
+        await database.update_project(project_id, {
+            "vercel_deployment_url": f"https://{result.get('url', '')}",
+            "vercel_project_id": result.get('projectId'),
+            "last_deployed": datetime.now(timezone.utc).isoformat()
+        })
+        
+        return {
+            "success": True,
+            "url": f"https://{result.get('url', '')}",
+            "projectId": result.get("projectId"),
+            "deploymentId": result.get("id"),
+            "status": result.get("readyState", "BUILDING")
+        }
+
 def get_placeholder_html():
     return """<!DOCTYPE html>
 <html>
