@@ -1392,11 +1392,22 @@ def clean_component_code(code: str) -> str:
 def generate_preview_html_multifile(files: list) -> str:
     """Generate HTML with multiple React components for preview"""
     
+    # Check if this is a full-stack app (has Supabase files)
+    has_supabase = any('supabase' in f.get('path', '').lower() or '@supabase' in f.get('content', '') for f in files)
+    
     # Sort files: components first, then App.jsx last (so it can use components)
+    # Skip non-frontend files (edge functions, sql) for preview
     sorted_files = []
     app_file = None
     
     for f in files:
+        # Skip non-frontend files
+        file_type = f.get("file_type", "frontend")
+        if file_type in ["edge_function", "sql"]:
+            continue
+        if f.get("path", "").endswith(".ts") or f.get("path", "").endswith(".sql"):
+            continue
+            
         if f["path"] == "App.jsx" or f["path"].endswith("/App.jsx"):
             app_file = f
         else:
@@ -1405,7 +1416,8 @@ def generate_preview_html_multifile(files: list) -> str:
     if app_file:
         sorted_files.append(app_file)
     elif files:
-        sorted_files = files
+        # If no App.jsx found, use frontend files only
+        sorted_files = [f for f in files if f.get("file_type", "frontend") == "frontend"]
     
     # Build all component code
     all_code_parts = []
@@ -1416,6 +1428,20 @@ def generate_preview_html_multifile(files: list) -> str:
     
     all_code = "\n\n".join(all_code_parts)
     
+    # Add Supabase library if needed
+    supabase_script = ""
+    supabase_init = ""
+    if has_supabase:
+        supabase_script = '<script src="https://unpkg.com/@supabase/supabase-js@2"></script>'
+        supabase_init = """
+        // Supabase client setup for preview
+        const { createClient } = supabase;
+        // Mock process.env for preview
+        if (typeof process === 'undefined') {
+            window.process = { env: {} };
+        }
+        """
+    
     # Build HTML template with string concatenation to avoid f-string brace issues
     html_template = """<!DOCTYPE html>
 <html>
@@ -1425,6 +1451,7 @@ def generate_preview_html_multifile(files: list) -> str:
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    """ + supabase_script + """
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -1444,6 +1471,8 @@ def generate_preview_html_multifile(files: list) -> str:
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback, useMemo, useContext, createContext, useReducer } = React;
+        
+        """ + supabase_init + """
         
         // Error Boundary Component
         class ErrorBoundary extends React.Component {
