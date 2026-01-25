@@ -1336,7 +1336,7 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
 
 @api_router.get("/projects/{project_id}/preview")
 async def get_preview_html(project_id: str):
-    """Generate HTML for iframe preview"""
+    """Generate HTML for iframe preview (returns JSON with html field)"""
     
     # Get project for Supabase credentials
     project = await database.get_project(project_id)
@@ -1358,6 +1358,31 @@ async def get_preview_html(project_id: str):
     # Pass all files and supabase config to the preview generator
     html = generate_preview_html_multifile(version["files"], supabase_config)
     return {"html": html}
+
+@api_router.get("/projects/{project_id}/preview/live")
+async def get_preview_live(project_id: str):
+    """Serve the preview as a standalone HTML page (for opening in new tab)"""
+    from fastapi.responses import HTMLResponse
+    
+    # Get project for Supabase credentials
+    project = await database.get_project(project_id)
+    
+    version = await database.get_latest_version(project_id)
+    
+    if not version or not version.get("files"):
+        return HTMLResponse(content=get_placeholder_html(), status_code=200)
+    
+    # Get Supabase config if connected
+    supabase_config = None
+    if project and project.get("supabase_connected"):
+        supabase_config = {
+            "url": project.get("supabase_url", ""),
+            "anon_key": project.get("supabase_anon_key", "")
+        }
+    
+    # Generate and return HTML directly
+    html = generate_preview_html_multifile(version["files"], supabase_config)
+    return HTMLResponse(content=html, status_code=200)
 
 def get_placeholder_html():
     return """<!DOCTYPE html>
