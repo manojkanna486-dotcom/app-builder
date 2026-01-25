@@ -839,6 +839,22 @@ export default function BuilderPage() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        data-testid="download-zip-btn"
+                        onClick={() => {
+                          window.location.href = `${API}/projects/${projectId}/export`;
+                          toast.success("Downloading ZIP...");
+                        }}
+                      >
+                        <Download className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Download ZIP (deploy to Vercel/Netlify)</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         data-testid="open-preview-btn"
                         onClick={() => window.open(`${API}/projects/${projectId}/preview/live`, '_blank')}
                       >
