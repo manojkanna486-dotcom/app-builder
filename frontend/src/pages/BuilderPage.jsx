@@ -906,6 +906,26 @@ export default function BuilderPage() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
+                        variant="outline"
+                        size="sm"
+                        data-testid="sandbox-btn"
+                        onClick={handleOpenSandbox}
+                        disabled={creatingSandbox}
+                        className="gap-1 h-8"
+                      >
+                        {creatingSandbox ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Play className="w-3 h-3" />
+                        )}
+                        Sandbox
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Open in CodeSandbox (editable)</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
                         variant="ghost"
                         size="icon"
                         data-testid="download-zip-btn"
