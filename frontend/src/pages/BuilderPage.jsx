@@ -189,6 +189,9 @@ export default function BuilderPage() {
   const [deploying, setDeploying] = useState(false);
   const [deploymentUrl, setDeploymentUrl] = useState("");
 
+  // Sandbox state
+  const [creatingSandbox, setCreatingSandbox] = useState(false);
+
   useEffect(() => {
     fetchProjectData();
   }, [projectId]);
