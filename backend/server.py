@@ -326,6 +326,88 @@ async def delete_project(project_id: str):
     await database.delete_project(project_id)
     return {"status": "deleted"}
 
+# ==================== SUPABASE CONNECTION ====================
+
+@api_router.post("/projects/{project_id}/connect-supabase")
+async def connect_supabase(project_id: str, request: SupabaseConnectRequest):
+    """Connect a Supabase project to this app project"""
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Validate the Supabase URL format
+    if not request.url.startswith("https://") or ".supabase.co" not in request.url:
+        raise HTTPException(status_code=400, detail="Invalid Supabase URL format")
+    
+    # Validate the anon key looks like a JWT
+    if not request.anon_key.startswith("eyJ"):
+        raise HTTPException(status_code=400, detail="Invalid Supabase anon key format")
+    
+    # Optional: Test connection to Supabase
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Test the REST API endpoint
+            test_url = f"{request.url}/rest/v1/"
+            headers = {
+                "apikey": request.anon_key,
+                "Authorization": f"Bearer {request.anon_key}"
+            }
+            response = await client.get(test_url, headers=headers)
+            # 200 or 404 are OK (means connection works), 401/403 means bad key
+            if response.status_code in [401, 403]:
+                raise HTTPException(status_code=400, detail="Invalid Supabase credentials")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=400, detail="Could not connect to Supabase (timeout)")
+    except Exception as e:
+        logger.warning(f"Supabase connection test warning: {e}")
+        # Continue anyway - might be network issue
+    
+    # Update project with Supabase config
+    await database.update_project(project_id, {
+        "supabase_connected": True,
+        "supabase_url": request.url,
+        "supabase_anon_key": request.anon_key,
+        "supabase_service_key": request.service_role_key,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    logger.info(f"Project {project_id} connected to Supabase: {request.url}")
+    
+    return {
+        "connected": True,
+        "message": "Supabase connected successfully",
+        "url": request.url
+    }
+
+@api_router.post("/projects/{project_id}/disconnect-supabase")
+async def disconnect_supabase(project_id: str):
+    """Disconnect Supabase from this project"""
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    await database.update_project(project_id, {
+        "supabase_connected": False,
+        "supabase_url": None,
+        "supabase_anon_key": None,
+        "supabase_service_key": None,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {"disconnected": True, "message": "Supabase disconnected"}
+
+@api_router.get("/projects/{project_id}/supabase-status")
+async def get_supabase_status(project_id: str):
+    """Get Supabase connection status for a project"""
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    return {
+        "connected": project.get("supabase_connected", False),
+        "url": project.get("supabase_url")
+    }
+
 # ==================== CODE VALIDATION & AUTO-FIX ====================
 
 def validate_react_code(files: List[dict]) -> List[str]:
