@@ -1258,6 +1258,16 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
             files = result.get("files", [])
             summary = result.get("summary", "")
             
+            # Auto-detect file_type based on path
+            for f in files:
+                path = f.get("path", "")
+                if ".sql" in path:
+                    f["file_type"] = "sql"
+                elif "supabase/functions" in path or path.endswith(".ts"):
+                    f["file_type"] = "edge_function"
+                elif not f.get("file_type"):
+                    f["file_type"] = "frontend"
+            
             yield f"data: {json.dumps({'type': 'status', 'message': f'Validating {len(files)} file(s)...'})}\n\n"
             
             # Validate and potentially auto-fix
