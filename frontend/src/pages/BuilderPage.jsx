@@ -23,6 +23,7 @@ import {
   AlertCircle,
   ExternalLink,
   Download,
+  Rocket,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
