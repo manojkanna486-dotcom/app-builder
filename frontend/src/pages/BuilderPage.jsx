@@ -1115,6 +1115,118 @@ export default function BuilderPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Vercel Deployment Modal */}
+      <Dialog open={showVercelModal} onOpenChange={setShowVercelModal}>
+        <DialogContent className="sm:max-w-[500px] bg-background border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Rocket className="w-5 h-5" />
+              Deploy to Vercel
+            </DialogTitle>
+            <DialogDescription>
+              Deploy your app directly to Vercel with one click. Your app will be live in seconds.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deploymentUrl ? (
+            <div className="py-6">
+              <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 text-center">
+                <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                <h3 className="font-semibold text-green-400 mb-2">Deployment Started!</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Your app is being deployed. It will be live at:
+                </p>
+                <a
+                  href={deploymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 underline break-all"
+                >
+                  {deploymentUrl}
+                  <ExternalLink className="w-4 h-4 flex-shrink-0" />
+                </a>
+                <p className="text-xs text-muted-foreground mt-4">
+                  Note: First deployment may take 1-2 minutes to build.
+                </p>
+              </div>
+              <div className="mt-4 flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowVercelModal(false);
+                    setDeploymentUrl("");
+                    setVercelToken("");
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="vercel-token">Vercel Access Token *</Label>
+                  <Input
+                    id="vercel-token"
+                    data-testid="vercel-token-input"
+                    type="password"
+                    placeholder="Enter your Vercel token..."
+                    value={vercelToken}
+                    onChange={(e) => setVercelToken(e.target.value)}
+                    className="bg-card border-border font-mono text-xs"
+                  />
+                </div>
+
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-blue-400 mt-0.5" />
+                    <div className="text-xs text-blue-200">
+                      <p className="font-medium mb-1">How to get your Vercel token:</p>
+                      <ol className="list-decimal ml-4 space-y-1 text-blue-200/80">
+                        <li>Go to <a href="https://vercel.com/account/tokens" target="_blank" rel="noopener noreferrer" className="underline">vercel.com/account/tokens</a></li>
+                        <li>Click "Create" to generate a new token</li>
+                        <li>Give it a name (e.g., "App Builder")</li>
+                        <li>Copy and paste the token here</li>
+                      </ol>
+                      <p className="mt-2 text-blue-300">Your token is stored locally and never saved on our servers.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowVercelModal(false)}
+                  disabled={deploying}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="deploy-vercel-submit-btn"
+                  onClick={handleDeployToVercel}
+                  disabled={deploying || !vercelToken.trim()}
+                  className="bg-black hover:bg-gray-800"
+                >
+                  {deploying ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Deploying...
+                    </>
+                  ) : (
+                    <>
+                      <Rocket className="w-4 h-4 mr-2" />
+                      Deploy Now
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }
