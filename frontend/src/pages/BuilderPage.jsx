@@ -171,6 +171,13 @@ export default function BuilderPage() {
   const [clarificationAnswers, setClarificationAnswers] = useState({});
   const [originalPrompt, setOriginalPrompt] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
+  
+  // Supabase connection state
+  const [showSupabaseModal, setShowSupabaseModal] = useState(false);
+  const [supabaseUrl, setSupabaseUrl] = useState("");
+  const [supabaseAnonKey, setSupabaseAnonKey] = useState("");
+  const [supabaseServiceKey, setSupabaseServiceKey] = useState("");
+  const [connectingSupabase, setConnectingSupabase] = useState(false);
 
   useEffect(() => {
     fetchProjectData();
