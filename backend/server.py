@@ -194,13 +194,16 @@ async def supabase_oauth_callback(code: str = Query(...), state: str = Query(...
                 }
             )
         
-        if token_response.status_code != 200:
-            logger.error(f"Token exchange failed: {token_response.text}")
+        # Check for success (200 or 201)
+        if token_response.status_code not in [200, 201]:
+            logger.error(f"Token exchange failed: {token_response.status_code} - {token_response.text}")
             return RedirectResponse(url=f"/?error=token_exchange_failed")
         
         tokens = token_response.json()
         access_token = tokens.get("access_token")
         refresh_token = tokens.get("refresh_token")
+        
+        logger.info(f"OAuth token exchange successful for project {project_id}")
         
         # Store tokens in the project (temporarily in memory, will be used to fetch projects)
         # We'll redirect to a page where user can select a project
