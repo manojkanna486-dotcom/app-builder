@@ -150,21 +150,21 @@ async def supabase_oauth_login(project_id: str = Query(..., description="App Bui
     }
     
     # Build authorization URL with required scopes
-    # Scopes needed: projects:read, projects:write, api_keys:read
-    scopes = "projects:read projects:write organizations:read"
+    # Scopes needed: projects:read, organizations:read
+    from urllib.parse import urlencode
     
     params = {
         "client_id": SUPABASE_OAUTH_CLIENT_ID,
         "redirect_uri": SUPABASE_OAUTH_REDIRECT_URI,
         "response_type": "code",
-        "scope": scopes,
+        "scope": "projects:read organizations:read",
         "state": state,
         "code_challenge": code_challenge,
         "code_challenge_method": "S256"
     }
     
-    auth_url = f"{SUPABASE_OAUTH_AUTH_URL}?" + "&".join(f"{k}={v}" for k, v in params.items())
-    logger.info(f"Redirecting to Supabase OAuth: {auth_url[:100]}...")
+    auth_url = f"{SUPABASE_OAUTH_AUTH_URL}?{urlencode(params)}"
+    logger.info(f"Redirecting to Supabase OAuth: {auth_url[:150]}...")
     
     return RedirectResponse(url=auth_url)
 
