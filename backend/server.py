@@ -1907,7 +1907,6 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                     
                     if migration_result.get("status") == "ready":
                         sql_count = migration_result.get("total", 0)
-                        sql_editor_url = migration_result.get("sql_editor_url", "")
                         status_msg = f"✅ {sql_count} SQL migration(s) ready. Run them in Supabase SQL Editor."
                         yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
                     elif migration_result.get("status") == "skipped":
