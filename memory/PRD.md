@@ -128,7 +128,7 @@ DB_NAME="test_database"
 OPENROUTER_API_KEY="sk-or-v1-..."
 SUPABASE_OAUTH_CLIENT_ID="995b1173-e948-42c4-93dc-3a7632968fed"
 SUPABASE_OAUTH_CLIENT_SECRET="sba_..."
-SUPABASE_OAUTH_REDIRECT_URI="https://stacksmith-2.preview.emergentagent.com/api/auth/supabase/callback"
+SUPABASE_OAUTH_REDIRECT_URI="https://supastack-1.preview.emergentagent.com/api/auth/supabase/callback"
 ```
 
 ## Data Model (Project)
