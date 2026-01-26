@@ -1945,12 +1945,17 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                     migration_result = await run_migrations_internal(project_id, files)
                     
                     if migration_result.get("status") == "completed":
-                        yield f"data: {json.dumps({'type': 'status', 'message': f'✅ Migrations completed: {migration_result.get(\"success\", 0)} successful'})}\n\n"
+                        success_count = migration_result.get("success", 0)
+                        status_msg = f"✅ Migrations completed: {success_count} successful"
+                        yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
                     elif migration_result.get("status") == "partial":
                         manual_count = migration_result.get("manual_required", 0)
-                        yield f"data: {json.dumps({'type': 'status', 'message': f'⚠️ {manual_count} migration(s) require manual execution in Supabase SQL Editor'})}\n\n"
+                        status_msg = f"⚠️ {manual_count} migration(s) require manual execution in Supabase SQL Editor"
+                        yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
                     elif migration_result.get("status") == "skipped":
-                        yield f"data: {json.dumps({'type': 'status', 'message': f'ℹ️ Migrations skipped: {migration_result.get(\"message\", \"\")}'})}\n\n"
+                        skip_reason = migration_result.get("message", "")
+                        status_msg = f"ℹ️ Migrations skipped: {skip_reason}"
+                        yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
                 
                 if edge_functions:
                     yield f"data: {json.dumps({'type': 'status', 'message': '⚡ Preparing Edge Functions for deployment...'})}\n\n"
@@ -1958,7 +1963,8 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                     
                     if deploy_result.get("status") == "prepared":
                         func_count = deploy_result.get("total", 0)
-                        yield f"data: {json.dumps({'type': 'status', 'message': f'✅ {func_count} Edge Function(s) ready for deployment'})}\n\n"
+                        status_msg = f"✅ {func_count} Edge Function(s) ready for deployment"
+                        yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
             
             # Send final result with migration/deploy info
             final_result = {
