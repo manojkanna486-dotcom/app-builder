@@ -453,6 +453,156 @@ async def connect_supabase_project(supabase_project_ref: str, token_state: str =
 
 # ==================== SUPABASE PROJECT ISOLATION HELPER ====================
 
+async def run_migrations_internal(project_id: str, files: list) -> dict:
+    """
+    Internal function to run SQL migrations after code generation.
+    Returns result dict with status and details.
+    """
+    try:
+        project = await database.get_project(project_id)
+        if not project or not project.get("supabase_connected"):
+            return {"status": "skipped", "message": "No Supabase connected"}
+        
+        supabase_url = project.get("supabase_url")
+        service_key = project.get("supabase_service_key")
+        project_ref = project.get("supabase_project_ref")
+        
+        if not service_key:
+            return {"status": "skipped", "message": "No service key available"}
+        
+        # Find SQL files
+        sql_files = [f for f in files if f.get("file_type") == "sql" or f.get("path", "").endswith(".sql")]
+        
+        if not sql_files:
+            return {"status": "skipped", "message": "No SQL migrations found"}
+        
+        results = []
+        for sql_file in sql_files:
+            sql_content = sql_file.get("content", "")
+            file_path = sql_file.get("path", "unknown")
+            
+            try:
+                # Use Supabase SQL API endpoint
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    # Try the query endpoint
+                    response = await client.post(
+                        f"{supabase_url}/rest/v1/",
+                        headers={
+                            "apikey": service_key,
+                            "Authorization": f"Bearer {service_key}",
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal"
+                        },
+                        content=sql_content
+                    )
+                    
+                    # Alternative: Use the pg_query function if available
+                    if response.status_code not in [200, 201, 204]:
+                        # Try pg-meta API for running queries
+                        pg_response = await client.post(
+                            f"https://api.supabase.com/v1/projects/{project_ref}/database/query",
+                            headers={
+                                "Authorization": f"Bearer {service_key}",
+                                "Content-Type": "application/json"
+                            },
+                            json={"query": sql_content}
+                        )
+                        
+                        if pg_response.status_code in [200, 201]:
+                            results.append({"file": file_path, "status": "success"})
+                            logger.info(f"Migration {file_path} executed via Management API")
+                        else:
+                            results.append({
+                                "file": file_path, 
+                                "status": "manual_required",
+                                "message": "Please run in Supabase SQL Editor",
+                                "sql": sql_content[:500]
+                            })
+                    else:
+                        results.append({"file": file_path, "status": "success"})
+                        logger.info(f"Migration {file_path} executed successfully")
+                        
+            except Exception as e:
+                logger.error(f"Migration error for {file_path}: {e}")
+                results.append({
+                    "file": file_path,
+                    "status": "manual_required", 
+                    "message": f"Auto-run failed: {str(e)[:100]}. Please run manually in SQL Editor."
+                })
+        
+        success_count = sum(1 for r in results if r["status"] == "success")
+        manual_count = sum(1 for r in results if r["status"] == "manual_required")
+        
+        return {
+            "status": "completed" if manual_count == 0 else "partial",
+            "total": len(results),
+            "success": success_count,
+            "manual_required": manual_count,
+            "results": results
+        }
+        
+    except Exception as e:
+        logger.error(f"Migration internal error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+async def deploy_edge_functions_internal(project_id: str, files: list) -> dict:
+    """
+    Internal function to deploy Edge Functions after code generation.
+    Note: Full deployment requires Supabase CLI or Management API access.
+    """
+    try:
+        project = await database.get_project(project_id)
+        if not project or not project.get("supabase_connected"):
+            return {"status": "skipped", "message": "No Supabase connected"}
+        
+        project_ref = project.get("supabase_project_ref")
+        service_key = project.get("supabase_service_key")
+        
+        # Find Edge Function files
+        edge_functions = [f for f in files if f.get("file_type") == "edge_function" or "supabase/functions" in f.get("path", "")]
+        
+        if not edge_functions:
+            return {"status": "skipped", "message": "No Edge Functions found"}
+        
+        # Group by function name
+        functions_by_name = {}
+        for f in edge_functions:
+            path = f.get("path", "")
+            # Extract function name from path like "supabase/functions/hello/index.ts"
+            parts = path.split("/")
+            if "functions" in parts:
+                func_idx = parts.index("functions")
+                if func_idx + 1 < len(parts):
+                    func_name = parts[func_idx + 1]
+                    if func_name not in functions_by_name:
+                        functions_by_name[func_name] = []
+                    functions_by_name[func_name].append(f)
+        
+        results = []
+        for func_name, func_files in functions_by_name.items():
+            # For now, we can't auto-deploy without CLI access
+            # But we prepare the deployment info
+            results.append({
+                "function": func_name,
+                "status": "ready_to_deploy",
+                "files": [f.get("path") for f in func_files],
+                "message": f"Function '{func_name}' ready. Deploy via Supabase CLI: supabase functions deploy {func_name}"
+            })
+            logger.info(f"Edge Function '{func_name}' prepared for deployment")
+        
+        return {
+            "status": "prepared",
+            "total": len(results),
+            "functions": results,
+            "deploy_command": f"cd your-project && supabase functions deploy --project-ref {project_ref}"
+        }
+        
+    except Exception as e:
+        logger.error(f"Edge function deployment error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 async def get_connected_supabase_project(app_project_id: str) -> dict:
     """
     Get the connected Supabase project for an App Builder project.
