@@ -2311,6 +2311,18 @@ def clean_component_code(code: str) -> str:
     cleaned = re.sub(r'^export\s+default\s+', '', cleaned, flags=re.MULTILINE)
     cleaned = re.sub(r'^export\s+', '', cleaned, flags=re.MULTILINE)
     
+    # Remove Supabase client initialization - we provide our own with correct credentials
+    # Remove: const supabaseUrl = '...'
+    cleaned = re.sub(r"const supabaseUrl\s*=\s*['\"][^'\"]*['\"];?\s*\n?", '', cleaned)
+    # Remove: const supabaseAnonKey = '...'
+    cleaned = re.sub(r"const supabaseAnonKey\s*=\s*['\"][^'\"]*['\"];?\s*\n?", '', cleaned)
+    # Remove: const supabase = createClient(...)
+    cleaned = re.sub(r"const supabase\s*=\s*createClient\([^)]*\);?\s*\n?", '', cleaned)
+    # Remove: const supabaseClient = createClient(...)
+    cleaned = re.sub(r"const supabaseClient\s*=\s*createClient\([^)]*\);?\s*\n?", '', cleaned)
+    # Remove: export const supabase = createClient(...)
+    cleaned = re.sub(r"export\s+const\s+supabase\s*=\s*createClient\([^)]*\);?\s*\n?", '', cleaned)
+    
     # Escape script closing tags
     cleaned = cleaned.replace("</script>", "<\\/script>")
     
