@@ -738,9 +738,16 @@ export default function BuilderPage() {
           <div className="px-4 py-2 border-b border-border bg-muted/30">
             {project?.supabase_connected ? (
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-500" />
-                  <span className="text-xs text-green-500 font-medium">Supabase Connected</span>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <span className="text-xs text-green-500 font-medium">Supabase Connected</span>
+                  </div>
+                  {project?.supabase_project_name && (
+                    <span className="text-xs text-muted-foreground ml-6">
+                      {project.supabase_project_name}
+                    </span>
+                  )}
                 </div>
                 <Button
                   variant="ghost"
@@ -757,11 +764,11 @@ export default function BuilderPage() {
                 variant="outline"
                 size="sm"
                 data-testid="connect-supabase-btn"
-                onClick={() => setShowSupabaseModal(true)}
+                onClick={handleSupabaseOAuth}
                 className="w-full h-8 text-xs border-dashed border-primary/50 text-primary hover:bg-primary/10"
               >
                 <Database className="w-3 h-3 mr-2" />
-                Connect Supabase for Full-Stack Apps
+                Connect Supabase Account
               </Button>
             )}
           </div>
