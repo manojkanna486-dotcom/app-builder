@@ -149,12 +149,15 @@ async def supabase_oauth_login(project_id: str = Query(..., description="App Bui
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    # Build authorization URL
+    # Build authorization URL with required scopes
+    # Scopes needed: projects:read, projects:write, api_keys:read
+    scopes = "projects:read projects:write organizations:read"
+    
     params = {
         "client_id": SUPABASE_OAUTH_CLIENT_ID,
         "redirect_uri": SUPABASE_OAUTH_REDIRECT_URI,
         "response_type": "code",
-        "scope": "all",
+        "scope": scopes,
         "state": state,
         "code_challenge": code_challenge,
         "code_challenge_method": "S256"
