@@ -1288,6 +1288,175 @@ export default function BuilderPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Supabase Project Selector Modal (OAuth) */}
+      <Dialog open={showProjectSelector} onOpenChange={setShowProjectSelector}>
+        <DialogContent className="sm:max-w-[600px] bg-background border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Database className="w-5 h-5 text-green-500" />
+              Select Supabase Project
+            </DialogTitle>
+            <DialogDescription>
+              Choose an existing project or create a new one to connect with your app.
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingProjects ? (
+            <div className="py-8 text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+              <p className="text-sm text-muted-foreground mt-2">Loading your projects...</p>
+            </div>
+          ) : showNewProjectForm ? (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Project Name *</Label>
+                <Input
+                  placeholder="My Awesome App"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Organization *</Label>
+                <select
+                  value={newProjectOrg}
+                  onChange={(e) => setNewProjectOrg(e.target.value)}
+                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm"
+                >
+                  <option value="">Select organization...</option>
+                  {supabaseOrgs.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Database Password *</Label>
+                <Input
+                  type="password"
+                  placeholder="Strong password..."
+                  value={newProjectPassword}
+                  onChange={(e) => setNewProjectPassword(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Min 6 characters. You'll need this to connect directly to the database.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Region</Label>
+                <select
+                  value={newProjectRegion}
+                  onChange={(e) => setNewProjectRegion(e.target.value)}
+                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm"
+                >
+                  <option value="us-east-1">US East (N. Virginia)</option>
+                  <option value="us-west-1">US West (N. California)</option>
+                  <option value="eu-west-1">EU (Ireland)</option>
+                  <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
+                  <option value="ap-south-1">Asia Pacific (Mumbai)</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowNewProjectForm(false)}
+                  disabled={creatingNewProject}
+                  className="flex-1"
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={handleCreateSupabaseProject}
+                  disabled={creatingNewProject || !newProjectName || !newProjectOrg || !newProjectPassword}
+                  className="flex-1"
+                >
+                  {creatingNewProject ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Project"
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 py-4">
+              {supabaseProjects.length > 0 ? (
+                <>
+                  <div className="space-y-2">
+                    <Label>Your Projects</Label>
+                    <div className="grid gap-2 max-h-[300px] overflow-y-auto">
+                      {supabaseProjects.map((proj) => (
+                        <div
+                          key={proj.id}
+                          onClick={() => setSelectedSupabaseProject(proj.id)}
+                          className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                            selectedSupabaseProject === proj.id
+                              ? "border-primary bg-primary/10"
+                              : "border-border hover:border-primary/50"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium">{proj.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {proj.region} • {proj.status}
+                              </p>
+                            </div>
+                            {selectedSupabaseProject === proj.id && (
+                              <CheckCircle className="w-5 h-5 text-primary" />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowNewProjectForm(true)}
+                      className="flex-1"
+                    >
+                      Create New Project
+                    </Button>
+                    <Button
+                      onClick={handleConnectSelectedProject}
+                      disabled={!selectedSupabaseProject || connectingProject}
+                      className="flex-1"
+                    >
+                      {connectingProject ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Connecting...
+                        </>
+                      ) : (
+                        "Connect Selected"
+                      )}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <Database className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+                  <p className="text-muted-foreground mb-4">No projects found</p>
+                  <Button onClick={() => setShowNewProjectForm(true)}>
+                    Create Your First Project
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Vercel Deployment Modal */}
       <Dialog open={showVercelModal} onOpenChange={setShowVercelModal}>
         <DialogContent className="sm:max-w-[500px] bg-background border-border">
