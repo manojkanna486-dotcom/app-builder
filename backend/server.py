@@ -1902,16 +1902,13 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                 edge_functions = [f for f in files if f.get("file_type") == "edge_function" or "supabase/functions" in f.get("path", "")]
                 
                 if sql_files:
-                    yield f"data: {json.dumps({'type': 'status', 'message': '🗄️ Running database migrations...'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'status', 'message': '🗄️ Preparing database migrations...'})}\n\n"
                     migration_result = await run_migrations_internal(project_id, files)
                     
-                    if migration_result.get("status") == "completed":
-                        success_count = migration_result.get("success", 0)
-                        status_msg = f"✅ Migrations completed: {success_count} successful"
-                        yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
-                    elif migration_result.get("status") == "partial":
-                        manual_count = migration_result.get("manual_required", 0)
-                        status_msg = f"⚠️ {manual_count} migration(s) require manual execution in Supabase SQL Editor"
+                    if migration_result.get("status") == "ready":
+                        sql_count = migration_result.get("total", 0)
+                        sql_editor_url = migration_result.get("sql_editor_url", "")
+                        status_msg = f"✅ {sql_count} SQL migration(s) ready. Run them in Supabase SQL Editor."
                         yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
                     elif migration_result.get("status") == "skipped":
                         skip_reason = migration_result.get("message", "")
