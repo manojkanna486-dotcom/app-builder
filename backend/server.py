@@ -2033,7 +2033,7 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                         status_msg = f"✅ {func_count} Edge Function(s) ready for deployment"
                         yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
             
-            # Send final result with migration/deploy info
+            # Send final result with migration/deploy/test info
             final_result = {
                 'type': 'complete', 
                 'version': new_version_number, 
@@ -2044,6 +2044,8 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                 final_result['migration'] = migration_result
             if deploy_result:
                 final_result['deployment'] = deploy_result
+            if test_results:
+                final_result['test_results'] = test_results
                 
             yield f"data: {json.dumps(final_result)}\n\n"
             
