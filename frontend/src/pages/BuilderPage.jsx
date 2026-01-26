@@ -153,6 +153,7 @@ const FileTree = ({ files, selectedFile, onSelectFile }) => {
 export default function BuilderPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const messagesEndRef = useRef(null);
   const iframeRef = useRef(null);
 
@@ -176,8 +177,25 @@ export default function BuilderPage() {
   const [originalPrompt, setOriginalPrompt] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   
-  // Supabase connection state
+  // Supabase OAuth state
   const [showSupabaseModal, setShowSupabaseModal] = useState(false);
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
+  const [supabaseProjects, setSupabaseProjects] = useState([]);
+  const [supabaseOrgs, setSupabaseOrgs] = useState([]);
+  const [selectedSupabaseProject, setSelectedSupabaseProject] = useState("");
+  const [supabaseTokenState, setSupabaseTokenState] = useState("");
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [connectingProject, setConnectingProject] = useState(false);
+  
+  // New project creation state
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectOrg, setNewProjectOrg] = useState("");
+  const [newProjectPassword, setNewProjectPassword] = useState("");
+  const [newProjectRegion, setNewProjectRegion] = useState("us-east-1");
+  const [creatingNewProject, setCreatingNewProject] = useState(false);
+
+  // Legacy manual connection state (fallback)
   const [supabaseUrl, setSupabaseUrl] = useState("");
   const [supabaseAnonKey, setSupabaseAnonKey] = useState("");
   const [supabaseServiceKey, setSupabaseServiceKey] = useState("");
@@ -191,6 +209,18 @@ export default function BuilderPage() {
 
   // Sandbox state
   const [creatingSandbox, setCreatingSandbox] = useState(false);
+
+  // Check for OAuth callback
+  useEffect(() => {
+    const authState = searchParams.get('supabase_auth');
+    if (authState) {
+      setSupabaseTokenState(authState);
+      setShowProjectSelector(true);
+      fetchSupabaseProjects(authState);
+      // Clean URL
+      window.history.replaceState({}, '', `/builder/${projectId}`);
+    }
+  }, [searchParams, projectId]);
 
   useEffect(() => {
     fetchProjectData();
