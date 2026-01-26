@@ -358,8 +358,25 @@ async def connect_supabase_project(supabase_project_ref: str, token_state: str =
     access_token = token_data["access_token"]
     app_project_id = token_data["project_id"]
     
+    # SECURITY: Verify the user has access to this specific project
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            # First verify this project belongs to the user by checking their project list
+            verify_response = await client.get(
+                f"{SUPABASE_MANAGEMENT_API}/projects",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            
+            if verify_response.status_code != 200:
+                raise HTTPException(status_code=403, detail="Cannot verify project ownership")
+            
+            user_projects = verify_response.json()
+            project_ids = [p.get("id") for p in user_projects]
+            
+            if supabase_project_ref not in project_ids:
+                logger.error(f"SECURITY: Attempted to connect unauthorized project {supabase_project_ref}")
+                raise HTTPException(status_code=403, detail="You don't have access to this project")
+            
             # Get project details
             project_response = await client.get(
                 f"{SUPABASE_MANAGEMENT_API}/projects/{supabase_project_ref}",
@@ -399,12 +416,13 @@ async def connect_supabase_project(supabase_project_ref: str, token_state: str =
         if not app_project:
             raise HTTPException(status_code=404, detail="App Builder project not found")
         
+        # Store ONLY this project's credentials - strict isolation
         await database.update_project(app_project_id, {
             "supabase_connected": True,
             "supabase_url": supabase_url,
             "supabase_anon_key": anon_key,
             "supabase_service_key": service_role_key,
-            "supabase_project_ref": supabase_project_ref,
+            "supabase_project_ref": supabase_project_ref,  # Store the ref for all future operations
             "supabase_project_name": project_info.get("name"),
             "supabase_region": project_info.get("region"),
             "supabase_connected_at": datetime.now(timezone.utc).isoformat()
