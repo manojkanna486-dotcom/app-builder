@@ -75,6 +75,13 @@ Create an App Builder (v0 clone) that allows users to build React applications u
 
 ## What's Been Implemented
 
+### Jan 26, 2026 - Auto-Migration & Function Deployment Preparation
+- ✅ Added `run_migrations_internal()` function to prepare SQL migrations after code generation
+- ✅ Added `deploy_edge_functions_internal()` function to prepare Edge Functions for deployment
+- ✅ Integrated auto-migration preparation into code generation stream
+- ✅ Frontend shows toast notifications with direct link to Supabase SQL Editor
+- ⚠️ Note: Supabase doesn't allow arbitrary SQL execution via API for security - migrations are prepared but need manual execution in SQL Editor
+
 ### Jan 26, 2026 - Critical Bug Fix: Invalid API Key
 - ✅ **FIXED** "Invalid API key" error in generated app preview
 - ✅ Root cause: `supabaseClient.js` had hardcoded stale API key that conflicted with correct credentials
@@ -115,10 +122,11 @@ Create an App Builder (v0 clone) that allows users to build React applications u
 - [x] Full-stack code generation prompts
 - [x] Deploy to Vercel
 - [x] CodeSandbox integration
+- [x] Fix "Invalid API key" bug in preview
 
-### P1 (Important) - Next
-- [ ] Auto-run SQL migrations on connected project
-- [ ] Deploy Edge Functions programmatically
+### P1 (Important) - In Progress
+- [x] Prepare SQL migrations after code generation (shows link to SQL Editor)
+- [x] Prepare Edge Functions for deployment (shows deployment instructions)
 - [ ] Supabase Auth in generated apps (email/password, OAuth)
 
 ### P2 (Nice to Have)
