@@ -743,11 +743,15 @@ export default function BuilderPage() {
                     <CheckCircle className="w-4 h-4 text-green-500" />
                     <span className="text-xs text-green-500 font-medium">Supabase Connected</span>
                   </div>
-                  {project?.supabase_project_name && (
-                    <span className="text-xs text-muted-foreground ml-6">
-                      {project.supabase_project_name}
-                    </span>
-                  )}
+                  <div className="ml-6 text-xs text-muted-foreground">
+                    <span className="font-medium">{project.supabase_project_name || 'Project'}</span>
+                    {project.supabase_project_ref && (
+                      <span className="text-muted-foreground/60 ml-1">({project.supabase_project_ref})</span>
+                    )}
+                  </div>
+                  <div className="ml-6 text-[10px] text-muted-foreground/50 mt-0.5">
+                    All operations will only affect this project
+                  </div>
                 </div>
                 <Button
                   variant="ghost"
