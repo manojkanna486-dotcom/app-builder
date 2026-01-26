@@ -7,7 +7,7 @@ Create an App Builder (v0 clone) that allows users to build React applications u
 - React frontend
 - Supabase Edge Functions backend (TypeScript/Deno)
 - PostgreSQL database schema with migrations
-- Supabase Auth integration
+- Supabase Auth integration (via OAuth)
 
 ## Architecture
 
@@ -16,7 +16,7 @@ Create an App Builder (v0 clone) that allows users to build React applications u
 - **Database**: MongoDB for App Builder data (projects, versions, messages)
 - **LLM Provider**: OpenRouter (Claude Sonnet 4)
 - **Key Files**:
-  - `/app/backend/server.py` - Main API server with full-stack generation logic
+  - `/app/backend/server.py` - Main API server with Supabase OAuth and full-stack generation
   - `/app/backend/database.py` - Database abstraction layer
 
 ### Frontend (React)
@@ -24,83 +24,134 @@ Create an App Builder (v0 clone) that allows users to build React applications u
 - **Styling**: Tailwind CSS + shadcn/ui components
 - **Key Files**:
   - `/app/frontend/src/pages/HomePage.jsx` - Project list page
-  - `/app/frontend/src/pages/BuilderPage.jsx` - Builder with Supabase connection UI
+  - `/app/frontend/src/pages/BuilderPage.jsx` - Builder with Supabase OAuth flow
 
-### API Endpoints
-- `GET /api/projects` - List projects
-- `POST /api/projects` - Create project
-- `GET /api/projects/{id}` - Get project
-- `DELETE /api/projects/{id}` - Delete project
-- `GET /api/projects/{id}/versions` - Get version history
-- `GET /api/projects/{id}/versions/latest` - Get latest version
-- `GET /api/projects/{id}/messages` - Get chat messages
-- `POST /api/projects/{id}/messages` - Add message
-- `POST /api/projects/{id}/generate` - Generate code via LLM
-- `POST /api/projects/{id}/generate/stream` - Generate code with streaming
-- `GET /api/projects/{id}/preview` - Get preview HTML
-- `GET /api/projects/{id}/validate` - Validate code for errors
-- `POST /api/projects/{id}/fix` - Auto-fix code errors
-- `POST /api/projects/{id}/analyze` - Analyze prompt for clarification
-- **NEW** `POST /api/projects/{id}/connect-supabase` - Connect Supabase project
-- **NEW** `POST /api/projects/{id}/disconnect-supabase` - Disconnect Supabase
-- **NEW** `GET /api/projects/{id}/supabase-status` - Get Supabase connection status
+## Supabase OAuth Integration (Completed)
+
+### Flow:
+1. User clicks "Connect Supabase Account" 
+2. Redirects to Supabase OAuth authorization page
+3. User authenticates and grants permissions (projects:read, organizations:read)
+4. App receives authorization code
+5. Backend exchanges code for access token (with PKCE)
+6. User sees project selector modal with their Supabase projects
+7. User selects a project (or creates new one)
+8. App fetches project credentials automatically (URL, anon_key, service_key)
+9. Connection saved - shows "Supabase Connected" with project name
+
+### Security - Strict Project Isolation:
+- All operations ONLY affect the connected Supabase project
+- Project ownership verified before connection
+- `supabase_project_ref` stored and used for all operations
+- Helper function `get_connected_supabase_project()` enforces isolation
+- UI shows "All operations will only affect this project"
+
+### API Endpoints:
+- `GET /api/auth/supabase/login?project_id={id}` - Start OAuth flow
+- `GET /api/auth/supabase/callback` - OAuth callback handler
+- `GET /api/auth/supabase/projects?token_state={state}` - List user's projects
+- `GET /api/auth/supabase/organizations?token_state={state}` - List organizations
+- `POST /api/auth/supabase/projects/create?token_state={state}` - Create new project
+- `POST /api/auth/supabase/connect/{ref}?token_state={state}` - Connect project
+- `GET /api/projects/{id}/supabase/info` - Get connected project info
+- `POST /api/projects/{id}/supabase/run-migration` - Run SQL migrations (isolated)
+
+## Deployment Features (Completed)
+
+### Deploy to Vercel:
+- One-click deployment with access token
+- Automatic environment variable injection (Supabase URL/key)
+- Modal with token input and deployment status
+
+### CodeSandbox Integration:
+- Opens project in CodeSandbox for editing/sharing
+- No account required
+- Fully interactive sandbox
+
+### ZIP Export:
+- Download complete source code
+- Includes package.json, README, deployment instructions
+- Ready for Vercel/Netlify deployment
 
 ## What's Been Implemented
 
-### Jan 25, 2026 - Phase 1: Full-Stack Supabase Integration
-- **Connect Supabase UI**: Button and modal to capture Supabase URL and keys
-- **Supabase Connection Endpoints**: Store credentials per project
-- **Full-Stack LLM Prompts**: Generate Edge Functions + SQL migrations
-- **File Type Detection**: Auto-detect `frontend`, `edge_function`, `sql` types
-- **Status Banner**: Shows "Supabase Connected" with disconnect option
+### Jan 26, 2026 - Supabase OAuth & Project Isolation
+- ✅ Complete OAuth flow with PKCE security
+- ✅ Project selector modal (list existing / create new)
+- ✅ Automatic credential fetching
+- ✅ Strict project isolation enforcement
+- ✅ UI shows connected project name and ref
+- ✅ "All operations will only affect this project" message
+
+### Jan 25, 2026 - Phase 1: Full-Stack Generation
+- ✅ "Connect Supabase" UI (now OAuth-based)
+- ✅ Full-stack LLM prompts (Edge Functions + SQL)
+- ✅ File type detection (frontend/edge_function/sql)
+- ✅ Deploy to Vercel button
+- ✅ CodeSandbox integration
+- ✅ ZIP export feature
 
 ### Previous Sessions
 - MVP App Builder with frontend-only generation
-- Multi-file project support with file tree navigator
+- Multi-file project support
 - Code validation and auto-fix
 - Real-time streaming generation
-- Smart clarification system for vague prompts
+- Smart clarification system
 
 ## Prioritized Backlog
 
-### P0 (Critical) - In Progress
-- [x] Connect Supabase UI and backend
+### P0 (Critical) - Completed
+- [x] Supabase OAuth integration
+- [x] Project selector modal
+- [x] Strict project isolation
 - [x] Full-stack code generation prompts
-- [x] File type distinction (frontend/edge_function/sql)
-- [ ] Backend deployment to Supabase Edge Functions (research needed)
-- [ ] Supabase Auth integration in generated apps
+- [x] Deploy to Vercel
+- [x] CodeSandbox integration
 
-### P1 (Important)
-- [ ] Execute SQL migrations on connected Supabase
+### P1 (Important) - Next
+- [ ] Auto-run SQL migrations on connected project
 - [ ] Deploy Edge Functions programmatically
-- [ ] User authentication for App Builder itself
+- [ ] Supabase Auth in generated apps (email/password, OAuth)
 
 ### P2 (Nice to Have)
-- [ ] Export project as ZIP
 - [ ] Syntax highlighting in code view
 - [ ] Cancel generation button
 - [ ] Share projects publicly
+- [ ] Project templates
 
-## Database Configuration
-The App Builder uses MongoDB. Generated apps use Supabase PostgreSQL.
+## Environment Variables
 
-### Supabase Connection (for generated apps)
-Users must provide:
-1. **Project URL**: `https://[project-ref].supabase.co`
-2. **Anon/Public Key**: Safe for frontend
-3. **Service Role Key** (optional): For admin operations
+### Backend (.env)
+```
+MONGO_URL="mongodb://localhost:27017"
+DB_NAME="test_database"
+OPENROUTER_API_KEY="sk-or-v1-..."
+SUPABASE_OAUTH_CLIENT_ID="995b1173-e948-42c4-93dc-3a7632968fed"
+SUPABASE_OAUTH_CLIENT_SECRET="sba_..."
+SUPABASE_OAUTH_REDIRECT_URI="https://stacksmith-2.preview.emergentagent.com/api/auth/supabase/callback"
+```
 
-## File Types in Generated Projects
-- `frontend` - React/JSX components
-- `edge_function` - Supabase Edge Functions (TypeScript/Deno)
-- `sql` - Database migrations
+## Data Model (Project)
+```json
+{
+  "id": "uuid",
+  "name": "string",
+  "description": "string",
+  "supabase_connected": true,
+  "supabase_url": "https://xxx.supabase.co",
+  "supabase_anon_key": "eyJ...",
+  "supabase_service_key": "eyJ...",
+  "supabase_project_ref": "xxx",
+  "supabase_project_name": "AI hub",
+  "supabase_region": "ap-south-1",
+  "supabase_connected_at": "2026-01-26T08:52:24.483028+00:00"
+}
+```
 
 ## Testing Status
-- Backend: 100% (21/21 tests passed)
-- Frontend: 100%
-- Test Report: `/app/test_reports/iteration_4.json`
-
-## Known Limitations
-- Preview iframe is blank for full-stack apps (Supabase client can't load in sandbox)
-- Edge Functions must be deployed manually to Supabase (not automated yet)
-- SQL migrations must be run manually via Supabase Dashboard
+- OAuth Flow: ✅ Working
+- Project Selector: ✅ Working
+- Project Isolation: ✅ Enforced
+- Full-stack Generation: ✅ Working
+- Vercel Deploy: ✅ Working
+- CodeSandbox: ✅ Working
