@@ -117,6 +117,8 @@ class ChatMessage(BaseModel):
 
 class PromptRequest(BaseModel):
     prompt: str
+    enable_testing: bool = True  # Enable auto-testing by default
+    max_test_retries: int = 3    # Max retry attempts
 
 class SupabaseConnectRequest(BaseModel):
     url: str
