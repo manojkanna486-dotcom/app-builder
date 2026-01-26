@@ -75,6 +75,14 @@ Create an App Builder (v0 clone) that allows users to build React applications u
 
 ## What's Been Implemented
 
+### Jan 26, 2026 - Critical Bug Fix: Invalid API Key
+- ✅ **FIXED** "Invalid API key" error in generated app preview
+- ✅ Root cause: `supabaseClient.js` had hardcoded stale API key that conflicted with correct credentials
+- ✅ Solution: Skip `supabaseClient.js` from preview, provide global `supabase` variable with correct credentials
+- ✅ Added `is_supabase_client_file()` helper function to identify Supabase client files
+- ✅ Modified `generate_preview_html_multifile()` to use project's actual API key
+- ✅ Both Sign Up and Sign In now working correctly in preview
+
 ### Jan 26, 2026 - Supabase OAuth & Project Isolation
 - ✅ Complete OAuth flow with PKCE security
 - ✅ Project selector modal (list existing / create new)
