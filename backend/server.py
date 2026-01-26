@@ -1,5 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException
-from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi import FastAPI, APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse, HTMLResponse, RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 import os
@@ -14,6 +14,9 @@ import json
 import asyncio
 import zipfile
 import io
+import secrets
+import hashlib
+import base64
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -25,6 +28,17 @@ database: DatabaseInterface = None
 # OpenRouter config
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+# Supabase OAuth config
+SUPABASE_OAUTH_CLIENT_ID = os.environ.get('SUPABASE_OAUTH_CLIENT_ID')
+SUPABASE_OAUTH_CLIENT_SECRET = os.environ.get('SUPABASE_OAUTH_CLIENT_SECRET')
+SUPABASE_OAUTH_REDIRECT_URI = os.environ.get('SUPABASE_OAUTH_REDIRECT_URI')
+SUPABASE_OAUTH_AUTH_URL = "https://api.supabase.com/v1/oauth/authorize"
+SUPABASE_OAUTH_TOKEN_URL = "https://api.supabase.com/v1/oauth/token"
+SUPABASE_MANAGEMENT_API = "https://api.supabase.com/v1"
+
+# In-memory store for OAuth state (in production, use Redis or database)
+oauth_states = {}
 
 # Create the main app
 app = FastAPI()
