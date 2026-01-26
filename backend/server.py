@@ -456,7 +456,8 @@ async def connect_supabase_project(supabase_project_ref: str, token_state: str =
 async def run_migrations_internal(project_id: str, files: list) -> dict:
     """
     Internal function to run SQL migrations after code generation.
-    Returns result dict with status and details.
+    Since Supabase doesn't allow direct SQL execution via API for security,
+    we provide the SQL content for manual execution in the SQL Editor.
     """
     try:
         project = await database.get_project(project_id)
@@ -466,6 +467,7 @@ async def run_migrations_internal(project_id: str, files: list) -> dict:
         supabase_url = project.get("supabase_url")
         service_key = project.get("supabase_service_key")
         project_ref = project.get("supabase_project_ref")
+        project_name = project.get("supabase_project_name", "")
         
         if not service_key:
             return {"status": "skipped", "message": "No service key available"}
@@ -481,68 +483,27 @@ async def run_migrations_internal(project_id: str, files: list) -> dict:
             sql_content = sql_file.get("content", "")
             file_path = sql_file.get("path", "unknown")
             
-            try:
-                # Use Supabase SQL API endpoint
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    # Try the query endpoint
-                    response = await client.post(
-                        f"{supabase_url}/rest/v1/",
-                        headers={
-                            "apikey": service_key,
-                            "Authorization": f"Bearer {service_key}",
-                            "Content-Type": "application/json",
-                            "Prefer": "return=minimal"
-                        },
-                        content=sql_content
-                    )
-                    
-                    # Alternative: Use the pg_query function if available
-                    if response.status_code not in [200, 201, 204]:
-                        # Try pg-meta API for running queries
-                        pg_response = await client.post(
-                            f"https://api.supabase.com/v1/projects/{project_ref}/database/query",
-                            headers={
-                                "Authorization": f"Bearer {service_key}",
-                                "Content-Type": "application/json"
-                            },
-                            json={"query": sql_content}
-                        )
-                        
-                        if pg_response.status_code in [200, 201]:
-                            results.append({"file": file_path, "status": "success"})
-                            logger.info(f"Migration {file_path} executed via Management API")
-                        else:
-                            results.append({
-                                "file": file_path, 
-                                "status": "manual_required",
-                                "message": "Please run in Supabase SQL Editor",
-                                "sql": sql_content[:500]
-                            })
-                    else:
-                        results.append({"file": file_path, "status": "success"})
-                        logger.info(f"Migration {file_path} executed successfully")
-                        
-            except Exception as e:
-                logger.error(f"Migration error for {file_path}: {e}")
-                results.append({
-                    "file": file_path,
-                    "status": "manual_required", 
-                    "message": f"Auto-run failed: {str(e)[:100]}. Please run manually in SQL Editor."
-                })
-        
-        success_count = sum(1 for r in results if r["status"] == "success")
-        manual_count = sum(1 for r in results if r["status"] == "manual_required")
+            # Provide migration info for manual execution
+            # Supabase doesn't allow arbitrary SQL via API for security
+            results.append({
+                "file": file_path,
+                "status": "ready",
+                "sql_preview": sql_content[:300] + "..." if len(sql_content) > 300 else sql_content,
+                "message": "Ready for execution in Supabase SQL Editor"
+            })
+            logger.info(f"Migration {file_path} prepared for {project_name}")
         
         return {
-            "status": "completed" if manual_count == 0 else "partial",
+            "status": "ready",
             "total": len(results),
-            "success": success_count,
-            "manual_required": manual_count,
-            "results": results
+            "results": results,
+            "project_ref": project_ref,
+            "sql_editor_url": f"https://supabase.com/dashboard/project/{project_ref}/sql/new",
+            "message": f"SQL migrations ready. Click 'Run Migrations' or open SQL Editor to execute."
         }
         
     except Exception as e:
-        logger.error(f"Migration internal error: {e}")
+        logger.error(f"Migration preparation error: {e}")
         return {"status": "error", "message": str(e)}
 
 
