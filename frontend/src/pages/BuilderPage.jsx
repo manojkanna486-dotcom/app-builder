@@ -520,6 +520,101 @@ export default function BuilderPage() {
     }
   };
 
+  // Supabase OAuth - Start authentication
+  const handleSupabaseOAuth = () => {
+    // Redirect to backend OAuth endpoint
+    window.location.href = `${API}/auth/supabase/login?project_id=${projectId}`;
+  };
+
+  // Fetch Supabase projects after OAuth
+  const fetchSupabaseProjects = async (tokenState) => {
+    setLoadingProjects(true);
+    try {
+      const [projectsRes, orgsRes] = await Promise.all([
+        axios.get(`${API}/auth/supabase/projects?token_state=${tokenState}`),
+        axios.get(`${API}/auth/supabase/organizations?token_state=${tokenState}`)
+      ]);
+      
+      setSupabaseProjects(projectsRes.data.projects || []);
+      setSupabaseOrgs(orgsRes.data.organizations || []);
+    } catch (err) {
+      console.error("Failed to fetch Supabase data:", err);
+      toast.error("Failed to fetch Supabase projects");
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  // Connect selected Supabase project
+  const handleConnectSelectedProject = async () => {
+    if (!selectedSupabaseProject) {
+      toast.error("Please select a project");
+      return;
+    }
+
+    setConnectingProject(true);
+    try {
+      const res = await axios.post(
+        `${API}/auth/supabase/connect/${selectedSupabaseProject}?token_state=${supabaseTokenState}`
+      );
+
+      if (res.data.connected) {
+        toast.success(`Connected to ${res.data.project_name}!`);
+        setProject((prev) => ({
+          ...prev,
+          supabase_connected: true,
+          supabase_url: res.data.supabase_url,
+          supabase_project_name: res.data.project_name,
+        }));
+        setShowProjectSelector(false);
+        setSupabaseTokenState("");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to connect project");
+    } finally {
+      setConnectingProject(false);
+    }
+  };
+
+  // Create new Supabase project
+  const handleCreateSupabaseProject = async () => {
+    if (!newProjectName.trim() || !newProjectOrg || !newProjectPassword.trim()) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    setCreatingNewProject(true);
+    try {
+      const res = await axios.post(
+        `${API}/auth/supabase/projects/create?token_state=${supabaseTokenState}`,
+        {
+          name: newProjectName.trim(),
+          organization_id: newProjectOrg,
+          db_pass: newProjectPassword.trim(),
+          region: newProjectRegion
+        }
+      );
+
+      toast.success("Project created! It may take a few minutes to be ready.");
+      
+      // Refresh projects list
+      await fetchSupabaseProjects(supabaseTokenState);
+      
+      // Select the new project
+      if (res.data.id) {
+        setSelectedSupabaseProject(res.data.id);
+      }
+      
+      setShowNewProjectForm(false);
+      setNewProjectName("");
+      setNewProjectPassword("");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to create project");
+    } finally {
+      setCreatingNewProject(false);
+    }
+  };
+
   // Deploy to Vercel
   const handleDeployToVercel = async () => {
     if (!vercelToken.trim()) {
