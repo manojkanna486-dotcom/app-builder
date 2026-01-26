@@ -446,6 +446,120 @@ async def connect_supabase_project(supabase_project_ref: str, token_state: str =
         logger.error(f"Error connecting project: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ==================== SUPABASE PROJECT ISOLATION HELPER ====================
+
+async def get_connected_supabase_project(app_project_id: str) -> dict:
+    """
+    Get the connected Supabase project for an App Builder project.
+    This ensures ALL operations only happen on the specifically connected project.
+    
+    Returns:
+        dict with supabase_url, supabase_anon_key, supabase_service_key, supabase_project_ref
+    
+    Raises:
+        HTTPException if no Supabase project is connected
+    """
+    project = await database.get_project(app_project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if not project.get("supabase_connected"):
+        raise HTTPException(status_code=400, detail="No Supabase project connected. Please connect a Supabase project first.")
+    
+    supabase_project_ref = project.get("supabase_project_ref")
+    if not supabase_project_ref:
+        raise HTTPException(status_code=400, detail="Supabase project reference not found. Please reconnect Supabase.")
+    
+    return {
+        "url": project.get("supabase_url"),
+        "anon_key": project.get("supabase_anon_key"),
+        "service_key": project.get("supabase_service_key"),
+        "project_ref": supabase_project_ref,
+        "project_name": project.get("supabase_project_name")
+    }
+
+@api_router.post("/projects/{project_id}/supabase/run-migration")
+async def run_supabase_migration(project_id: str):
+    """
+    Run SQL migrations on the CONNECTED Supabase project only.
+    STRICT ISOLATION: This ONLY operates on the connected project.
+    """
+    # Get the connected Supabase project - this ensures isolation
+    supabase = await get_connected_supabase_project(project_id)
+    
+    # Get the latest version with SQL files
+    version = await database.get_latest_version(project_id)
+    if not version or not version.get("files"):
+        raise HTTPException(status_code=404, detail="No code generated yet")
+    
+    # Find SQL migration files
+    sql_files = [f for f in version["files"] if f.get("file_type") == "sql" or f.get("path", "").endswith(".sql")]
+    
+    if not sql_files:
+        raise HTTPException(status_code=404, detail="No SQL migrations found in the generated code")
+    
+    # Execute migrations on the CONNECTED project only
+    results = []
+    
+    for sql_file in sql_files:
+        sql_content = sql_file.get("content", "")
+        file_path = sql_file.get("path", "unknown")
+        
+        try:
+            # Use the Supabase REST API to run SQL
+            # This uses the service_key which has admin privileges on THIS project only
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{supabase['url']}/rest/v1/rpc/exec_sql",
+                    headers={
+                        "apikey": supabase["service_key"] or supabase["anon_key"],
+                        "Authorization": f"Bearer {supabase['service_key'] or supabase['anon_key']}",
+                        "Content-Type": "application/json"
+                    },
+                    json={"query": sql_content}
+                )
+                
+                if response.status_code in [200, 201]:
+                    results.append({"file": file_path, "status": "success"})
+                    logger.info(f"Migration {file_path} executed successfully on {supabase['project_name']}")
+                else:
+                    # Try direct PostgreSQL connection as fallback
+                    results.append({
+                        "file": file_path, 
+                        "status": "pending",
+                        "message": "Please run this migration manually in Supabase SQL Editor"
+                    })
+                    
+        except Exception as e:
+            logger.error(f"Migration error for {file_path}: {e}")
+            results.append({
+                "file": file_path,
+                "status": "error",
+                "message": str(e)
+            })
+    
+    return {
+        "project_ref": supabase["project_ref"],
+        "project_name": supabase["project_name"],
+        "migrations": results
+    }
+
+@api_router.get("/projects/{project_id}/supabase/info")
+async def get_supabase_info(project_id: str):
+    """Get information about the connected Supabase project (isolated)"""
+    try:
+        supabase = await get_connected_supabase_project(project_id)
+        return {
+            "connected": True,
+            "project_ref": supabase["project_ref"],
+            "project_name": supabase["project_name"],
+            "url": supabase["url"]
+        }
+    except HTTPException as e:
+        if e.status_code == 400:
+            return {"connected": False}
+        raise
+
 # ==================== OPENROUTER LLM ====================
 
 async def call_openrouter(messages: List[Dict]):
