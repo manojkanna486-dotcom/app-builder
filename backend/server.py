@@ -217,10 +217,14 @@ async def supabase_oauth_callback(code: str = Query(...), state: str = Query(...
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         
-        logger.info(f"OAuth successful for project {project_id}")
+        logger.info(f"OAuth successful for project {project_id}, token_state: {token_state}")
         
         # Redirect to frontend with token state
-        return RedirectResponse(url=f"/builder/{project_id}?supabase_auth={token_state}")
+        # Use the same domain as the redirect URI
+        frontend_url = SUPABASE_OAUTH_REDIRECT_URI.replace("/api/auth/supabase/callback", "")
+        redirect_url = f"{frontend_url}/builder/{project_id}?supabase_auth={token_state}"
+        logger.info(f"Redirecting to: {redirect_url}")
+        return RedirectResponse(url=redirect_url)
         
     except Exception as e:
         logger.error(f"OAuth callback error: {e}")
