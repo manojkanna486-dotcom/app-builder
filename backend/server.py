@@ -2344,19 +2344,26 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
     has_supabase = any('supabase' in f.get('path', '').lower() or '@supabase' in f.get('content', '') for f in files)
     
     # Sort files: components first, then App.jsx last (so it can use components)
-    # Skip non-frontend files (edge functions, sql) for preview
+    # Skip non-frontend files (edge functions, sql) AND supabaseClient files for preview
     sorted_files = []
     app_file = None
     
     for f in files:
-        # Skip non-frontend files
+        file_path = f.get("path", "")
+        file_content = f.get("content", "")
         file_type = f.get("file_type", "frontend")
+        
+        # Skip non-frontend files
         if file_type in ["edge_function", "sql"]:
             continue
-        if f.get("path", "").endswith(".ts") or f.get("path", "").endswith(".sql"):
+        if file_path.endswith(".ts") or file_path.endswith(".sql"):
+            continue
+        
+        # CRITICAL: Skip supabaseClient.js - we provide our own with correct credentials
+        if is_supabase_client_file(file_path, file_content):
             continue
             
-        if f["path"] == "App.jsx" or f["path"].endswith("/App.jsx"):
+        if file_path == "App.jsx" or file_path.endswith("/App.jsx"):
             app_file = f
         else:
             sorted_files.append(f)
@@ -2365,7 +2372,8 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         sorted_files.append(app_file)
     elif files:
         # If no App.jsx found, use frontend files only
-        sorted_files = [f for f in files if f.get("file_type", "frontend") == "frontend"]
+        sorted_files = [f for f in files if f.get("file_type", "frontend") == "frontend" 
+                        and not is_supabase_client_file(f.get("path", ""), f.get("content", ""))]
     
     # Build all component code
     all_code_parts = []
@@ -2387,7 +2395,7 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         sb_key = supabase_config.get("anon_key", "") if supabase_config else ""
         
         supabase_init = f"""
-        // Supabase client setup for preview - OVERRIDE any hardcoded values
+        // Supabase client setup for preview - CORRECT credentials from connected project
         const {{ createClient }} = supabase;
         
         // CORRECT Supabase credentials from connected project
@@ -2395,10 +2403,11 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         const SUPABASE_ANON_KEY = '{sb_key}';
         
         // Create the official Supabase client with CORRECT credentials
+        // This replaces any supabaseClient.js that was skipped
         const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
-        // Also expose as 'supabase' for code that uses that name
-        const supabaseInstance = supabaseClient;
+        // CRITICAL: Also expose as 'supabase' - this is what App.jsx imports
+        const supabase = supabaseClient;
         
         // Mock process.env for preview
         if (typeof process === 'undefined') {{
