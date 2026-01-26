@@ -1931,8 +1931,48 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
             )
             await database.create_message(assistant_msg.model_dump())
             
-            # Send final result
-            yield f"data: {json.dumps({'type': 'complete', 'version': new_version_number, 'files': files, 'summary': summary})}\n\n"
+            # AUTO-RUN MIGRATIONS AND DEPLOY FUNCTIONS (if Supabase connected)
+            migration_result = None
+            deploy_result = None
+            
+            if is_fullstack:
+                # Check for SQL migrations
+                sql_files = [f for f in files if f.get("file_type") == "sql" or f.get("path", "").endswith(".sql")]
+                edge_functions = [f for f in files if f.get("file_type") == "edge_function" or "supabase/functions" in f.get("path", "")]
+                
+                if sql_files:
+                    yield f"data: {json.dumps({'type': 'status', 'message': '🗄️ Running database migrations...'})}\n\n"
+                    migration_result = await run_migrations_internal(project_id, files)
+                    
+                    if migration_result.get("status") == "completed":
+                        yield f"data: {json.dumps({'type': 'status', 'message': f'✅ Migrations completed: {migration_result.get(\"success\", 0)} successful'})}\n\n"
+                    elif migration_result.get("status") == "partial":
+                        manual_count = migration_result.get("manual_required", 0)
+                        yield f"data: {json.dumps({'type': 'status', 'message': f'⚠️ {manual_count} migration(s) require manual execution in Supabase SQL Editor'})}\n\n"
+                    elif migration_result.get("status") == "skipped":
+                        yield f"data: {json.dumps({'type': 'status', 'message': f'ℹ️ Migrations skipped: {migration_result.get(\"message\", \"\")}'})}\n\n"
+                
+                if edge_functions:
+                    yield f"data: {json.dumps({'type': 'status', 'message': '⚡ Preparing Edge Functions for deployment...'})}\n\n"
+                    deploy_result = await deploy_edge_functions_internal(project_id, files)
+                    
+                    if deploy_result.get("status") == "prepared":
+                        func_count = deploy_result.get("total", 0)
+                        yield f"data: {json.dumps({'type': 'status', 'message': f'✅ {func_count} Edge Function(s) ready for deployment'})}\n\n"
+            
+            # Send final result with migration/deploy info
+            final_result = {
+                'type': 'complete', 
+                'version': new_version_number, 
+                'files': files, 
+                'summary': summary
+            }
+            if migration_result:
+                final_result['migration'] = migration_result
+            if deploy_result:
+                final_result['deployment'] = deploy_result
+                
+            yield f"data: {json.dumps(final_result)}\n\n"
             
         except Exception as e:
             logger.error(f"Stream generation error: {str(e)}")
