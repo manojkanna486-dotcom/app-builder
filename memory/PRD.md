@@ -75,6 +75,16 @@ Create an App Builder (v0 clone) that allows users to build React applications u
 
 ## What's Been Implemented
 
+### Jan 26, 2026 - Built-in Testing Agent
+- ✅ Created `testing_agent.py` module with TestingAgent class
+- ✅ Automatic requirement extraction from user prompts using LLM
+- ✅ Test validation for UI, Auth, Data, API, and Logic requirements
+- ✅ Auto-retry loop: max 3 attempts to fix failing tests
+- ✅ Test results shown in real-time during generation
+- ✅ Frontend toast notifications for test status
+- ✅ Test results saved with version data
+- ✅ Enable/disable testing per generation request
+
 ### Jan 26, 2026 - Auto-Migration & Function Deployment Preparation
 - ✅ Added `run_migrations_internal()` function to prepare SQL migrations after code generation
 - ✅ Added `deploy_edge_functions_internal()` function to prepare Edge Functions for deployment
