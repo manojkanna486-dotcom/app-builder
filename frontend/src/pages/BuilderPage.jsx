@@ -416,12 +416,21 @@ export default function BuilderPage() {
                 // Show success toast with migration/deployment info
                 let successMsg = `Version ${data.version} generated with ${data.files?.length || 0} files!`;
                 
-                // Show migration status
+                // Show migration status with link to SQL Editor
                 if (data.migration) {
-                  if (data.migration.status === "completed") {
-                    toast.success(`✅ Database migrations executed successfully!`);
-                  } else if (data.migration.status === "partial") {
-                    toast.warning(`⚠️ Some migrations need manual execution in Supabase SQL Editor`);
+                  if (data.migration.status === "ready") {
+                    const sqlEditorUrl = data.migration.sql_editor_url;
+                    toast.info(
+                      <div>
+                        🗄️ SQL migrations ready! 
+                        <a href={sqlEditorUrl} target="_blank" rel="noopener noreferrer" className="ml-2 underline text-blue-400">
+                          Open SQL Editor
+                        </a>
+                      </div>,
+                      { duration: 8000 }
+                    );
+                  } else if (data.migration.status === "skipped") {
+                    // Silently skip - no need to notify
                   }
                 }
                 
