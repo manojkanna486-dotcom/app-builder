@@ -2366,20 +2366,30 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         sb_key = supabase_config.get("anon_key", "") if supabase_config else ""
         
         supabase_init = f"""
-        // Supabase client setup for preview
+        // Supabase client setup for preview - OVERRIDE any hardcoded values
         const {{ createClient }} = supabase;
         
-        // Inject Supabase credentials for preview
-        const PREVIEW_SUPABASE_URL = '{sb_url}';
-        const PREVIEW_SUPABASE_KEY = '{sb_key}';
+        // CORRECT Supabase credentials from connected project
+        const SUPABASE_URL = '{sb_url}';
+        const SUPABASE_ANON_KEY = '{sb_key}';
+        
+        // Create the official Supabase client with CORRECT credentials
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        // Also expose as 'supabase' for code that uses that name
+        const supabaseInstance = supabaseClient;
         
         // Mock process.env for preview
         if (typeof process === 'undefined') {{
             window.process = {{ env: {{
-                REACT_APP_SUPABASE_URL: PREVIEW_SUPABASE_URL,
-                REACT_APP_SUPABASE_ANON_KEY: PREVIEW_SUPABASE_KEY
+                REACT_APP_SUPABASE_URL: SUPABASE_URL,
+                REACT_APP_SUPABASE_ANON_KEY: SUPABASE_ANON_KEY
             }} }};
         }}
+        
+        // Override any variables that might be used for Supabase config
+        const supabaseUrl = SUPABASE_URL;
+        const supabaseAnonKey = SUPABASE_ANON_KEY;
         """
     
     # Build HTML template with string concatenation to avoid f-string brace issues
