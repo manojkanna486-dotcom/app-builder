@@ -390,6 +390,15 @@ export default function BuilderPage() {
                 setGenerationStatus(data.message);
               } else if (data.type === "code") {
                 setStreamingCode((prev) => prev + data.content);
+              } else if (data.type === "test_result") {
+                // Handle test result events
+                if (data.status === "PASS") {
+                  toast.success(`🧪 All tests passed! (${data.results?.passed || 0}/${data.results?.total || 0})`);
+                } else if (data.retrying) {
+                  toast.warning(`🔄 Tests failed (attempt ${data.attempt}). Auto-fixing...`);
+                } else if (data.max_attempts_reached) {
+                  toast.error(`❌ Tests still failing after ${data.attempt} attempts. Please review the code.`);
+                }
               } else if (data.type === "complete") {
                 // Generation complete
                 if (data.files?.length > 0) {
@@ -412,6 +421,26 @@ export default function BuilderPage() {
                 setMessages(messagesRes.data);
                 setVersions(versionsRes.data);
                 setProject((prev) => ({ ...prev, current_version: data.version }));
+
+                // Show test results summary
+                if (data.test_results) {
+                  const tr = data.test_results;
+                  if (tr.status === "PASS") {
+                    toast.success(`✅ All ${tr.total} tests passed!`, { duration: 5000 });
+                  } else {
+                    toast.error(
+                      <div>
+                        <strong>⚠️ {tr.failed} of {tr.total} tests failed</strong>
+                        <div className="text-sm mt-1">
+                          {tr.failed_requirements?.slice(0, 2).map((f, i) => (
+                            <div key={i}>• {f.description?.slice(0, 50)}...</div>
+                          ))}
+                        </div>
+                      </div>,
+                      { duration: 8000 }
+                    );
+                  }
+                }
 
                 // Show success toast with migration/deployment info
                 let successMsg = `Version ${data.version} generated with ${data.files?.length || 0} files!`;
