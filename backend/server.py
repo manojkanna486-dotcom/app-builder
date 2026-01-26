@@ -2303,7 +2303,7 @@ def clean_component_code(code: str) -> str:
     """Clean a single component's code for embedding"""
     import re
     
-    # Remove import statements
+    # Remove import statements (general)
     cleaned = re.sub(r'^import\s+.*?[\'"].*?[\'"];?\s*$', '', code, flags=re.MULTILINE)
     cleaned = re.sub(r'^import\s+\{[^}]*\}\s+from\s+[\'"].*?[\'"];?\s*$', '', cleaned, flags=re.MULTILINE)
     
@@ -2327,6 +2327,15 @@ def clean_component_code(code: str) -> str:
     cleaned = cleaned.replace("</script>", "<\\/script>")
     
     return cleaned.strip()
+
+def is_supabase_client_file(file_path: str, content: str) -> bool:
+    """Check if a file is the supabaseClient configuration file"""
+    if 'supabaseClient' in file_path.lower():
+        return True
+    # Check content for patterns like export const supabase = createClient
+    if 'createClient' in content and ('export const supabase' in content or 'export const supabaseClient' in content):
+        return True
+    return False
 
 def generate_preview_html_multifile(files: list, supabase_config: dict = None) -> str:
     """Generate HTML with multiple React components for preview"""
