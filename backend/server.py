@@ -76,6 +76,11 @@ class Project(BaseModel):
     supabase_url: Optional[str] = None
     supabase_anon_key: Optional[str] = None
     supabase_service_key: Optional[str] = None
+    # OAuth-added fields for project isolation
+    supabase_project_ref: Optional[str] = None
+    supabase_project_name: Optional[str] = None
+    supabase_region: Optional[str] = None
+    supabase_connected_at: Optional[str] = None
 
 class VersionFile(BaseModel):
     path: str
