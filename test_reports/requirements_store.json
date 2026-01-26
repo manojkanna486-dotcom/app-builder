@@ -1,0 +1,38 @@
+{
+  "project": "App Builder (Supabase Full-Stack)",
+  "active_requirements": {
+    "REQ-001": {
+      "description": "Supabase OAuth Connection - Users can initiate OAuth flow to connect Supabase account",
+      "source": "User prompt: Supabase OAuth Integration"
+    },
+    "REQ-002": {
+      "description": "Project Selection - After OAuth, users can select/view Supabase projects",
+      "source": "User prompt: Select existing project or create new one"
+    },
+    "REQ-003": {
+      "description": "Full-Stack Code Generation - Generate React + Edge Functions + SQL migrations for connected Supabase project",
+      "source": "User prompt: Full-stack generation with Supabase"
+    },
+    "REQ-004": {
+      "description": "Live Preview with Correct Credentials - Preview uses correct Supabase API key (not hardcoded stale key)",
+      "source": "User reported: Invalid API key bug fix"
+    },
+    "REQ-005": {
+      "description": "Sign Up/Sign In in Preview - Authentication works in generated app preview",
+      "source": "User reported: Invalid API key when signing up"
+    },
+    "REQ-006": {
+      "description": "Auto-Migration Preparation - After code generation, SQL migrations prepared with SQL Editor link",
+      "source": "User prompt: Run migrations and deploy functions after connection"
+    },
+    "REQ-007": {
+      "description": "Edge Function Preparation - After code generation, Edge Functions prepared with deployment info",
+      "source": "User prompt: Deploy functions after connection"
+    },
+    "REQ-008": {
+      "description": "Export Features - ZIP download, Vercel deployment, CodeSandbox available",
+      "source": "Handoff: Deployment independence features"
+    }
+  },
+  "retry_count": 0
+}
