@@ -1872,6 +1872,101 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                     files = fixed_files
                     summary = f"{summary}. Auto-fixed: {fix_summary}"
             
+            # ==================== TESTING AGENT ====================
+            test_results = None
+            if request.enable_testing and testing_agent:
+                yield f"data: {json.dumps({'type': 'status', 'message': '🧪 Running automated tests...'})}\n\n"
+                
+                # Get Supabase config for testing
+                test_supabase_config = None
+                if project.get("supabase_connected"):
+                    test_supabase_config = {
+                        "url": project.get("supabase_url", ""),
+                        "anon_key": project.get("supabase_anon_key", "")
+                    }
+                
+                # Extract requirements from prompt
+                requirements = await testing_agent.extract_requirements(request.prompt)
+                yield f"data: {json.dumps({'type': 'status', 'message': f'📋 Found {len(requirements)} testable requirement(s)'})}\n\n"
+                
+                # Run testing loop with retries
+                attempt = 0
+                max_attempts = min(request.max_test_retries, MAX_RETRY_ATTEMPTS)
+                current_files = files
+                current_summary = summary
+                
+                while attempt < max_attempts:
+                    attempt += 1
+                    
+                    # Run tests
+                    test_results = await testing_agent.run_tests(current_files, requirements, test_supabase_config)
+                    
+                    if test_results["status"] == "PASS":
+                        passed_count = test_results.get("passed", 0)
+                        total_count = test_results.get("total", 0)
+                        yield f"data: {json.dumps({'type': 'status', 'message': f'✅ All tests passed ({passed_count}/{total_count})'})}\n\n"
+                        yield f"data: {json.dumps({'type': 'test_result', 'status': 'PASS', 'attempt': attempt, 'results': test_results})}\n\n"
+                        break
+                    else:
+                        failed_count = test_results.get("failed", 0)
+                        total_count = test_results.get("total", 0)
+                        
+                        if attempt < max_attempts:
+                            yield f"data: {json.dumps({'type': 'status', 'message': f'⚠️ Tests failed ({failed_count}/{total_count}). Attempt {attempt}/{max_attempts}. Fixing issues...'})}\n\n"
+                            yield f"data: {json.dumps({'type': 'test_result', 'status': 'FAIL', 'attempt': attempt, 'results': test_results, 'retrying': True})}\n\n"
+                            
+                            # Generate fix prompt
+                            fix_prompt = await testing_agent.generate_fix_prompt(request.prompt, current_files, test_results)
+                            
+                            # Regenerate with fix prompt
+                            yield f"data: {json.dumps({'type': 'status', 'message': '🔧 Regenerating code to fix issues...'})}\n\n"
+                            
+                            # Call LLM to fix issues
+                            fix_messages = [
+                                {"role": "system", "content": SYSTEM_PROMPT if not is_fullstack else FULLSTACK_SYSTEM_PROMPT.replace("{supabase_url}", supabase_url)},
+                                {"role": "user", "content": fix_prompt}
+                            ]
+                            
+                            fix_content = ""
+                            async for chunk in call_openrouter_stream(fix_messages):
+                                fix_content += chunk
+                            
+                            # Parse fixed code
+                            try:
+                                fix_result = json.loads(fix_content, strict=False)
+                                if fix_result.get("files"):
+                                    current_files = fix_result["files"]
+                                    current_summary = fix_result.get("summary", current_summary)
+                                    # Re-apply file types
+                                    for f in current_files:
+                                        path = f.get("path", "")
+                                        if ".sql" in path:
+                                            f["file_type"] = "sql"
+                                        elif "supabase/functions" in path or path.endswith(".ts"):
+                                            f["file_type"] = "edge_function"
+                                        elif not f.get("file_type"):
+                                            f["file_type"] = "frontend"
+                            except:
+                                # Try to extract JSON from response
+                                import re
+                                json_match = re.search(r'\{[\s\S]*"files"[\s\S]*\}', fix_content)
+                                if json_match:
+                                    try:
+                                        fix_result = json.loads(json_match.group(), strict=False)
+                                        if fix_result.get("files"):
+                                            current_files = fix_result["files"]
+                                            current_summary = fix_result.get("summary", current_summary)
+                                    except:
+                                        pass
+                        else:
+                            yield f"data: {json.dumps({'type': 'status', 'message': f'❌ Tests still failing after {max_attempts} attempts ({failed_count}/{total_count} failed)'})}\n\n"
+                            yield f"data: {json.dumps({'type': 'test_result', 'status': 'FAIL', 'attempt': attempt, 'results': test_results, 'retrying': False, 'max_attempts_reached': True})}\n\n"
+                
+                # Update files and summary if tests resulted in fixes
+                if current_files != files:
+                    files = current_files
+                    summary = current_summary
+            
             yield f"data: {json.dumps({'type': 'status', 'message': 'Saving version...'})}\n\n"
             
             # Create version
@@ -1881,7 +1976,7 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                 prompt=request.prompt,
                 files=[VersionFile(**f) for f in files],
                 status="success",
-                delta_plan={"summary": summary}
+                delta_plan={"summary": summary, "test_results": test_results}
             )
             await database.create_version(version.model_dump())
             
@@ -1893,10 +1988,17 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
             })
             
             # Save assistant message
+            test_status_msg = ""
+            if test_results:
+                if test_results["status"] == "PASS":
+                    test_status_msg = f" (✅ All {test_results.get('total', 0)} tests passed)"
+                else:
+                    test_status_msg = f" (⚠️ {test_results.get('failed', 0)} tests failed)"
+            
             assistant_msg = ChatMessage(
                 project_id=project_id,
                 role="assistant",
-                content=f"✓ {summary or 'Code generated successfully'}"
+                content=f"✓ {summary or 'Code generated successfully'}{test_status_msg}"
             )
             await database.create_message(assistant_msg.model_dump())
             
