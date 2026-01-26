@@ -413,7 +413,26 @@ export default function BuilderPage() {
                 setVersions(versionsRes.data);
                 setProject((prev) => ({ ...prev, current_version: data.version }));
 
-                toast.success(`Version ${data.version} generated with ${data.files?.length || 0} files!`);
+                // Show success toast with migration/deployment info
+                let successMsg = `Version ${data.version} generated with ${data.files?.length || 0} files!`;
+                
+                // Show migration status
+                if (data.migration) {
+                  if (data.migration.status === "completed") {
+                    toast.success(`✅ Database migrations executed successfully!`);
+                  } else if (data.migration.status === "partial") {
+                    toast.warning(`⚠️ Some migrations need manual execution in Supabase SQL Editor`);
+                  }
+                }
+                
+                // Show deployment status
+                if (data.deployment) {
+                  if (data.deployment.status === "prepared") {
+                    toast.info(`⚡ ${data.deployment.total} Edge Function(s) ready for deployment`);
+                  }
+                }
+                
+                toast.success(successMsg);
                 setViewMode("preview");
               } else if (data.type === "error") {
                 throw new Error(data.message);
