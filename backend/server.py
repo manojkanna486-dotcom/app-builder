@@ -116,6 +116,308 @@ class VercelDeployRequest(BaseModel):
     vercel_token: str
     project_name: Optional[str] = None
 
+class SupabaseProjectCreate(BaseModel):
+    name: str
+    organization_id: str
+    db_pass: str
+    region: str = "us-east-1"
+
+# ==================== SUPABASE OAUTH ====================
+
+def generate_pkce_pair():
+    """Generate PKCE code verifier and challenge"""
+    code_verifier = secrets.token_urlsafe(32)
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).decode().rstrip('=')
+    return code_verifier, code_challenge
+
+@api_router.get("/auth/supabase/login")
+async def supabase_oauth_login(project_id: str = Query(..., description="App Builder project ID to connect")):
+    """Initiate Supabase OAuth flow"""
+    if not SUPABASE_OAUTH_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Supabase OAuth not configured")
+    
+    # Generate state and PKCE
+    state = secrets.token_urlsafe(32)
+    code_verifier, code_challenge = generate_pkce_pair()
+    
+    # Store state with project_id and code_verifier
+    oauth_states[state] = {
+        "project_id": project_id,
+        "code_verifier": code_verifier,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Build authorization URL
+    params = {
+        "client_id": SUPABASE_OAUTH_CLIENT_ID,
+        "redirect_uri": SUPABASE_OAUTH_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "all",
+        "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256"
+    }
+    
+    auth_url = f"{SUPABASE_OAUTH_AUTH_URL}?" + "&".join(f"{k}={v}" for k, v in params.items())
+    logger.info(f"Redirecting to Supabase OAuth: {auth_url[:100]}...")
+    
+    return RedirectResponse(url=auth_url)
+
+@api_router.get("/auth/supabase/callback")
+async def supabase_oauth_callback(code: str = Query(...), state: str = Query(...)):
+    """Handle Supabase OAuth callback"""
+    
+    # Verify state
+    if state not in oauth_states:
+        logger.error(f"Invalid OAuth state: {state}")
+        # Redirect to frontend with error
+        return RedirectResponse(url="/?error=invalid_state")
+    
+    state_data = oauth_states.pop(state)
+    project_id = state_data["project_id"]
+    code_verifier = state_data["code_verifier"]
+    
+    try:
+        # Exchange code for token
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            token_response = await client.post(
+                SUPABASE_OAUTH_TOKEN_URL,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": SUPABASE_OAUTH_REDIRECT_URI,
+                    "client_id": SUPABASE_OAUTH_CLIENT_ID,
+                    "client_secret": SUPABASE_OAUTH_CLIENT_SECRET,
+                    "code_verifier": code_verifier
+                }
+            )
+        
+        if token_response.status_code != 200:
+            logger.error(f"Token exchange failed: {token_response.text}")
+            return RedirectResponse(url=f"/?error=token_exchange_failed")
+        
+        tokens = token_response.json()
+        access_token = tokens.get("access_token")
+        refresh_token = tokens.get("refresh_token")
+        
+        # Store tokens in the project (temporarily in memory, will be used to fetch projects)
+        # We'll redirect to a page where user can select a project
+        
+        # Store tokens temporarily with project_id
+        token_state = secrets.token_urlsafe(16)
+        oauth_states[f"token_{token_state}"] = {
+            "project_id": project_id,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        logger.info(f"OAuth successful for project {project_id}")
+        
+        # Redirect to frontend with token state
+        return RedirectResponse(url=f"/builder/{project_id}?supabase_auth={token_state}")
+        
+    except Exception as e:
+        logger.error(f"OAuth callback error: {e}")
+        return RedirectResponse(url=f"/?error=oauth_failed")
+
+@api_router.get("/auth/supabase/projects")
+async def list_supabase_projects(token_state: str = Query(...)):
+    """List user's Supabase projects using OAuth token"""
+    
+    token_key = f"token_{token_state}"
+    if token_key not in oauth_states:
+        raise HTTPException(status_code=401, detail="Invalid or expired token state")
+    
+    token_data = oauth_states[token_key]
+    access_token = token_data["access_token"]
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{SUPABASE_MANAGEMENT_API}/projects",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+        
+        if response.status_code != 200:
+            logger.error(f"Failed to list projects: {response.text}")
+            raise HTTPException(status_code=400, detail="Failed to list projects")
+        
+        projects = response.json()
+        
+        # Return simplified project list
+        return {
+            "projects": [
+                {
+                    "id": p.get("id"),
+                    "name": p.get("name"),
+                    "region": p.get("region"),
+                    "organization_id": p.get("organization_id"),
+                    "status": p.get("status"),
+                    "created_at": p.get("created_at")
+                }
+                for p in projects
+            ],
+            "project_id": token_data["project_id"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing projects: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/auth/supabase/organizations")
+async def list_supabase_organizations(token_state: str = Query(...)):
+    """List user's Supabase organizations"""
+    
+    token_key = f"token_{token_state}"
+    if token_key not in oauth_states:
+        raise HTTPException(status_code=401, detail="Invalid or expired token state")
+    
+    token_data = oauth_states[token_key]
+    access_token = token_data["access_token"]
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{SUPABASE_MANAGEMENT_API}/organizations",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+        
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to list organizations")
+        
+        return {"organizations": response.json()}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/auth/supabase/projects/create")
+async def create_supabase_project(request: SupabaseProjectCreate, token_state: str = Query(...)):
+    """Create a new Supabase project"""
+    
+    token_key = f"token_{token_state}"
+    if token_key not in oauth_states:
+        raise HTTPException(status_code=401, detail="Invalid or expired token state")
+    
+    token_data = oauth_states[token_key]
+    access_token = token_data["access_token"]
+    
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{SUPABASE_MANAGEMENT_API}/projects",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "name": request.name,
+                    "organization_id": request.organization_id,
+                    "db_pass": request.db_pass,
+                    "region": request.region
+                }
+            )
+        
+        if response.status_code not in [200, 201]:
+            logger.error(f"Failed to create project: {response.text}")
+            raise HTTPException(status_code=400, detail=f"Failed to create project: {response.text}")
+        
+        return response.json()
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating project: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/auth/supabase/connect/{supabase_project_ref}")
+async def connect_supabase_project(supabase_project_ref: str, token_state: str = Query(...)):
+    """Connect a Supabase project to an App Builder project - fetches credentials automatically"""
+    
+    token_key = f"token_{token_state}"
+    if token_key not in oauth_states:
+        raise HTTPException(status_code=401, detail="Invalid or expired token state")
+    
+    token_data = oauth_states[token_key]
+    access_token = token_data["access_token"]
+    app_project_id = token_data["project_id"]
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Get project details
+            project_response = await client.get(
+                f"{SUPABASE_MANAGEMENT_API}/projects/{supabase_project_ref}",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            
+            if project_response.status_code != 200:
+                raise HTTPException(status_code=400, detail="Failed to get project details")
+            
+            project_info = project_response.json()
+            
+            # Get API keys
+            keys_response = await client.get(
+                f"{SUPABASE_MANAGEMENT_API}/projects/{supabase_project_ref}/api-keys",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            
+            if keys_response.status_code != 200:
+                raise HTTPException(status_code=400, detail="Failed to get API keys")
+            
+            api_keys = keys_response.json()
+            
+            # Find anon and service_role keys
+            anon_key = None
+            service_role_key = None
+            for key in api_keys:
+                if key.get("name") == "anon":
+                    anon_key = key.get("api_key")
+                elif key.get("name") == "service_role":
+                    service_role_key = key.get("api_key")
+        
+        # Build Supabase URL
+        supabase_url = f"https://{supabase_project_ref}.supabase.co"
+        
+        # Update the App Builder project with Supabase credentials
+        app_project = await database.get_project(app_project_id)
+        if not app_project:
+            raise HTTPException(status_code=404, detail="App Builder project not found")
+        
+        await database.update_project(app_project_id, {
+            "supabase_connected": True,
+            "supabase_url": supabase_url,
+            "supabase_anon_key": anon_key,
+            "supabase_service_key": service_role_key,
+            "supabase_project_ref": supabase_project_ref,
+            "supabase_project_name": project_info.get("name"),
+            "supabase_region": project_info.get("region"),
+            "supabase_connected_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        # Clean up token state
+        del oauth_states[token_key]
+        
+        logger.info(f"Connected Supabase project {supabase_project_ref} to App Builder project {app_project_id}")
+        
+        return {
+            "connected": True,
+            "supabase_url": supabase_url,
+            "project_name": project_info.get("name"),
+            "region": project_info.get("region")
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error connecting project: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ==================== OPENROUTER LLM ====================
 
 async def call_openrouter(messages: List[Dict]):
