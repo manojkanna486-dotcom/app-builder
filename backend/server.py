@@ -339,13 +339,16 @@ async def create_supabase_project(request: SupabaseProjectCreate, token_state: s
     
     token_key = f"token_{token_state}"
     if token_key not in oauth_states:
-        raise HTTPException(status_code=401, detail="Invalid or expired token state")
+        logger.error(f"Token state not found: {token_state}")
+        raise HTTPException(status_code=401, detail="Session expired. Please reconnect your Supabase account.")
     
     token_data = oauth_states[token_key]
     access_token = token_data["access_token"]
     
+    logger.info(f"Creating Supabase project: {request.name} in org {request.organization_id}")
+    
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:  # Increased timeout for project creation
             response = await client.post(
                 f"{SUPABASE_MANAGEMENT_API}/projects",
                 headers={
@@ -356,21 +359,41 @@ async def create_supabase_project(request: SupabaseProjectCreate, token_state: s
                     "name": request.name,
                     "organization_id": request.organization_id,
                     "db_pass": request.db_pass,
-                    "region": request.region
+                    "region": request.region,
+                    "plan": "free"  # Explicitly set to free plan
                 }
             )
         
-        if response.status_code not in [200, 201]:
-            logger.error(f"Failed to create project: {response.text}")
-            raise HTTPException(status_code=400, detail=f"Failed to create project: {response.text}")
+        logger.info(f"Supabase API response: {response.status_code}")
         
-        return response.json()
+        if response.status_code not in [200, 201]:
+            error_detail = response.text
+            logger.error(f"Failed to create project: {error_detail}")
+            
+            # Parse error for user-friendly message
+            try:
+                error_json = response.json()
+                if "message" in error_json:
+                    error_detail = error_json["message"]
+                elif "error" in error_json:
+                    error_detail = error_json["error"]
+            except:
+                pass
+            
+            raise HTTPException(status_code=400, detail=f"Supabase error: {error_detail}")
+        
+        result = response.json()
+        logger.info(f"Project created successfully: {result.get('id', 'unknown')}")
+        return result
         
     except HTTPException:
         raise
+    except httpx.TimeoutException:
+        logger.error("Timeout creating Supabase project")
+        raise HTTPException(status_code=504, detail="Request timed out. Supabase project creation can take a while. Please try again.")
     except Exception as e:
         logger.error(f"Error creating project: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
 
 @api_router.post("/auth/supabase/connect/{supabase_project_ref}")
 async def connect_supabase_project(supabase_project_ref: str, token_state: str = Query(...)):
