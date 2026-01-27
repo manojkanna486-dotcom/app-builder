@@ -1690,7 +1690,7 @@ export default function BuilderPage() {
                       <ol className="list-decimal ml-4 space-y-1 text-blue-200/80">
                         <li>Go to <a href="https://vercel.com/account/tokens" target="_blank" rel="noopener noreferrer" className="underline">vercel.com/account/tokens</a></li>
                         <li>Click "Create" to generate a new token</li>
-                        <li>Give it a name (e.g., "App Builder")</li>
+                        <li>Give it a name (e.g., "Astra AI")</li>
                         <li>Copy and paste the token here</li>
                       </ol>
                       <p className="mt-2 text-blue-300">Your token is stored locally and never saved on our servers.</p>

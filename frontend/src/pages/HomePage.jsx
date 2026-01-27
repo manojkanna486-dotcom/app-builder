@@ -112,8 +112,8 @@ export default function HomePage() {
               <Sparkles className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-foreground">App Builder</h1>
-              <p className="text-sm text-muted-foreground">Build React apps with AI</p>
+              <h1 className="text-xl font-semibold text-foreground">Astra AI</h1>
+              <p className="text-sm text-muted-foreground">Build full-stack apps with AI</p>
             </div>
           </div>
           <Button
