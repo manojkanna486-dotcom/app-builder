@@ -2918,7 +2918,12 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
     
     # Build all component code
     all_code_parts = []
+    logger.info(f"[PREVIEW DEBUG] sorted_files count: {len(sorted_files)}, files: {[f['path'] for f in sorted_files]}")
     for f in sorted_files:
+        # Double-check: skip any .env files that somehow got through
+        if ".env" in f.get("path", ""):
+            logger.warning(f"[PREVIEW DEBUG] .env file in sorted_files! Skipping: {f['path']}")
+            continue
         cleaned = clean_component_code(f["content"])
         # Add a comment marker for debugging
         all_code_parts.append(f"// === File: {f['path']} ===\n{cleaned}")
