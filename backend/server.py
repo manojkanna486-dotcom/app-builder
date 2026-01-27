@@ -2881,14 +2881,19 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         file_content = f.get("content", "")
         file_type = f.get("file_type", "frontend")
         
+        logger.info(f"[PREVIEW DEBUG] Processing file: {file_path}, file_type: {file_type}")
+        
         # Skip non-frontend files
         if file_type in ["edge_function", "sql"]:
+            logger.info(f"[PREVIEW DEBUG] Skipping {file_path} - non-frontend file_type")
             continue
         if file_path.endswith(".ts") or file_path.endswith(".sql"):
+            logger.info(f"[PREVIEW DEBUG] Skipping {file_path} - .ts or .sql extension")
             continue
         
         # Skip .env files - they are not JavaScript
-        if ".env" in file_path or file_path.endswith(".env.example") or file_path.endswith(".env.local"):
+        if ".env" in file_path:
+            logger.info(f"[PREVIEW DEBUG] Skipping {file_path} - .env file detected")
             continue
         
         # Skip non-JSX/JS files that might have been incorrectly marked as frontend
