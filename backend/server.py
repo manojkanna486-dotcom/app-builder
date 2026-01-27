@@ -2912,9 +2912,12 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
     if app_file:
         sorted_files.append(app_file)
     elif files:
-        # If no App.jsx found, use frontend files only
-        sorted_files = [f for f in files if f.get("file_type", "frontend") == "frontend" 
-                        and not is_supabase_client_file(f.get("path", ""), f.get("content", ""))]
+        # If no App.jsx found, use frontend files only (with proper filtering)
+        sorted_files = [f for f in files 
+                        if f.get("file_type", "frontend") == "frontend" 
+                        and not is_supabase_client_file(f.get("path", ""), f.get("content", ""))
+                        and ".env" not in f.get("path", "")
+                        and (f.get("path", "").endswith(".jsx") or f.get("path", "").endswith(".js") or f.get("path", "").endswith(".tsx"))]
     
     # Build all component code
     all_code_parts = []
