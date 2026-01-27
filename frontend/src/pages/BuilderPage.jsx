@@ -928,9 +928,46 @@ export default function BuilderPage() {
                   </div>
                   <div className="flex-1 max-w-[90%]">
                     <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
+                      {/* Project Summary */}
+                      {clarificationQuestions.project_summary && (
+                        <div className="pb-3 border-b border-border">
+                          <p className="text-sm font-medium text-foreground mb-1">
+                            📋 I understand you want to build:
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {clarificationQuestions.project_summary}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Requirements Preview */}
+                      {clarificationQuestions.requirements && clarificationQuestions.requirements.length > 0 && (
+                        <div className="pb-3 border-b border-border">
+                          <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
+                            Extracted Requirements ({clarificationQuestions.requirements.length})
+                          </p>
+                          <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {clarificationQuestions.requirements.slice(0, 5).map((req, idx) => (
+                              <div key={req.id || idx} className="flex items-start gap-2 text-xs">
+                                <span className={`shrink-0 ${
+                                  req.priority === 'must-have' ? 'text-red-500' : 
+                                  req.priority === 'should-have' ? 'text-yellow-500' : 'text-green-500'
+                                }`}>●</span>
+                                <span className="text-muted-foreground">{req.description}</span>
+                              </div>
+                            ))}
+                            {clarificationQuestions.requirements.length > 5 && (
+                              <p className="text-xs text-muted-foreground italic">
+                                +{clarificationQuestions.requirements.length - 5} more requirements...
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       <div>
                         <p className="text-sm font-medium text-foreground mb-1">
-                          Let me help you build the best app! 🎨
+                          🎨 A few questions to perfect your app:
                         </p>
                         {clarificationQuestions.context && (
                           <p className="text-xs text-muted-foreground">
@@ -942,7 +979,12 @@ export default function BuilderPage() {
                       <div className="space-y-3">
                         {clarificationQuestions.questions.map((q, idx) => (
                           <div key={q.id || idx} className="space-y-2">
-                            <p className="text-sm text-foreground">{q.question}</p>
+                            <div>
+                              <p className="text-sm text-foreground">{q.question}</p>
+                              {q.context && (
+                                <p className="text-xs text-muted-foreground mt-0.5">{q.context}</p>
+                              )}
+                            </div>
                             {q.options ? (
                               <div className="flex flex-wrap gap-2">
                                 {q.options.map((opt, optIdx) => (
@@ -968,25 +1010,43 @@ export default function BuilderPage() {
                                 value={clarificationAnswers[q.id || `q${idx}`] || ""}
                               />
                             )}
+                            {q.default && !clarificationAnswers[q.id || `q${idx}`] && (
+                              <p className="text-xs text-muted-foreground">
+                                Default: {q.default}
+                              </p>
+                            )}
                           </div>
                         ))}
                       </div>
+                      
+                      {/* Assumptions */}
+                      {clarificationQuestions.assumptions && clarificationQuestions.assumptions.length > 0 && (
+                        <div className="pt-2 border-t border-border">
+                          <p className="text-xs font-medium text-muted-foreground mb-1">
+                            I'll also assume:
+                          </p>
+                          <ul className="text-xs text-muted-foreground space-y-0.5">
+                            {clarificationQuestions.assumptions.slice(0, 3).map((a, i) => (
+                              <li key={i}>• {a}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       
                       <div className="flex gap-2 pt-2">
                         <Button
                           size="sm"
                           onClick={handleSubmitClarification}
-                          disabled={Object.keys(clarificationAnswers).length === 0}
                           className="flex-1"
                         >
-                          Generate with these preferences
+                          ✨ Generate with these preferences
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={handleSkipClarification}
                         >
-                          Skip & Generate
+                          Skip & Use Defaults
                         </Button>
                       </div>
                     </div>
