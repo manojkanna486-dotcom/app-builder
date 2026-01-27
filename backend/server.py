@@ -2775,15 +2775,16 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_db_client():
-    global database, testing_agent
+    global database, testing_agent, clarification_agent
     database = get_database()
     await database.init()
     logger.info(f"Database initialized: {os.environ.get('DB_TYPE', 'mongodb')}")
     
-    # Initialize Testing Agent
+    # Initialize agents
     if OPENROUTER_API_KEY:
         testing_agent = TestingAgent(OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
-        logger.info("Testing Agent initialized")
+        clarification_agent = ClarificationAgent(OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
+        logger.info("Testing Agent and Clarification Agent initialized")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
