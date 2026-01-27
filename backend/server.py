@@ -909,11 +909,21 @@ Return JSON:
 # ==================== FULL-STACK GENERATION PROMPTS ====================
 
 FULLSTACK_SYSTEM_PROMPT = """You are an elite full-stack developer. Generate complete web applications with:
-- React frontend (JSX with Tailwind CSS)
+- React frontend (JSX with Tailwind CSS) - MUST BE FULLY RESPONSIVE
 - Supabase Edge Functions backend (TypeScript/Deno)
 - PostgreSQL database schema (SQL)
 
 The user has connected their Supabase project. Generate production-ready code.
+
+RESPONSIVE DESIGN (MANDATORY - ALL APPS MUST BE FULLY RESPONSIVE):
+1. Mobile-first approach: Design for 320px screens first, then scale up
+2. Breakpoints: sm:640px, md:768px, lg:1024px, xl:1280px
+3. Flexible layouts: Use flex/grid with responsive classes (flex-col sm:flex-row)
+4. Touch-friendly: Minimum 44px tap targets, adequate spacing between interactive elements
+5. Responsive typography: text-sm sm:text-base lg:text-lg
+6. Responsive spacing: p-4 sm:p-6 lg:p-8
+7. Hide/show elements: Use hidden sm:block or sm:hidden as needed
+8. Mobile navigation: Hamburger menu on mobile, full nav on desktop
 
 IMPORTANT - PROJECT ISOLATION:
 - All code must ONLY operate on the connected Supabase project
@@ -927,6 +937,7 @@ OUTPUT FORMAT (RAW JSON ONLY - NO MARKDOWN):
   "files": [
     {{"path": "App.jsx", "content": "...", "file_type": "frontend"}},
     {{"path": "components/Header.jsx", "content": "...", "file_type": "frontend"}},
+    {{"path": "components/MobileNav.jsx", "content": "...", "file_type": "frontend"}},
     {{"path": "supabase/functions/api/index.ts", "content": "...", "file_type": "edge_function"}},
     {{"path": "supabase/migrations/001_initial.sql", "content": "...", "file_type": "sql"}}
   ],
@@ -936,8 +947,10 @@ OUTPUT FORMAT (RAW JSON ONLY - NO MARKDOWN):
 
 FILE STRUCTURE:
 1. Frontend (React/JSX):
-   - App.jsx: Main component with routing
-   - components/*.jsx: Feature components
+   - App.jsx: Main component with routing (responsive layout)
+   - components/Header.jsx: Navigation with hamburger menu for mobile
+   - components/MobileNav.jsx: Mobile navigation drawer
+   - components/*.jsx: Feature components (all responsive)
    - Use Supabase client for data fetching
 
 2. Edge Functions (TypeScript/Deno):
@@ -955,7 +968,8 @@ FRONTEND CODE RULES:
 - Use environment variable for anon key: const supabaseUrl = '{supabase_url}'; const supabaseKey = 'SUPABASE_ANON_KEY';
 - Fetch data from Supabase tables directly using supabase.from('table').select()
 - Handle loading and error states
-- Use Tailwind CSS for styling
+- Use Tailwind CSS with RESPONSIVE classes (sm:, md:, lg:, xl:)
+- ALL layouts must work on mobile, tablet, and desktop
 
 EDGE FUNCTION TEMPLATE:
 ```typescript
@@ -986,7 +1000,7 @@ SQL MIGRATION RULES:
 - Add appropriate indexes
 - Include RLS policies for security
 
-CRITICAL: Return ONLY raw JSON. No markdown code blocks."""
+CRITICAL: Return ONLY raw JSON. No markdown code blocks. ALL layouts MUST be responsive."""
 
 FULLSTACK_UPDATE_PROMPT = """You are an elite full-stack developer. Update the existing application.
 
