@@ -75,6 +75,15 @@ Create an App Builder (v0 clone) that allows users to build React applications u
 
 ## What's Been Implemented
 
+### Jan 27, 2026 - Automatic Migration & Deployment Execution
+- ✅ Updated `run_migrations_internal()` to actually execute SQL via pg-meta API
+- ✅ Migrations auto-run after code generation (shows success/pending status)
+- ✅ Frontend shows real-time migration results via toast notifications
+- ✅ Link to SQL Editor provided for pending migrations
+- ✅ Edge Functions prepared with deployment commands
+- ✅ Added stream events for migration_result and deploy_result
+- ✅ Better error messages for session expiration in project creation
+
 ### Jan 27, 2026 - Lucide Icons Support in Preview
 - ✅ Added 40+ mock Lucide icons to preview HTML (Plus, Minus, Check, Trash, Edit, Search, Menu, Home, User, Settings, Heart, Star, Calendar, Clock, Mail, Phone, LogIn, LogOut, Sun, Moon, Chevrons, Arrows, Loader, Calculator, Code, Download, Upload, Eye, Lock, AlertCircle, CheckCircle, Info, RotateCcw)
 - ✅ Icons render correctly in generated app previews
