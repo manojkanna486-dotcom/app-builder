@@ -17,7 +17,7 @@
       "requirement_id": "REQ-001",
       "type": "CONFIGURATION",
       "description": "Supabase OAuth redirect_uri must be registered by user",
-      "action_required": "Add https://supastack-1.preview.emergentagent.com/api/auth/supabase/callback to Supabase OAuth app settings",
+      "action_required": "Add https://fullstack-builder-29.preview.emergentagent.com/api/auth/supabase/callback to Supabase OAuth app settings",
       "code_status": "WORKING"
     }
   ],
