@@ -802,6 +802,143 @@ async def run_supabase_migration(project_id: str):
         "migrations": results
     }
 
+@api_router.post("/projects/{project_id}/migrations/approve")
+async def approve_and_run_migrations(project_id: str):
+    """
+    Approve and run pending migrations after user confirmation.
+    STRICT ISOLATION: This ONLY operates on the connected Supabase project.
+    """
+    # Get project with pending migrations
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    pending_migrations = project.get("pending_migrations", [])
+    if not pending_migrations:
+        raise HTTPException(status_code=404, detail="No pending migrations to run")
+    
+    # Ensure Supabase is connected
+    if not project.get("supabase_connected"):
+        raise HTTPException(status_code=400, detail="Supabase not connected")
+    
+    supabase_url = project.get("supabase_url")
+    service_key = project.get("supabase_service_key")
+    project_ref = project.get("supabase_project_ref")
+    project_name = project.get("supabase_project_name", "")
+    
+    if not service_key:
+        return {
+            "status": "pending",
+            "message": "No service key available. Please run migrations manually in Supabase SQL Editor.",
+            "sql_editor_url": f"https://supabase.com/dashboard/project/{project_ref}/sql/new"
+        }
+    
+    results = []
+    success_count = 0
+    pending_count = 0
+    
+    for migration in pending_migrations:
+        sql_content = migration.get("full_sql", "")
+        file_path = migration.get("file", "unknown")
+        
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                # Try the pg-meta query endpoint
+                pg_meta_url = f"{supabase_url}/pg/query"
+                
+                response = await client.post(
+                    pg_meta_url,
+                    headers={
+                        "apikey": service_key,
+                        "Authorization": f"Bearer {service_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={"query": sql_content}
+                )
+                
+                if response.status_code in [200, 201]:
+                    results.append({
+                        "file": file_path,
+                        "status": "success",
+                        "message": "Migration executed successfully"
+                    })
+                    success_count += 1
+                    logger.info(f"Migration {file_path} executed successfully on {project_name}")
+                elif response.status_code == 404:
+                    # pg-meta not available
+                    results.append({
+                        "file": file_path,
+                        "status": "pending",
+                        "message": "Please run in Supabase SQL Editor",
+                        "sql_preview": sql_content[:200] + "..." if len(sql_content) > 200 else sql_content
+                    })
+                    pending_count += 1
+                else:
+                    error_text = response.text
+                    try:
+                        error_json = response.json()
+                        error_text = error_json.get("message", error_json.get("error", error_text))
+                    except:
+                        pass
+                    
+                    results.append({
+                        "file": file_path,
+                        "status": "error",
+                        "message": f"Error: {error_text}"
+                    })
+                    
+        except Exception as e:
+            logger.error(f"Migration error for {file_path}: {e}")
+            results.append({
+                "file": file_path,
+                "status": "error",
+                "message": str(e)
+            })
+    
+    # Clear pending migrations after processing
+    await database.update_project(project_id, {
+        "pending_migrations": None,
+        "pending_migrations_version": None,
+        "last_migration_run": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Determine overall status
+    if success_count == len(pending_migrations):
+        status = "completed"
+    elif success_count > 0:
+        status = "partial"
+    elif pending_count > 0:
+        status = "pending"
+    else:
+        status = "error"
+    
+    return {
+        "status": status,
+        "success": success_count,
+        "pending": pending_count,
+        "total": len(pending_migrations),
+        "results": results,
+        "project_name": project_name,
+        "sql_editor_url": f"https://supabase.com/dashboard/project/{project_ref}/sql/new"
+    }
+
+@api_router.post("/projects/{project_id}/migrations/skip")
+async def skip_migrations(project_id: str):
+    """
+    Skip pending migrations (user chose not to run them).
+    """
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Clear pending migrations
+    await database.update_project(project_id, {
+        "pending_migrations": None,
+        "pending_migrations_version": None
+    })
+    
+    return {"status": "skipped", "message": "Migrations skipped by user"}
+
 @api_router.get("/projects/{project_id}/supabase/info")
 async def get_supabase_info(project_id: str):
     """Get information about the connected Supabase project (isolated)"""
