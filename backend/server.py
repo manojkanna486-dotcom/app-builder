@@ -147,6 +147,13 @@ class SupabaseProjectCreate(BaseModel):
     organization_id: str
     db_pass: str
     region: str = "us-east-1"
+    
+    @property
+    def validate_db_pass(self):
+        """Validate database password meets Supabase requirements"""
+        if len(self.db_pass) < 8:
+            return False, "Password must be at least 8 characters"
+        return True, ""
 
 # ==================== SUPABASE OAUTH ====================
 
