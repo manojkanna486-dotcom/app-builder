@@ -2902,12 +2902,19 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         
         # CRITICAL: Skip supabaseClient.js - we provide our own with correct credentials
         if is_supabase_client_file(file_path, file_content):
+            logger.info(f"[PREVIEW DEBUG] Skipping {file_path} - supabase client file")
             continue
-            
-        if file_path == "App.jsx" or file_path.endswith("/App.jsx"):
+        
+        # Check for App.jsx    
+        is_app_file = file_path == "App.jsx" or file_path.endswith("/App.jsx")
+        logger.info(f"[PREVIEW DEBUG] Checking if App.jsx: path={file_path!r}, is_app={is_app_file}")
+        
+        if is_app_file:
             app_file = f
+            logger.info(f"[PREVIEW DEBUG] SET app_file to: {file_path}")
         else:
             sorted_files.append(f)
+            logger.info(f"[PREVIEW DEBUG] Added to sorted_files: {file_path}")
     
     if app_file:
         sorted_files.append(app_file)
