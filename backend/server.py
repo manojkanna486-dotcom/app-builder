@@ -2258,33 +2258,27 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                 edge_functions = [f for f in files if f.get("file_type") == "edge_function" or "supabase/functions" in f.get("path", "")]
                 
                 if sql_files:
-                    yield f"data: {json.dumps({'type': 'status', 'message': '🗄️ Running database migrations automatically...'})}\n\n"
-                    migration_result = await run_migrations_internal(project_id, files)
+                    # Instead of auto-running, request user approval
+                    migration_preview = []
+                    for sql_file in sql_files:
+                        sql_content = sql_file.get("content", "")
+                        file_path = sql_file.get("path", "unknown")
+                        # Show first 500 chars as preview
+                        preview = sql_content[:500] + "..." if len(sql_content) > 500 else sql_content
+                        migration_preview.append({
+                            "file": file_path,
+                            "preview": preview,
+                            "full_sql": sql_content
+                        })
                     
-                    if migration_result.get("status") == "completed":
-                        success_count = migration_result.get("success", 0)
-                        status_msg = f"✅ {success_count} migration(s) executed successfully!"
-                        yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
-                        yield f"data: {json.dumps({'type': 'migration_result', 'status': 'success', 'results': migration_result})}\n\n"
-                    elif migration_result.get("status") == "partial":
-                        success_count = migration_result.get("success", 0)
-                        pending_count = migration_result.get("pending", 0)
-                        status_msg = f"⚠️ {success_count} migration(s) executed, {pending_count} pending manual execution"
-                        yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
-                        yield f"data: {json.dumps({'type': 'migration_result', 'status': 'partial', 'results': migration_result})}\n\n"
-                    elif migration_result.get("status") == "pending":
-                        sql_editor_url = migration_result.get("sql_editor_url", "")
-                        status_msg = f"📝 Migrations ready for manual execution"
-                        yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
-                        yield f"data: {json.dumps({'type': 'migration_result', 'status': 'pending', 'results': migration_result, 'sql_editor_url': sql_editor_url})}\n\n"
-                    elif migration_result.get("status") == "skipped":
-                        skip_reason = migration_result.get("message", "")
-                        status_msg = f"ℹ️ Migrations skipped: {skip_reason}"
-                        yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
-                    else:
-                        error_msg = migration_result.get("message", "Unknown error")
-                        status_msg = f"❌ Migration error: {error_msg}"
-                        yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
+                    # Store pending migrations in the project for later approval
+                    await database.update_project(project_id, {
+                        "pending_migrations": migration_preview,
+                        "pending_migrations_version": new_version_number
+                    })
+                    
+                    yield f"data: {json.dumps({'type': 'status', 'message': '🗄️ SQL migrations detected - awaiting your approval...'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'migration_approval_needed', 'migrations': migration_preview, 'version': new_version_number})}\n\n"
                 
                 if edge_functions:
                     yield f"data: {json.dumps({'type': 'status', 'message': '⚡ Preparing Edge Functions for deployment...'})}\n\n"
