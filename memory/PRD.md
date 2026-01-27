@@ -226,14 +226,27 @@ SUPABASE_OAUTH_REDIRECT_URI="https://fullstack-builder-29.preview.emergentagent.
 3. Added fallback filter with same `.env` and extension checks
 4. Added double-check filter in the code generation loop
 
+### Jan 27, 2026 - Migration Approval Flow (P0 - IMPLEMENTED)
+**Feature:** User approval required before running SQL migrations
+
+**Changes:**
+- Backend (`server.py`):
+  - Modified streaming generation to send `migration_approval_needed` event instead of auto-running
+  - Added `POST /api/projects/{project_id}/migrations/approve` endpoint
+  - Added `POST /api/projects/{project_id}/migrations/skip` endpoint
+  - Migrations stored in project as `pending_migrations` until approved/skipped
+
+- Frontend (`BuilderPage.jsx`):
+  - Added `pendingMigrations` state
+  - Added migration approval UI card in chat with SQL preview
+  - Added "Run Migrations" and "Skip for Now" buttons
+  - Added `handleApproveMigrations()` and `handleSkipMigrations()` functions
+
 ## Pending Issues
 
 ### P1: Supabase Project Creation Token Expiration
 - In-memory `oauth_states` dictionary loses refresh tokens
 - Need to persist refresh token in database
-
-### P0: User Verification for Auto-Migrations
-- Backend migration logic exists but needs user approval flow in chat
 
 ## Upcoming Tasks
 1. Verify Edge Function deployment end-to-end
@@ -242,5 +255,5 @@ SUPABASE_OAUTH_REDIRECT_URI="https://fullstack-builder-29.preview.emergentagent.
 4. Track migration history and rollback feature
 
 ## Backlog
-- Refactor `server.py` (~2900 lines) into smaller modules
-- Refactor `BuilderPage.jsx` (~1500 lines) into components
+- Refactor `server.py` (~3000 lines) into smaller modules
+- Refactor `BuilderPage.jsx` (~1600 lines) into components
