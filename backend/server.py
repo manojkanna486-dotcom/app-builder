@@ -2911,7 +2911,9 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
     
     if app_file:
         sorted_files.append(app_file)
+        logger.info(f"[PREVIEW DEBUG] Added App.jsx to sorted_files: {app_file.get('path', 'UNKNOWN')}")
     elif files:
+        logger.warning(f"[PREVIEW DEBUG] No App.jsx found! Using fallback filter")
         # If no App.jsx found, use frontend files only (with proper filtering)
         sorted_files = [f for f in files 
                         if f.get("file_type", "frontend") == "frontend" 
