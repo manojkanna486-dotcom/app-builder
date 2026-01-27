@@ -2887,6 +2887,14 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         if file_path.endswith(".ts") or file_path.endswith(".sql"):
             continue
         
+        # Skip .env files - they are not JavaScript
+        if ".env" in file_path or file_path.endswith(".env.example") or file_path.endswith(".env.local"):
+            continue
+        
+        # Skip non-JSX/JS files that might have been incorrectly marked as frontend
+        if not (file_path.endswith(".jsx") or file_path.endswith(".js") or file_path.endswith(".tsx")):
+            continue
+        
         # CRITICAL: Skip supabaseClient.js - we provide our own with correct credentials
         if is_supabase_client_file(file_path, file_content):
             continue
