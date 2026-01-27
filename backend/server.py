@@ -1702,6 +1702,61 @@ async def generate_code(project_id: str, request: PromptRequest):
         
         raise HTTPException(status_code=500, detail=str(e))
 
+# ==================== REQUIREMENT CLARIFICATION ====================
+
+@api_router.post("/projects/{project_id}/clarify")
+async def clarify_requirements(project_id: str, request: ClarifyRequest):
+    """
+    Analyze user prompt and extract requirements with clarifying questions.
+    Call this BEFORE generate/stream to get user confirmation.
+    """
+    if not clarification_agent:
+        raise HTTPException(status_code=500, detail="Clarification agent not initialized")
+    
+    # Get project for context
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Build context
+    context = {
+        "supabase_connected": project.get("supabase_connected", False),
+        "project_name": project.get("name", ""),
+        "existing_summary": project.get("summary", "")
+    }
+    
+    # Analyze prompt
+    analysis = await clarification_agent.analyze_prompt(request.prompt, context)
+    
+    return {
+        "status": "success",
+        "analysis": analysis,
+        "questions": clarification_agent.format_questions_for_display(analysis),
+        "formatted_requirements": clarification_agent.format_requirements_for_display(analysis)
+    }
+
+
+@api_router.post("/projects/{project_id}/confirm-requirements")
+async def confirm_requirements(project_id: str, request: ConfirmRequirementsRequest):
+    """
+    Refine requirements based on user's answers to clarifying questions.
+    Returns final requirements ready for code generation.
+    """
+    if not clarification_agent:
+        raise HTTPException(status_code=500, detail="Clarification agent not initialized")
+    
+    # Refine requirements with user answers
+    refined = await clarification_agent.refine_requirements(
+        request.analysis, 
+        request.user_answers
+    )
+    
+    return {
+        "status": "success",
+        "refined_requirements": refined,
+        "ready_for_generation": True
+    }
+
 # ==================== STREAMING GENERATION ====================
 
 @api_router.post("/projects/{project_id}/generate/stream")
