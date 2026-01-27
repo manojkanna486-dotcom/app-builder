@@ -1385,7 +1385,7 @@ async def get_latest_version(project_id: str):
 
 @api_router.post("/projects/{project_id}/analyze")
 async def analyze_prompt(project_id: str, request: PromptRequest):
-    """Analyze a prompt and determine if clarification is needed"""
+    """Analyze a prompt and extract requirements with clarifying questions"""
     
     project = await database.get_project(project_id)
     if not project:
@@ -1402,7 +1402,37 @@ async def analyze_prompt(project_id: str, request: PromptRequest):
             "message": "Ready to update existing code"
         }
     
-    # Analyze the prompt
+    # Use ClarificationAgent if available
+    if clarification_agent:
+        try:
+            context = {
+                "supabase_connected": project.get("supabase_connected", False),
+                "project_name": project.get("name", ""),
+                "existing_summary": project.get("summary", "")
+            }
+            
+            analysis = await clarification_agent.analyze_prompt(request.prompt, context)
+            
+            # Return with clarification questions
+            questions = analysis.get("clarifying_questions", [])
+            requirements = analysis.get("requirements", [])
+            
+            return {
+                "needs_clarification": len(questions) > 0,
+                "questions": questions,
+                "requirements": requirements,
+                "project_summary": analysis.get("project_summary", ""),
+                "assumptions": analysis.get("assumptions", []),
+                "technical_considerations": analysis.get("technical_considerations", []),
+                "formatted_requirements": clarification_agent.format_requirements_for_display(analysis),
+                "analysis": analysis
+            }
+        except Exception as e:
+            logger.error(f"Clarification agent error: {e}")
+            # Fall back to no clarification
+            return {"needs_clarification": False}
+    
+    # Fallback: Use basic clarification prompt
     messages = [
         {"role": "system", "content": CLARIFICATION_PROMPT.replace("{prompt}", request.prompt)},
         {"role": "user", "content": f"Analyze this request: {request.prompt}"}
