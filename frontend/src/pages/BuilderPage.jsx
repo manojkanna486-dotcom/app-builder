@@ -639,6 +639,12 @@ export default function BuilderPage() {
       toast.error("Please fill in all required fields");
       return;
     }
+    
+    // Validate password
+    if (newProjectPassword.length < 8) {
+      toast.error("Database password must be at least 8 characters");
+      return;
+    }
 
     setCreatingNewProject(true);
     try {
@@ -666,7 +672,16 @@ export default function BuilderPage() {
       setNewProjectName("");
       setNewProjectPassword("");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to create project");
+      const errorMsg = err.response?.data?.detail || "Failed to create project";
+      
+      // Handle session expiration
+      if (errorMsg.includes("expired") || errorMsg.includes("Session") || err.response?.status === 401) {
+        toast.error("Session expired. Please click 'Connect Supabase' again to reconnect.");
+        setShowSupabaseModal(false);
+        setSupabaseTokenState(null);
+      } else {
+        toast.error(errorMsg);
+      }
     } finally {
       setCreatingNewProject(false);
     }
