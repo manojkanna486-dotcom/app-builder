@@ -2901,7 +2901,8 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
             continue
         
         # CRITICAL: Skip supabaseClient.js - we provide our own with correct credentials
-        if is_supabase_client_file(file_path, file_content):
+        # BUT never skip App.jsx - it's the main app file even if it creates supabase client
+        if is_supabase_client_file(file_path, file_content) and file_path != "App.jsx" and not file_path.endswith("/App.jsx"):
             logger.info(f"[PREVIEW DEBUG] Skipping {file_path} - supabase client file")
             continue
         
