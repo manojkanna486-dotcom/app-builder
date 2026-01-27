@@ -123,6 +123,15 @@ class PromptRequest(BaseModel):
     prompt: str
     enable_testing: bool = True  # Enable auto-testing by default
     max_test_retries: int = 3    # Max retry attempts
+    confirmed_requirements: Optional[Dict] = None  # Pre-confirmed requirements from clarification
+    user_answers: Optional[Dict[str, str]] = None  # Answers to clarifying questions
+
+class ClarifyRequest(BaseModel):
+    prompt: str
+
+class ConfirmRequirementsRequest(BaseModel):
+    analysis: Dict
+    user_answers: Dict[str, str]
 
 class SupabaseConnectRequest(BaseModel):
     url: str
