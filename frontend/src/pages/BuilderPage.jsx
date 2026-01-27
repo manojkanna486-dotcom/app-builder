@@ -399,6 +399,32 @@ export default function BuilderPage() {
                 } else if (data.max_attempts_reached) {
                   toast.error(`❌ Tests still failing after ${data.attempt} attempts. Please review the code.`);
                 }
+              } else if (data.type === "migration_result") {
+                // Handle migration result
+                if (data.status === "success") {
+                  toast.success(`🗄️ Database migrations executed successfully!`);
+                } else if (data.status === "partial") {
+                  toast.warning(`⚠️ Some migrations need manual execution`);
+                } else if (data.status === "pending") {
+                  const sqlEditorUrl = data.sql_editor_url;
+                  toast.info(
+                    <div>
+                      📝 Migrations ready for execution
+                      {sqlEditorUrl && (
+                        <a href={sqlEditorUrl} target="_blank" rel="noopener noreferrer" 
+                           className="ml-2 underline text-blue-400">
+                          Open SQL Editor
+                        </a>
+                      )}
+                    </div>,
+                    { duration: 10000 }
+                  );
+                }
+              } else if (data.type === "deploy_result") {
+                // Handle deployment result
+                if (data.status === "ready") {
+                  toast.info(`⚡ Edge Functions ready for deployment`);
+                }
               } else if (data.type === "complete") {
                 // Generation complete
                 if (data.files?.length > 0) {
