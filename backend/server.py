@@ -2881,19 +2881,14 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         file_content = f.get("content", "")
         file_type = f.get("file_type", "frontend")
         
-        logger.info(f"[PREVIEW DEBUG] Processing file: {file_path}, file_type: {file_type}")
-        
         # Skip non-frontend files
         if file_type in ["edge_function", "sql"]:
-            logger.info(f"[PREVIEW DEBUG] Skipping {file_path} - non-frontend file_type")
             continue
         if file_path.endswith(".ts") or file_path.endswith(".sql"):
-            logger.info(f"[PREVIEW DEBUG] Skipping {file_path} - .ts or .sql extension")
             continue
         
         # Skip .env files - they are not JavaScript
         if ".env" in file_path:
-            logger.info(f"[PREVIEW DEBUG] Skipping {file_path} - .env file detected")
             continue
         
         # Skip non-JSX/JS files that might have been incorrectly marked as frontend
@@ -2903,25 +2898,17 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         # CRITICAL: Skip supabaseClient.js - we provide our own with correct credentials
         # BUT never skip App.jsx - it's the main app file even if it creates supabase client
         if is_supabase_client_file(file_path, file_content) and file_path != "App.jsx" and not file_path.endswith("/App.jsx"):
-            logger.info(f"[PREVIEW DEBUG] Skipping {file_path} - supabase client file")
             continue
         
-        # Check for App.jsx    
-        is_app_file = file_path == "App.jsx" or file_path.endswith("/App.jsx")
-        logger.info(f"[PREVIEW DEBUG] Checking if App.jsx: path={file_path!r}, is_app={is_app_file}")
-        
-        if is_app_file:
+        # Identify App.jsx and ensure it's added last for proper component resolution
+        if file_path == "App.jsx" or file_path.endswith("/App.jsx"):
             app_file = f
-            logger.info(f"[PREVIEW DEBUG] SET app_file to: {file_path}")
         else:
             sorted_files.append(f)
-            logger.info(f"[PREVIEW DEBUG] Added to sorted_files: {file_path}")
     
     if app_file:
         sorted_files.append(app_file)
-        logger.info(f"[PREVIEW DEBUG] Added App.jsx to sorted_files: {app_file.get('path', 'UNKNOWN')}")
     elif files:
-        logger.warning(f"[PREVIEW DEBUG] No App.jsx found! Using fallback filter")
         # If no App.jsx found, use frontend files only (with proper filtering)
         sorted_files = [f for f in files 
                         if f.get("file_type", "frontend") == "frontend" 
@@ -2931,11 +2918,9 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
     
     # Build all component code
     all_code_parts = []
-    logger.info(f"[PREVIEW DEBUG] sorted_files count: {len(sorted_files)}, files: {[f['path'] for f in sorted_files]}")
     for f in sorted_files:
         # Double-check: skip any .env files that somehow got through
         if ".env" in f.get("path", ""):
-            logger.warning(f"[PREVIEW DEBUG] .env file in sorted_files! Skipping: {f['path']}")
             continue
         cleaned = clean_component_code(f["content"])
         # Add a comment marker for debugging
