@@ -209,3 +209,38 @@ SUPABASE_OAUTH_REDIRECT_URI="https://fullstack-builder-29.preview.emergentagent.
 - Full-stack Generation: ✅ Working
 - Vercel Deploy: ✅ Working
 - CodeSandbox: ✅ Working
+- Live Preview: ✅ Working (Fixed Jan 27, 2026)
+
+## Bug Fixes History
+
+### Jan 27, 2026 - Blank Preview Bug (P0 - FIXED)
+**Issue:** Live preview showed blank screen for generated projects containing `.env.example` or when App.jsx contained Supabase client initialization.
+
+**Root Causes Identified:**
+1. `.env.example` files (marked as `file_type: frontend`) were being included in preview HTML, causing JS syntax errors
+2. `is_supabase_client_file()` was incorrectly filtering out `App.jsx` because it contained both `createClient` and `export const supabase` patterns
+
+**Fixes Applied to `server.py` in `generate_preview_html_multifile()`:**
+1. Added filter to skip files with `.env` in path
+2. Added exception for App.jsx to NOT be skipped even if it matches supabase client patterns
+3. Added fallback filter with same `.env` and extension checks
+4. Added double-check filter in the code generation loop
+
+## Pending Issues
+
+### P1: Supabase Project Creation Token Expiration
+- In-memory `oauth_states` dictionary loses refresh tokens
+- Need to persist refresh token in database
+
+### P0: User Verification for Auto-Migrations
+- Backend migration logic exists but needs user approval flow in chat
+
+## Upcoming Tasks
+1. Verify Edge Function deployment end-to-end
+2. Add "Cancel Generation" button
+3. Implement syntax highlighting in code viewer
+4. Track migration history and rollback feature
+
+## Backlog
+- Refactor `server.py` (~2900 lines) into smaller modules
+- Refactor `BuilderPage.jsx` (~1500 lines) into components
