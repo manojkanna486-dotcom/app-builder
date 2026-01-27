@@ -210,6 +210,10 @@ export default function BuilderPage() {
   // Sandbox state
   const [creatingSandbox, setCreatingSandbox] = useState(false);
 
+  // Migration approval state
+  const [pendingMigrations, setPendingMigrations] = useState(null);
+  const [runningMigrations, setRunningMigrations] = useState(false);
+
   // Check for OAuth callback
   useEffect(() => {
     const authState = searchParams.get('supabase_auth');
