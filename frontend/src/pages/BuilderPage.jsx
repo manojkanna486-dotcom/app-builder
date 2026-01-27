@@ -722,6 +722,61 @@ export default function BuilderPage() {
     }
   };
 
+  // Approve and run migrations
+  const handleApproveMigrations = async () => {
+    setRunningMigrations(true);
+    try {
+      const res = await axios.post(`${API}/projects/${projectId}/migrations/approve`);
+      
+      if (res.data.status === "completed") {
+        toast.success(`✅ ${res.data.success} migration(s) executed successfully!`);
+        setPendingMigrations(null);
+      } else if (res.data.status === "partial") {
+        toast.warning(
+          <div>
+            ⚠️ {res.data.success} executed, {res.data.pending} need manual execution
+            <a href={res.data.sql_editor_url} target="_blank" rel="noopener noreferrer" 
+               className="ml-2 underline text-blue-400">
+              Open SQL Editor
+            </a>
+          </div>,
+          { duration: 10000 }
+        );
+        setPendingMigrations(null);
+      } else if (res.data.status === "pending") {
+        toast.info(
+          <div>
+            📝 Please run migrations manually in Supabase
+            <a href={res.data.sql_editor_url} target="_blank" rel="noopener noreferrer" 
+               className="ml-2 underline text-blue-400">
+              Open SQL Editor
+            </a>
+          </div>,
+          { duration: 10000 }
+        );
+        setPendingMigrations(null);
+      } else {
+        toast.error(`❌ Migration failed: ${res.data.message || "Unknown error"}`);
+      }
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || "Failed to run migrations";
+      toast.error(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
+    } finally {
+      setRunningMigrations(false);
+    }
+  };
+
+  // Skip migrations
+  const handleSkipMigrations = async () => {
+    try {
+      await axios.post(`${API}/projects/${projectId}/migrations/skip`);
+      setPendingMigrations(null);
+      toast.info("Migrations skipped. You can run them manually later from the SQL Editor.");
+    } catch (err) {
+      toast.error("Failed to skip migrations");
+    }
+  };
+
   // Deploy to Vercel
   const handleDeployToVercel = async () => {
     if (!vercelToken.trim()) {
