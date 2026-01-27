@@ -1159,6 +1159,68 @@ export default function BuilderPage() {
                 </div>
               )}
               
+              {/* Migration Approval UI */}
+              {pendingMigrations && pendingMigrations.length > 0 && (
+                <div className="flex gap-3 animate-slide-up">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                    <Database className="w-4 h-4 text-amber-500" />
+                  </div>
+                  <div className="chat-bubble-ai px-4 py-3 max-w-[95%] space-y-3 border-amber-500/30">
+                    <div>
+                      <p className="text-sm font-medium text-foreground mb-1">
+                        🗄️ Database Migrations Ready
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        The following SQL migrations need to be executed on your Supabase database. Please review and approve.
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                      {pendingMigrations.map((migration, idx) => (
+                        <div key={idx} className="p-2 bg-background/50 rounded border border-border">
+                          <p className="text-xs font-medium text-foreground mb-1 flex items-center gap-1">
+                            <FileCode className="w-3 h-3" />
+                            {migration.file}
+                          </p>
+                          <pre className="text-xs text-muted-foreground font-mono whitespace-pre-wrap max-h-[100px] overflow-y-auto">
+                            {migration.preview}
+                          </pre>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div className="flex gap-2 pt-2 border-t border-border">
+                      <Button
+                        size="sm"
+                        onClick={handleApproveMigrations}
+                        disabled={runningMigrations}
+                        className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
+                      >
+                        {runningMigrations ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                            Running...
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-4 h-4 mr-2" />
+                            Run Migrations
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleSkipMigrations}
+                        disabled={runningMigrations}
+                      >
+                        Skip for Now
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
