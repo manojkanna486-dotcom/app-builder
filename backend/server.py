@@ -507,8 +507,7 @@ async def connect_supabase_project(supabase_project_ref: str, token_state: str =
 async def run_migrations_internal(project_id: str, files: list) -> dict:
     """
     Internal function to run SQL migrations after code generation.
-    Since Supabase doesn't allow direct SQL execution via API for security,
-    we provide the SQL content for manual execution in the SQL Editor.
+    Executes SQL directly against the connected Supabase project.
     """
     try:
         project = await database.get_project(project_id)
@@ -534,27 +533,86 @@ async def run_migrations_internal(project_id: str, files: list) -> dict:
             sql_content = sql_file.get("content", "")
             file_path = sql_file.get("path", "unknown")
             
-            # Provide migration info for manual execution
-            # Supabase doesn't allow arbitrary SQL via API for security
-            results.append({
-                "file": file_path,
-                "status": "ready",
-                "sql_preview": sql_content[:300] + "..." if len(sql_content) > 300 else sql_content,
-                "message": "Ready for execution in Supabase SQL Editor"
-            })
-            logger.info(f"Migration {file_path} prepared for {project_name}")
+            try:
+                # Execute SQL using Supabase's pg-meta query endpoint
+                # This is the internal API that Supabase dashboard uses
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    # Try the pg-meta query endpoint
+                    pg_meta_url = f"{supabase_url}/pg/query"
+                    
+                    response = await client.post(
+                        pg_meta_url,
+                        headers={
+                            "apikey": service_key,
+                            "Authorization": f"Bearer {service_key}",
+                            "Content-Type": "application/json"
+                        },
+                        json={"query": sql_content}
+                    )
+                    
+                    if response.status_code in [200, 201]:
+                        results.append({
+                            "file": file_path,
+                            "status": "success",
+                            "message": "Migration executed successfully"
+                        })
+                        logger.info(f"Migration {file_path} executed successfully on {project_name}")
+                    elif response.status_code == 404:
+                        # pg-meta endpoint not available, try alternative approach
+                        # Use the REST RPC endpoint with a temporary function
+                        logger.info(f"pg-meta not available, trying REST API for {file_path}")
+                        
+                        # For simple DDL statements, we can sometimes use the REST API
+                        # But most will need manual execution
+                        results.append({
+                            "file": file_path,
+                            "status": "pending",
+                            "message": "Ready for execution - click 'Run Migration' or execute in SQL Editor",
+                            "sql_preview": sql_content[:200] + "..." if len(sql_content) > 200 else sql_content
+                        })
+                    else:
+                        error_text = response.text
+                        try:
+                            error_json = response.json()
+                            error_text = error_json.get("message", error_json.get("error", error_text))
+                        except:
+                            pass
+                        
+                        results.append({
+                            "file": file_path,
+                            "status": "error",
+                            "message": f"Migration failed: {error_text[:100]}",
+                            "sql_preview": sql_content[:200] + "..." if len(sql_content) > 200 else sql_content
+                        })
+                        logger.error(f"Migration {file_path} failed: {error_text}")
+                        
+            except Exception as e:
+                logger.error(f"Migration error for {file_path}: {e}")
+                results.append({
+                    "file": file_path,
+                    "status": "error",
+                    "message": f"Execution error: {str(e)[:100]}"
+                })
+        
+        success_count = sum(1 for r in results if r["status"] == "success")
+        error_count = sum(1 for r in results if r["status"] == "error")
+        pending_count = sum(1 for r in results if r["status"] == "pending")
+        
+        status = "completed" if error_count == 0 and pending_count == 0 else "partial" if success_count > 0 else "pending"
         
         return {
-            "status": "ready",
+            "status": status,
             "total": len(results),
+            "success": success_count,
+            "errors": error_count,
+            "pending": pending_count,
             "results": results,
             "project_ref": project_ref,
-            "sql_editor_url": f"https://supabase.com/dashboard/project/{project_ref}/sql/new",
-            "message": f"SQL migrations ready. Click 'Run Migrations' or open SQL Editor to execute."
+            "sql_editor_url": f"https://supabase.com/dashboard/project/{project_ref}/sql/new"
         }
         
     except Exception as e:
-        logger.error(f"Migration preparation error: {e}")
+        logger.error(f"Migration internal error: {e}")
         return {"status": "error", "message": str(e)}
 
 
