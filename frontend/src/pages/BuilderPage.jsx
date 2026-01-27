@@ -403,8 +403,13 @@ export default function BuilderPage() {
                 } else if (data.max_attempts_reached) {
                   toast.error(`❌ Tests still failing after ${data.attempt} attempts. Please review the code.`);
                 }
+              } else if (data.type === "migration_approval_needed") {
+                // User approval needed for migrations
+                setPendingMigrations(data.migrations);
+                toast.info(`🗄️ ${data.migrations.length} migration(s) awaiting your approval`, { duration: 5000 });
               } else if (data.type === "migration_result") {
-                // Handle migration result
+                // Handle migration result (after approval)
+                setPendingMigrations(null);
                 if (data.status === "success") {
                   toast.success(`🗄️ Database migrations executed successfully!`);
                 } else if (data.status === "partial") {
