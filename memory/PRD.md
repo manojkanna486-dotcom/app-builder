@@ -262,9 +262,7 @@ SUPABASE_OAUTH_REDIRECT_URI="https://fullstack-builder-29.preview.emergentagent.
 
 ## Pending Issues
 
-### P1: Supabase Project Creation Token Expiration
-- In-memory `oauth_states` dictionary loses refresh tokens
-- Need to persist refresh token in database
+### ~~P1: Supabase Project Creation Token Expiration~~ - FIXED (Jan 28, 2026)
 
 ## Upcoming Tasks
 1. Verify Edge Function deployment end-to-end
