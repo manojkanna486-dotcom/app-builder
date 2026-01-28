@@ -355,173 +355,163 @@ export default function BuilderPage() {
 
   const doGenerate = async (userPrompt) => {
     setGenerating(true);
-    setGenerationStatus("Starting...");
-    setStreamingCode("");
-    setViewMode("code"); // Switch to code view to show streaming
+    setGenerationStatus("Starting background generation...");
+    setGenerationProgress(0);
+    setViewMode("code");
 
     try {
-      // Use streaming endpoint
-      const response = await fetch(`${API}/projects/${projectId}/generate/stream`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ prompt: userPrompt }),
+      // Start background generation
+      const startRes = await axios.post(`${API}/projects/${projectId}/generate/background`, {
+        prompt: userPrompt,
       });
 
-      if (!response.ok) {
-        throw new Error("Generation failed");
+      if (startRes.data.status === "already_running") {
+        toast.info("Generation already in progress...");
+        setGenerationTaskId(startRes.data.task_id);
+      } else {
+        setGenerationTaskId(startRes.data.task_id);
+        toast.success("🚀 Generation started! You can close the browser - it will continue in the background.");
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              
-              if (data.type === "status") {
-                setGenerationStatus(data.message);
-              } else if (data.type === "code") {
-                setStreamingCode((prev) => prev + data.content);
-              } else if (data.type === "test_result") {
-                // Handle test result events
-                if (data.status === "PASS") {
-                  toast.success(`🧪 All tests passed! (${data.results?.passed || 0}/${data.results?.total || 0})`);
-                } else if (data.retrying) {
-                  toast.warning(`🔄 Tests failed (attempt ${data.attempt}). Auto-fixing...`);
-                } else if (data.max_attempts_reached) {
-                  toast.error(`❌ Tests still failing after ${data.attempt} attempts. Please review the code.`);
-                }
-              } else if (data.type === "migration_result") {
-                // Handle auto-migration result
-                if (data.status === "success") {
-                  toast.success(`🗄️ Database migrations executed successfully!`);
-                } else if (data.status === "partial") {
-                  toast.warning(`⚠️ Some migrations executed, others need manual execution`);
-                } else if (data.status === "pending") {
-                  const sqlEditorUrl = data.sql_editor_url;
-                  toast.info(
-                    <div>
-                      📝 Migrations ready for manual execution
-                      {sqlEditorUrl && (
-                        <a href={sqlEditorUrl} target="_blank" rel="noopener noreferrer" 
-                           className="ml-2 underline text-blue-400">
-                          Open SQL Editor
-                        </a>
-                      )}
-                    </div>,
-                    { duration: 10000 }
-                  );
-                } else if (data.status === "error") {
-                  toast.error(`❌ Migration failed: ${data.message || "Unknown error"}`);
-                }
-              } else if (data.type === "deploy_result") {
-                // Handle auto-deployment result
-                if (data.status === "deployed") {
-                  toast.success(`⚡ Edge Functions deployed successfully!`);
-                } else if (data.status === "ready") {
-                  toast.info(`📦 Edge Functions ready for manual deployment`);
-                } else if (data.status === "error") {
-                  toast.error(`❌ Deployment failed: ${data.message || "Unknown error"}`);
-                }
-              } else if (data.type === "complete") {
-                // Generation complete
-                if (data.files?.length > 0) {
-                  setFiles(data.files);
-                  const stillExists = data.files.some((f) => f.path === selectedFile);
-                  if (!stillExists) {
-                    setSelectedFile(data.files[0].path);
-                  }
-                }
-                
-                // Update preview
-                const previewRes = await axios.get(`${API}/projects/${projectId}/preview`);
-                setPreviewHtml(previewRes.data.html);
-
-                // Refresh messages and versions
-                const [messagesRes, versionsRes] = await Promise.all([
-                  axios.get(`${API}/projects/${projectId}/messages`),
-                  axios.get(`${API}/projects/${projectId}/versions`),
-                ]);
-                setMessages(messagesRes.data);
-                setVersions(versionsRes.data);
-                setProject((prev) => ({ ...prev, current_version: data.version }));
-
-                // Show test results summary
-                if (data.test_results) {
-                  const tr = data.test_results;
-                  if (tr.status === "PASS") {
-                    toast.success(`✅ All ${tr.total} tests passed!`, { duration: 5000 });
-                  } else {
-                    toast.error(
-                      <div>
-                        <strong>⚠️ {tr.failed} of {tr.total} tests failed</strong>
-                        <div className="text-sm mt-1">
-                          {tr.failed_requirements?.slice(0, 2).map((f, i) => (
-                            <div key={i}>• {f.description?.slice(0, 50)}...</div>
-                          ))}
-                        </div>
-                      </div>,
-                      { duration: 8000 }
-                    );
-                  }
-                }
-
-                // Show success toast with migration/deployment info
-                let successMsg = `Version ${data.version} generated with ${data.files?.length || 0} files!`;
-                
-                // Show migration status with link to SQL Editor
-                if (data.migration) {
-                  if (data.migration.status === "ready") {
-                    const sqlEditorUrl = data.migration.sql_editor_url;
-                    toast.info(
-                      <div>
-                        🗄️ SQL migrations ready! 
-                        <a href={sqlEditorUrl} target="_blank" rel="noopener noreferrer" className="ml-2 underline text-blue-400">
-                          Open SQL Editor
-                        </a>
-                      </div>,
-                      { duration: 8000 }
-                    );
-                  } else if (data.migration.status === "skipped") {
-                    // Silently skip - no need to notify
-                  }
-                }
-                
-                // Show deployment status
-                if (data.deployment) {
-                  if (data.deployment.status === "prepared") {
-                    toast.info(`⚡ ${data.deployment.total} Edge Function(s) ready for deployment`);
-                  }
-                }
-                
-                toast.success(successMsg);
-                setViewMode("preview");
-              } else if (data.type === "error") {
-                throw new Error(data.message);
-              }
-            } catch (parseErr) {
-              // Ignore JSON parse errors for incomplete chunks
-            }
-          }
-        }
-      }
+      // Poll for completion
+      await pollGenerationStatus(startRes.data.task_id);
+      
     } catch (err) {
-      toast.error(err.message || "Generation failed");
-    } finally {
+      toast.error(err.response?.data?.detail || err.message || "Generation failed");
       setGenerating(false);
       setGenerationStatus("");
+    }
+  };
+
+  // Poll for generation status
+  const pollGenerationStatus = async (taskId) => {
+    const pollInterval = 2000; // 2 seconds
+    const maxPollTime = 600000; // 10 minutes max
+    const startTime = Date.now();
+
+    const poll = async () => {
+      try {
+        const statusRes = await axios.get(`${API}/projects/${projectId}/generate/status`);
+        const status = statusRes.data;
+
+        setGenerationStatus(status.current_step || status.status);
+        setGenerationProgress(status.progress || 0);
+
+        if (status.status === "completed") {
+          // Generation complete - load results
+          await loadGenerationResults();
+          setGenerating(false);
+          setGenerationStatus("");
+          setGenerationTaskId(null);
+          toast.success(`✅ Version ${status.version_number} generated successfully!`);
+          
+          // Show migration/deployment results
+          if (status.migration_result?.status === "completed") {
+            toast.success("🗄️ Migrations executed successfully!");
+          } else if (status.migration_result?.status === "pending") {
+            toast.info("📝 Migrations ready for manual execution");
+          }
+          
+          if (status.deploy_result?.status === "deployed") {
+            toast.success("⚡ Edge Functions deployed!");
+          }
+          
+          return;
+        } else if (status.status === "failed") {
+          // Generation failed
+          setGenerating(false);
+          setGenerationStatus("");
+          setGenerationTaskId(null);
+          toast.error(`❌ Generation failed: ${status.error || "Unknown error"}`);
+          return;
+        } else if (!status.is_running && status.status === "idle") {
+          // No active task
+          setGenerating(false);
+          setGenerationStatus("");
+          return;
+        }
+
+        // Still running - continue polling
+        if (Date.now() - startTime < maxPollTime) {
+          setTimeout(poll, pollInterval);
+        } else {
+          toast.warning("Generation is taking longer than expected. It will continue in the background.");
+          setGenerating(false);
+        }
+      } catch (err) {
+        console.error("Poll error:", err);
+        // Continue polling on error
+        if (Date.now() - startTime < maxPollTime) {
+          setTimeout(poll, pollInterval);
+        }
+      }
+    };
+
+    await poll();
+  };
+
+  // Load results after generation completes
+  const loadGenerationResults = async () => {
+    try {
+      const [versionsRes, messagesRes, previewRes] = await Promise.all([
+        axios.get(`${API}/projects/${projectId}/versions`),
+        axios.get(`${API}/projects/${projectId}/messages`),
+        axios.get(`${API}/projects/${projectId}/preview`),
+      ]);
+
+      setVersions(versionsRes.data);
+      setMessages(messagesRes.data);
+      setPreviewHtml(previewRes.data.html);
+
+      // Load files from latest version
+      if (versionsRes.data.length > 0) {
+        const latestVersion = versionsRes.data[0];
+        if (latestVersion.files?.length > 0) {
+          setFiles(latestVersion.files);
+          if (!selectedFile || !latestVersion.files.some(f => f.path === selectedFile)) {
+            setSelectedFile(latestVersion.files[0].path);
+          }
+        }
+        setProject((prev) => ({ ...prev, current_version: latestVersion.version_number }));
+      }
+
+      setViewMode("preview");
+    } catch (err) {
+      console.error("Error loading results:", err);
+    }
+  };
+
+  // Check for active generation on page load
+  useEffect(() => {
+    const checkActiveGeneration = async () => {
+      if (!projectId) return;
+      
+      try {
+        const statusRes = await axios.get(`${API}/projects/${projectId}/generate/status`);
+        if (statusRes.data.is_running) {
+          setGenerating(true);
+          setGenerationStatus(statusRes.data.current_step || "Generation in progress...");
+          setGenerationProgress(statusRes.data.progress || 0);
+          setGenerationTaskId(statusRes.data.task_id);
+          toast.info("🔄 Resuming generation progress...");
+          await pollGenerationStatus(statusRes.data.task_id);
+        } else if (statusRes.data.status === "completed" && statusRes.data.completed_at) {
+          // Check if completed recently (within last minute)
+          const completedAt = new Date(statusRes.data.completed_at);
+          const now = new Date();
+          const diffMs = now - completedAt;
+          if (diffMs < 60000) { // Within last minute
+            toast.success(`✅ Generation completed while you were away!`);
+            await loadGenerationResults();
+          }
+        }
+      } catch (err) {
+        // Ignore - no active generation
+      }
+    };
+
+    checkActiveGeneration();
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
       setStreamingCode("");
     }
   };
