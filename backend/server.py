@@ -1088,6 +1088,126 @@ def get_files_content(files: list, file_paths: list) -> str:
             content_parts.append(f"// File: {f['path']} (type: {file_type})\n{f['content']}")
     return "\n\n".join(content_parts)
 
+# ==================== CONVERSATION CONTEXT ====================
+
+MAX_CONTEXT_MESSAGES = 20  # Max messages before summarization
+MAX_CONTEXT_CHARS = 8000   # Approximate char limit for context
+
+async def build_conversation_context(project_id: str, current_prompt: str) -> tuple:
+    """
+    Build conversation context from chat history.
+    Returns (context_messages, conversation_summary)
+    
+    If history is too long, summarizes older messages.
+    """
+    messages = await database.get_messages(project_id)
+    
+    if not messages:
+        return [], ""
+    
+    # Sort by created_at (oldest first)
+    messages = sorted(messages, key=lambda m: m.get("created_at", ""))
+    
+    # Calculate total context size
+    total_chars = sum(len(m.get("content", "")) for m in messages)
+    
+    # If within limits, return all messages
+    if len(messages) <= MAX_CONTEXT_MESSAGES and total_chars <= MAX_CONTEXT_CHARS:
+        context_messages = [
+            {"role": m["role"], "content": m["content"]}
+            for m in messages
+            if m["content"] and not m["content"].startswith("✅")  # Skip status messages
+        ]
+        return context_messages, ""
+    
+    # Need to summarize - split into older (to summarize) and recent (to keep)
+    recent_count = min(5, len(messages))  # Keep last 5 messages
+    older_messages = messages[:-recent_count] if recent_count > 0 else messages
+    recent_messages = messages[-recent_count:] if recent_count > 0 else []
+    
+    # Summarize older messages
+    summary = await summarize_conversation(older_messages)
+    
+    # Build context with summary + recent messages
+    context_messages = [
+        {"role": m["role"], "content": m["content"]}
+        for m in recent_messages
+        if m["content"] and not m["content"].startswith("✅")
+    ]
+    
+    return context_messages, summary
+
+
+async def summarize_conversation(messages: list) -> str:
+    """
+    Summarize a list of conversation messages.
+    Returns a concise summary of what was discussed and built.
+    """
+    if not messages:
+        return ""
+    
+    # Build conversation text
+    conversation_text = "\n".join([
+        f"{m['role'].upper()}: {m['content'][:500]}"  # Truncate long messages
+        for m in messages
+        if m.get("content")
+    ])
+    
+    # Limit input size
+    if len(conversation_text) > 6000:
+        conversation_text = conversation_text[:6000] + "\n... (truncated)"
+    
+    summary_prompt = f"""Summarize this conversation history concisely. Focus on:
+1. What features/changes were requested
+2. What was built/modified
+3. Any important decisions or preferences mentioned
+
+Conversation:
+{conversation_text}
+
+Return a brief summary (max 500 chars) that captures the key context needed for future development."""
+
+    try:
+        result = await call_openrouter([
+            {"role": "system", "content": "You are a summarization assistant. Be concise."},
+            {"role": "user", "content": summary_prompt}
+        ])
+        
+        if result:
+            summary = result.get("content", "")
+            # Truncate if too long
+            if len(summary) > 600:
+                summary = summary[:600] + "..."
+            return summary
+    except Exception as e:
+        logger.error(f"Error summarizing conversation: {e}")
+    
+    # Fallback: simple extraction
+    user_requests = [m["content"][:100] for m in messages if m["role"] == "user"]
+    return f"Previous requests: {'; '.join(user_requests[-3:])}"
+
+
+def build_context_prompt(conversation_summary: str, recent_messages: list) -> str:
+    """
+    Build a context string to prepend to the system prompt.
+    """
+    context_parts = []
+    
+    if conversation_summary:
+        context_parts.append(f"CONVERSATION HISTORY SUMMARY:\n{conversation_summary}")
+    
+    if recent_messages:
+        recent_text = "\n".join([
+            f"- {m['role'].upper()}: {m['content'][:200]}..."
+            if len(m['content']) > 200 else f"- {m['role'].upper()}: {m['content']}"
+            for m in recent_messages[-3:]  # Last 3 messages
+        ])
+        context_parts.append(f"RECENT MESSAGES:\n{recent_text}")
+    
+    if context_parts:
+        return "\n\n".join(context_parts) + "\n\n---\n\n"
+    return ""
+
 # ==================== OPENROUTER LLM ====================
 
 async def call_openrouter(messages: List[Dict]):
