@@ -47,8 +47,9 @@ SUPABASE_OAUTH_AUTH_URL = "https://api.supabase.com/v1/oauth/authorize"
 SUPABASE_OAUTH_TOKEN_URL = "https://api.supabase.com/v1/oauth/token"
 SUPABASE_MANAGEMENT_API = "https://api.supabase.com/v1"
 
-# In-memory store for OAuth state (in production, use Redis or database)
-oauth_states = {}
+# In-memory store for OAuth PKCE state only (short-lived, needed during OAuth flow)
+# Tokens are now stored in database for persistence
+oauth_pkce_states = {}
 
 # Create the main app
 app = FastAPI()
@@ -57,6 +58,68 @@ api_router = APIRouter(prefix="/api")
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# ==================== OAUTH TOKEN HELPERS ====================
+
+async def get_valid_oauth_token(token_state: str) -> Optional[dict]:
+    """
+    Get OAuth token from database and refresh if expired.
+    Returns token_data with valid access_token or None if invalid.
+    """
+    token_data = await database.get_oauth_token(token_state)
+    if not token_data:
+        return None
+    
+    # Check if token is expired (Supabase tokens expire in 1 hour)
+    created_at = token_data.get("created_at", "")
+    if created_at:
+        try:
+            created_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            age_seconds = (datetime.now(timezone.utc) - created_time).total_seconds()
+            
+            # If token is more than 50 minutes old, refresh it
+            if age_seconds > 3000 and token_data.get("refresh_token"):
+                refreshed = await refresh_oauth_token(token_state, token_data["refresh_token"])
+                if refreshed:
+                    return refreshed
+        except Exception as e:
+            logger.warning(f"Error checking token age: {e}")
+    
+    return token_data
+
+async def refresh_oauth_token(token_state: str, refresh_token: str) -> Optional[dict]:
+    """Refresh an expired OAuth token using the refresh_token"""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                SUPABASE_OAUTH_TOKEN_URL,
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                    "client_id": SUPABASE_OAUTH_CLIENT_ID,
+                    "client_secret": SUPABASE_OAUTH_CLIENT_SECRET,
+                }
+            )
+            
+            if response.status_code in [200, 201]:
+                tokens = response.json()
+                new_token_data = {
+                    "access_token": tokens.get("access_token"),
+                    "refresh_token": tokens.get("refresh_token", refresh_token),
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                
+                # Update in database
+                await database.store_oauth_token(token_state, new_token_data)
+                logger.info(f"Successfully refreshed OAuth token for state: {token_state}")
+                return new_token_data
+            else:
+                logger.error(f"Failed to refresh token: {response.status_code} - {response.text}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Error refreshing OAuth token: {e}")
+        return None
 
 # ==================== MODELS ====================
 
