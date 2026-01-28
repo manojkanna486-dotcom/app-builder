@@ -210,6 +210,10 @@ export default function BuilderPage() {
   // Sandbox state
   const [creatingSandbox, setCreatingSandbox] = useState(false);
 
+  // Background generation state
+  const [generationTaskId, setGenerationTaskId] = useState(null);
+  const [generationProgress, setGenerationProgress] = useState(0);
+
   // Check for OAuth callback
   useEffect(() => {
     const authState = searchParams.get('supabase_auth');
