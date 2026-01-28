@@ -242,6 +242,24 @@ SUPABASE_OAUTH_REDIRECT_URI="https://fullstack-builder-29.preview.emergentagent.
   - Added "Run Migrations" and "Skip for Now" buttons
   - Added `handleApproveMigrations()` and `handleSkipMigrations()` functions
 
+### Jan 28, 2026 - Incremental/Diff-Based Code Generation (IMPLEMENTED)
+**Optimization:** Reduced LLM context usage by only sending affected files for updates
+
+**Changes:**
+- Added `INTENT_DIFF_PROMPT` - Analyzes user request to identify affected files
+- Added `DIFF_UPDATE_PROMPT` and `DIFF_UPDATE_FULLSTACK_PROMPT` - Only sends affected files
+- Added `analyze_affected_files()` function for Pass 1 analysis
+- Added `get_files_content()` helper to extract specific file contents
+- Modified `generate_code_stream()` to use two-pass approach:
+  - Pass 1: Analyze which files need changes (scope detection)
+  - Pass 2: Send only affected files to LLM, get back only modified files
+  - Merge: Combine modified files with unchanged existing files
+
+**Benefits:**
+- Significantly reduced token usage for updates
+- Faster response times
+- More focused changes (less risk of unintended modifications)
+
 ## Pending Issues
 
 ### P1: Supabase Project Creation Token Expiration
