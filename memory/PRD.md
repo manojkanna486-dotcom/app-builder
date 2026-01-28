@@ -325,6 +325,29 @@ SUPABASE_OAUTH_REDIRECT_URI="https://fullstack-builder-29.preview.emergentagent.
 3. User can close browser - generation continues
 4. On return, frontend detects active/completed task and shows result
 
+### Jan 28, 2026 - Conversation Context Memory (IMPLEMENTED)
+**Feature:** App remembers all previous messages with auto-summarization
+
+**Backend Changes (`server.py`):**
+- Added `build_conversation_context()` - loads chat history with summarization
+- Added `summarize_conversation()` - uses LLM to summarize old messages when context limit reached
+- Added `build_context_prompt()` - formats context for system prompt
+- Constants: `MAX_CONTEXT_MESSAGES = 20`, `MAX_CONTEXT_CHARS = 8000`
+- Integrated context into both background and streaming generation
+- Context shows in status: "📚 Loaded conversation context..."
+
+**How it works:**
+1. Loads all chat messages for the project
+2. If within limits (20 messages or 8000 chars) → use all messages
+3. If over limit → summarize older messages, keep last 5 recent
+4. Prepends context summary + recent messages to system prompt
+5. LLM now knows full conversation history
+
+**Benefits:**
+- Multi-turn development: "now add dark mode" works because it knows what was built
+- Consistent decisions: remembers user preferences from earlier messages
+- Better error fixes: knows what was tried before
+
 ## Pending Issues
 
 ### ~~P1: Supabase Project Creation Token Expiration~~ - FIXED (Jan 28, 2026)
