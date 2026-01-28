@@ -1211,7 +1211,7 @@ def build_context_prompt(conversation_summary: str, recent_messages: list) -> st
 # ==================== OPENROUTER LLM ====================
 
 async def call_openrouter(messages: List[Dict]):
-    """Call OpenRouter API (non-streaming)"""
+    """Call OpenRouter API (non-streaming) - returns content dict"""
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
@@ -1231,8 +1231,16 @@ async def call_openrouter(messages: List[Dict]):
         response = await http_client.post(f"{OPENROUTER_BASE_URL}/chat/completions", json=payload, headers=headers)
         if response.status_code != 200:
             logger.error(f"OpenRouter error: {response.text}")
-            raise HTTPException(status_code=500, detail=f"LLM error: {response.text}")
-        return response.json()
+            return None
+        
+        data = response.json()
+        # Extract content from OpenRouter response structure
+        try:
+            content = data["choices"][0]["message"]["content"]
+            return {"content": content}
+        except (KeyError, IndexError) as e:
+            logger.error(f"Failed to extract content from OpenRouter response: {e}")
+            return None
 
 async def call_openrouter_stream(messages: List[Dict]):
     """Call OpenRouter API with streaming"""
