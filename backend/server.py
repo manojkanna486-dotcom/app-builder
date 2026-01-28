@@ -2796,6 +2796,13 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
             yield f"data: {json.dumps({'type': 'status', 'message': 'Analyzing request...'})}\n\n"
             await asyncio.sleep(0.1)
             
+            # Build conversation context (remembers previous messages)
+            recent_messages, conversation_summary = await build_conversation_context(project_id, request.prompt)
+            context_prompt = build_context_prompt(conversation_summary, recent_messages)
+            
+            if conversation_summary:
+                yield f"data: {json.dumps({'type': 'status', 'message': '📚 Loaded conversation context...'})}\n\n"
+            
             if use_diff_approach and existing_files:
                 # DIFF-BASED APPROACH: Analyze which files need changes first
                 yield f"data: {json.dumps({'type': 'status', 'message': '🔍 Analyzing which files need changes...'})}\n\n"
@@ -2824,6 +2831,9 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                     system_content = DIFF_UPDATE_PROMPT.replace("{affected_files_content}", affected_content or "No existing files to modify")
                     system_content = system_content.replace("{user_request}", request.prompt)
                 
+                # Prepend conversation context
+                system_content = context_prompt + system_content
+                
                 messages_to_send = [
                     {"role": "system", "content": system_content},
                     {"role": "user", "content": f"Make the following changes: {request.prompt}"}
@@ -2838,14 +2848,15 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                     yield f"data: {json.dumps({'type': 'status', 'message': 'Generating code structure...'})}\n\n"
                 
                 if is_fullstack:
-                    system_content = FULLSTACK_SYSTEM_PROMPT.replace("{supabase_url}", supabase_url)
+                    system_content = context_prompt + FULLSTACK_SYSTEM_PROMPT.replace("{supabase_url}", supabase_url)
                     messages_to_send = [
                         {"role": "system", "content": system_content},
                         {"role": "user", "content": f"Create a full-stack application with Supabase backend: {request.prompt}"}
                     ]
                 else:
+                    system_content = context_prompt + SYSTEM_PROMPT
                     messages_to_send = [
-                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "system", "content": system_content},
                         {"role": "user", "content": f"Create a React application: {request.prompt}"}
                     ]
             
