@@ -298,6 +298,33 @@ SUPABASE_OAUTH_REDIRECT_URI="https://fullstack-builder-29.preview.emergentagent.
 4. Edge Functions detected → Auto-deploy → Report status
 5. Show final result with migration/deployment status
 
+### Jan 28, 2026 - Background Async Generation (IMPLEMENTED)
+**Feature:** Code generation continues even if browser is closed
+
+**Backend Changes (`server.py`):**
+- Added `GenerationTask` model with status tracking (pending/analyzing/generating/validating/migrating/deploying/completed/failed)
+- Added `generation_tasks` MongoDB collection for persistence
+- Added `run_background_generation()` async function that runs independently
+- Added endpoints:
+  - `POST /api/projects/{id}/generate/background` - Start background generation
+  - `GET /api/projects/{id}/generate/status` - Poll for status
+  - `GET /api/projects/{id}/generate/task/{task_id}` - Get task details
+- Added `active_generation_tasks` dict for tracking running tasks
+
+**Frontend Changes (`BuilderPage.jsx`):**
+- Added `generationTaskId` and `generationProgress` state
+- Replaced streaming generation with background generation + polling
+- Added `pollGenerationStatus()` function (2-second intervals)
+- Added `loadGenerationResults()` to fetch results after completion
+- Added `useEffect` to check for active generation on page load
+- Added progress bar UI with percentage and "close browser safely" message
+
+**Flow:**
+1. User sends prompt → Backend starts background task
+2. Frontend polls for status every 2 seconds
+3. User can close browser - generation continues
+4. On return, frontend detects active/completed task and shows result
+
 ## Pending Issues
 
 ### ~~P1: Supabase Project Creation Token Expiration~~ - FIXED (Jan 28, 2026)
