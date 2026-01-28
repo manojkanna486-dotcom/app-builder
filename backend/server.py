@@ -955,6 +955,57 @@ async def get_supabase_info(project_id: str):
             return {"connected": False}
         raise
 
+# ==================== DIFF-BASED CODE ANALYSIS ====================
+
+async def analyze_affected_files(files: list, summary: str, user_request: str) -> dict:
+    """
+    Analyze which files need to be modified based on user request.
+    This is Pass 1 of the incremental generation approach.
+    """
+    file_list = [f"{f['path']} ({f.get('file_type', 'frontend')})" for f in files]
+    
+    prompt = INTENT_DIFF_PROMPT.replace("{summary}", summary or "No summary available")
+    prompt = prompt.replace("{file_list}", "\n".join(file_list))
+    prompt = prompt.replace("{request}", user_request)
+    
+    messages = [
+        {"role": "system", "content": "You are a code analysis assistant. Return only valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
+    
+    try:
+        result = await call_openrouter(messages)
+        if result:
+            # Parse JSON from response
+            content = result.get("content", "")
+            # Extract JSON from response
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0]
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0]
+            
+            return json.loads(content.strip())
+    except Exception as e:
+        logger.error(f"Error analyzing affected files: {e}")
+    
+    # Fallback: assume all files affected
+    return {
+        "change_type": "unknown",
+        "affected_files": [f["path"] for f in files],
+        "new_files": [],
+        "scope": "major",
+        "description": "Could not determine scope, sending all files"
+    }
+
+def get_files_content(files: list, file_paths: list) -> str:
+    """Get content of specific files for the diff-based prompt"""
+    content_parts = []
+    for f in files:
+        if f["path"] in file_paths:
+            file_type = f.get("file_type", "frontend")
+            content_parts.append(f"// File: {f['path']} (type: {file_type})\n{f['content']}")
+    return "\n\n".join(content_parts)
+
 # ==================== OPENROUTER LLM ====================
 
 async def call_openrouter(messages: List[Dict]):
