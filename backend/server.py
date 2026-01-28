@@ -2264,6 +2264,355 @@ async def confirm_requirements(project_id: str, request: ConfirmRequirementsRequ
         "ready_for_generation": True
     }
 
+# ==================== BACKGROUND GENERATION ====================
+
+async def run_background_generation(task_id: str, project_id: str, prompt: str, enable_testing: bool = True, max_test_retries: int = 3):
+    """
+    Run code generation in the background.
+    This function runs independently of HTTP connection.
+    """
+    try:
+        # Get project
+        project = await database.get_project(project_id)
+        if not project:
+            await database.update_generation_task(task_id, {
+                "status": "failed",
+                "error": "Project not found"
+            })
+            return
+        
+        # Update task status
+        await database.update_generation_task(task_id, {
+            "status": "analyzing",
+            "progress": 5,
+            "current_step": "Analyzing request..."
+        })
+        
+        # Get latest version
+        latest_version = await database.get_latest_version(project_id)
+        new_version_number = (latest_version["version_number"] + 1) if latest_version else 1
+        
+        # Check if Supabase is connected
+        is_fullstack = project.get("supabase_connected", False)
+        supabase_url = project.get("supabase_url", "")
+        
+        existing_files = latest_version.get("files", []) if latest_version else []
+        
+        # Determine if we should use diff-based approach
+        use_diff_approach = bool(existing_files)
+        
+        await database.update_generation_task(task_id, {
+            "status": "generating",
+            "progress": 15,
+            "current_step": "Generating code..." if not use_diff_approach else "Analyzing changes..."
+        })
+        
+        messages_to_send = []
+        affected_analysis = None
+        
+        if use_diff_approach and existing_files:
+            # Diff-based approach for updates
+            await database.update_generation_task(task_id, {
+                "progress": 20,
+                "current_step": "Identifying affected files..."
+            })
+            
+            project_summary = project.get("summary", "")
+            affected_analysis = await analyze_affected_files(existing_files, project_summary, prompt)
+            
+            affected_files = affected_analysis.get("affected_files", [])
+            affected_content = get_files_content(existing_files, affected_files)
+            
+            if is_fullstack:
+                system_content = DIFF_UPDATE_FULLSTACK_PROMPT.replace("{supabase_url}", supabase_url)
+                system_content = system_content.replace("{affected_files_content}", affected_content or "No existing files")
+                system_content = system_content.replace("{user_request}", prompt)
+            else:
+                system_content = DIFF_UPDATE_PROMPT.replace("{affected_files_content}", affected_content or "No existing files")
+                system_content = system_content.replace("{user_request}", prompt)
+            
+            messages_to_send = [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": f"Make the following changes: {prompt}"}
+            ]
+        else:
+            # Full generation for new projects
+            if is_fullstack:
+                system_content = FULLSTACK_SYSTEM_PROMPT.replace("{supabase_url}", supabase_url)
+                messages_to_send = [
+                    {"role": "system", "content": system_content},
+                    {"role": "user", "content": f"Create a full-stack application with Supabase backend: {prompt}"}
+                ]
+            else:
+                messages_to_send = [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Create a React application: {prompt}"}
+                ]
+        
+        await database.update_generation_task(task_id, {
+            "progress": 30,
+            "current_step": "Generating code with AI..."
+        })
+        
+        # Call LLM (non-streaming for background)
+        result = await call_openrouter(messages_to_send)
+        
+        if not result:
+            await database.update_generation_task(task_id, {
+                "status": "failed",
+                "error": "Failed to generate code from LLM"
+            })
+            return
+        
+        full_content = result.get("content", "")
+        
+        await database.update_generation_task(task_id, {
+            "progress": 50,
+            "current_step": "Parsing generated code..."
+        })
+        
+        # Parse JSON from response
+        files = []
+        summary = ""
+        
+        try:
+            json_match = re.search(r'\{[\s\S]*\}', full_content)
+            if json_match:
+                parsed = json.loads(json_match.group(), strict=False)
+                files = parsed.get("files", [])
+                summary = parsed.get("summary", "")
+        except Exception as e:
+            logger.error(f"Error parsing LLM response: {e}")
+            await database.update_generation_task(task_id, {
+                "status": "failed",
+                "error": f"Failed to parse generated code: {str(e)}"
+            })
+            return
+        
+        if not files:
+            await database.update_generation_task(task_id, {
+                "status": "failed",
+                "error": "No files generated"
+            })
+            return
+        
+        await database.update_generation_task(task_id, {
+            "progress": 60,
+            "current_step": "Validating code..."
+        })
+        
+        # Validate code
+        validation_errors = validate_generated_code(files)
+        if validation_errors:
+            fixed_files, fix_summary = await auto_fix_code(files, validation_errors, project.get("summary", ""))
+            if fixed_files:
+                files = fixed_files
+                summary = f"{summary}. Auto-fixed: {fix_summary}"
+        
+        # Merge files for diff-based updates
+        if use_diff_approach and existing_files:
+            returned_files_map = {f["path"]: f for f in files}
+            merged_files = []
+            updated_paths = set()
+            
+            for existing_file in existing_files:
+                path = existing_file["path"]
+                if path in returned_files_map:
+                    merged_files.append(returned_files_map[path])
+                    updated_paths.add(path)
+                else:
+                    merged_files.append(existing_file)
+            
+            for f in files:
+                if f["path"] not in updated_paths:
+                    merged_files.append(f)
+            
+            files = merged_files
+        
+        await database.update_generation_task(task_id, {
+            "progress": 70,
+            "current_step": "Saving version..."
+        })
+        
+        # Create version
+        version = Version(
+            project_id=project_id,
+            version_number=new_version_number,
+            prompt=prompt,
+            files=[VersionFile(**f) if isinstance(f, dict) else f for f in files],
+            status="success"
+        )
+        await database.create_version(version.model_dump())
+        
+        # Update project
+        await database.update_project(project_id, {
+            "current_version": new_version_number,
+            "summary": summary or project.get("summary", ""),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        # Run migrations if fullstack
+        migration_result = None
+        deploy_result = None
+        
+        if is_fullstack:
+            sql_files = [f for f in files if f.get("file_type") == "sql" or f.get("path", "").endswith(".sql")]
+            edge_functions = [f for f in files if f.get("file_type") == "edge_function" or "supabase/functions" in f.get("path", "")]
+            
+            if sql_files:
+                await database.update_generation_task(task_id, {
+                    "status": "migrating",
+                    "progress": 80,
+                    "current_step": "Running database migrations..."
+                })
+                migration_result = await run_migrations_internal(project_id, files)
+            
+            if edge_functions:
+                await database.update_generation_task(task_id, {
+                    "status": "deploying",
+                    "progress": 90,
+                    "current_step": "Deploying Edge Functions..."
+                })
+                deploy_result = await deploy_edge_functions_internal(project_id, files)
+        
+        # Save assistant message
+        assistant_msg = ChatMessage(
+            project_id=project_id,
+            role="assistant",
+            content=f"✅ Generated version {new_version_number}: {summary}"
+        )
+        await database.create_message(assistant_msg.model_dump())
+        
+        # Mark task as completed
+        await database.update_generation_task(task_id, {
+            "status": "completed",
+            "progress": 100,
+            "current_step": "Complete!",
+            "version_number": new_version_number,
+            "files": files,
+            "summary": summary,
+            "migration_result": migration_result,
+            "deploy_result": deploy_result,
+            "completed_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        logger.info(f"Background generation completed for project {project_id}, version {new_version_number}")
+        
+    except Exception as e:
+        logger.error(f"Background generation error: {e}")
+        await database.update_generation_task(task_id, {
+            "status": "failed",
+            "error": str(e)
+        })
+    finally:
+        # Remove from active tasks
+        if project_id in active_generation_tasks:
+            del active_generation_tasks[project_id]
+
+
+@api_router.post("/projects/{project_id}/generate/background")
+async def start_background_generation(project_id: str, request: PromptRequest, background_tasks: BackgroundTasks):
+    """
+    Start code generation in the background.
+    Returns immediately with a task ID that can be polled for status.
+    """
+    # Get project
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check if there's already an active generation for this project
+    active_task = await database.get_active_task_for_project(project_id)
+    if active_task:
+        return {
+            "status": "already_running",
+            "task_id": active_task["id"],
+            "message": "Generation already in progress"
+        }
+    
+    # Save user message
+    user_msg = ChatMessage(project_id=project_id, role="user", content=request.prompt)
+    await database.create_message(user_msg.model_dump())
+    
+    # Create generation task
+    task = GenerationTask(
+        project_id=project_id,
+        prompt=request.prompt,
+        status="pending",
+        current_step="Starting generation..."
+    )
+    await database.create_generation_task(task.model_dump())
+    
+    # Start background task
+    async_task = asyncio.create_task(
+        run_background_generation(
+            task.id,
+            project_id,
+            request.prompt,
+            request.enable_testing,
+            request.max_test_retries
+        )
+    )
+    active_generation_tasks[project_id] = async_task
+    
+    return {
+        "status": "started",
+        "task_id": task.id,
+        "message": "Generation started in background"
+    }
+
+
+@api_router.get("/projects/{project_id}/generate/status")
+async def get_generation_status(project_id: str):
+    """
+    Get the current generation status for a project.
+    Used by frontend to poll for completion.
+    """
+    # First check for active task
+    active_task = await database.get_active_task_for_project(project_id)
+    if active_task:
+        return {
+            "status": active_task["status"],
+            "task_id": active_task["id"],
+            "progress": active_task.get("progress", 0),
+            "current_step": active_task.get("current_step", ""),
+            "is_running": True
+        }
+    
+    # Check for recently completed task
+    latest_task = await database.get_latest_task_for_project(project_id)
+    if latest_task:
+        return {
+            "status": latest_task["status"],
+            "task_id": latest_task["id"],
+            "progress": latest_task.get("progress", 100),
+            "current_step": latest_task.get("current_step", ""),
+            "is_running": False,
+            "version_number": latest_task.get("version_number"),
+            "summary": latest_task.get("summary"),
+            "error": latest_task.get("error"),
+            "completed_at": latest_task.get("completed_at")
+        }
+    
+    return {
+        "status": "idle",
+        "is_running": False,
+        "message": "No generation in progress"
+    }
+
+
+@api_router.get("/projects/{project_id}/generate/task/{task_id}")
+async def get_generation_task(project_id: str, task_id: str):
+    """Get details of a specific generation task"""
+    task = await database.get_generation_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task["project_id"] != project_id:
+        raise HTTPException(status_code=403, detail="Task does not belong to this project")
+    
+    return task
+
 # ==================== STREAMING GENERATION ====================
 
 @api_router.post("/projects/{project_id}/generate/stream")
