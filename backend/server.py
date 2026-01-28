@@ -375,11 +375,11 @@ async def list_supabase_projects(token_state: str = Query(...)):
 async def list_supabase_organizations(token_state: str = Query(...)):
     """List user's Supabase organizations"""
     
-    token_key = f"token_{token_state}"
-    if token_key not in oauth_states:
-        raise HTTPException(status_code=401, detail="Invalid or expired token state")
+    # Get token from database (with auto-refresh if expired)
+    token_data = await get_valid_oauth_token(token_state)
+    if not token_data:
+        raise HTTPException(status_code=401, detail="Invalid or expired token. Please reconnect your Supabase account.")
     
-    token_data = oauth_states[token_key]
     access_token = token_data["access_token"]
     
     try:
@@ -403,12 +403,12 @@ async def list_supabase_organizations(token_state: str = Query(...)):
 async def create_supabase_project(request: SupabaseProjectCreate, token_state: str = Query(...)):
     """Create a new Supabase project"""
     
-    token_key = f"token_{token_state}"
-    if token_key not in oauth_states:
-        logger.error(f"Token state not found: {token_state}")
+    # Get token from database (with auto-refresh if expired)
+    token_data = await get_valid_oauth_token(token_state)
+    if not token_data:
+        logger.error(f"Token state not found or expired: {token_state}")
         raise HTTPException(status_code=401, detail="Session expired. Please reconnect your Supabase account.")
     
-    token_data = oauth_states[token_key]
     access_token = token_data["access_token"]
     
     logger.info(f"Creating Supabase project: {request.name} in org {request.organization_id}")
