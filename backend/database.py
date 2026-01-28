@@ -162,6 +162,37 @@ class MongoDatabase(DatabaseInterface):
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
         result = await self.db.oauth_tokens.delete_many({"created_at": {"$lt": cutoff}})
         return result.deleted_count
+    
+    # Generation Task Storage (for background processing)
+    async def create_generation_task(self, task: dict) -> dict:
+        """Create a new generation task"""
+        await self.db.generation_tasks.insert_one(task)
+        return task
+    
+    async def get_generation_task(self, task_id: str) -> Optional[dict]:
+        """Get a generation task by ID"""
+        return await self.db.generation_tasks.find_one({"id": task_id}, {"_id": 0})
+    
+    async def get_active_task_for_project(self, project_id: str) -> Optional[dict]:
+        """Get the active (non-completed) generation task for a project"""
+        return await self.db.generation_tasks.find_one(
+            {"project_id": project_id, "status": {"$nin": ["completed", "failed"]}},
+            {"_id": 0}
+        )
+    
+    async def get_latest_task_for_project(self, project_id: str) -> Optional[dict]:
+        """Get the most recent generation task for a project"""
+        return await self.db.generation_tasks.find_one(
+            {"project_id": project_id},
+            {"_id": 0},
+            sort=[("created_at", -1)]
+        )
+    
+    async def update_generation_task(self, task_id: str, updates: dict) -> bool:
+        """Update a generation task"""
+        updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+        result = await self.db.generation_tasks.update_one({"id": task_id}, {"$set": updates})
+        return result.modified_count > 0
 
 
 class SupabaseDatabase(DatabaseInterface):
