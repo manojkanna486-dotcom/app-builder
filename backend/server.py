@@ -2218,23 +2218,9 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
         
         # Pass 1: Analyze which files need changes (done in stream_generator for async)
         # We'll do this inside the stream generator
-        
-        is_update = True
     else:
-        if is_fullstack:
-            # New full-stack app - use full generation
-            system_content = FULLSTACK_SYSTEM_PROMPT.replace("{supabase_url}", supabase_url)
-            messages = [
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": f"Create a full-stack application with Supabase backend: {request.prompt}"}
-            ]
-        else:
-            # New frontend-only app
-            messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"Create a React application: {request.prompt}"}
-            ]
-        # Note: is_update flag no longer needed outside stream_generator
+        # New project - no diff approach needed
+        use_diff_approach = False
     
     async def stream_generator():
         nonlocal affected_analysis, use_diff_approach
