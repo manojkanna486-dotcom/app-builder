@@ -260,6 +260,22 @@ SUPABASE_OAUTH_REDIRECT_URI="https://fullstack-builder-29.preview.emergentagent.
 - Faster response times
 - More focused changes (less risk of unintended modifications)
 
+### Jan 28, 2026 - OAuth Token Persistence (P1 - FIXED)
+**Issue:** Supabase OAuth tokens were stored in-memory, lost on server restart
+
+**Changes:**
+- Added `oauth_tokens` collection in MongoDB for persistent storage
+- Added `store_oauth_token()`, `get_oauth_token()`, `delete_oauth_token()` to database.py
+- Added `get_valid_oauth_token()` helper with automatic token refresh
+- Added `refresh_oauth_token()` to refresh expired tokens using refresh_token
+- Updated all OAuth endpoints to use database storage instead of in-memory
+- Renamed `oauth_states` → `oauth_pkce_states` (short-lived PKCE state only)
+
+**Benefits:**
+- Tokens survive server restarts
+- Automatic token refresh before expiration
+- More reliable Supabase project creation flow
+
 ## Pending Issues
 
 ### ~~P1: Supabase Project Creation Token Expiration~~ - FIXED (Jan 28, 2026)
