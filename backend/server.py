@@ -189,6 +189,28 @@ class PromptRequest(BaseModel):
     confirmed_requirements: Optional[Dict] = None  # Pre-confirmed requirements from clarification
     user_answers: Optional[Dict[str, str]] = None  # Answers to clarifying questions
 
+class GenerationTask(BaseModel):
+    """Background generation task tracking"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    project_id: str
+    prompt: str
+    status: str = "pending"  # pending, analyzing, generating, validating, migrating, deploying, completed, failed
+    progress: int = 0  # 0-100
+    current_step: str = ""
+    error: Optional[str] = None
+    version_number: Optional[int] = None
+    files: Optional[List[Dict]] = None
+    summary: Optional[str] = None
+    migration_result: Optional[Dict] = None
+    deploy_result: Optional[Dict] = None
+    test_results: Optional[Dict] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    completed_at: Optional[str] = None
+
+# In-memory store for active generation tasks (for quick lookups)
+active_generation_tasks: Dict[str, asyncio.Task] = {}
+
 class ClarifyRequest(BaseModel):
     prompt: str
 
