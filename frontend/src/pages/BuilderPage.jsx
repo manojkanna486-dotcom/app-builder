@@ -512,9 +512,6 @@ export default function BuilderPage() {
 
     checkActiveGeneration();
   }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
-      setStreamingCode("");
-    }
-  };
 
   const refreshPreview = () => {
     if (iframeRef.current) {
