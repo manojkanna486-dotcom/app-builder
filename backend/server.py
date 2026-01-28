@@ -238,8 +238,8 @@ async def supabase_oauth_login(project_id: str = Query(..., description="App Bui
     state = secrets.token_urlsafe(32)
     code_verifier, code_challenge = generate_pkce_pair()
     
-    # Store state with project_id and code_verifier
-    oauth_states[state] = {
+    # Store state with project_id and code_verifier (short-lived, in-memory is fine)
+    oauth_pkce_states[state] = {
         "project_id": project_id,
         "code_verifier": code_verifier,
         "created_at": datetime.now(timezone.utc).isoformat()
