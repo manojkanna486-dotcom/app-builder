@@ -276,6 +276,28 @@ SUPABASE_OAUTH_REDIRECT_URI="https://fullstack-builder-29.preview.emergentagent.
 - Automatic token refresh before expiration
 - More reliable Supabase project creation flow
 
+### Jan 28, 2026 - Auto Migration & Deployment (IMPLEMENTED)
+**Feature:** Automatic migration execution and Edge Function deployment after code validation
+
+**Changes:**
+- Backend (`server.py`):
+  - Removed migration approval flow - migrations now auto-run after validation
+  - Auto-executes SQL migrations via Supabase pg-meta API
+  - Auto-deploys Edge Functions after code generation
+  - Sends real-time status updates: success/partial/pending/error
+
+- Frontend (`BuilderPage.jsx`):
+  - Removed `pendingMigrations` state and approval UI
+  - Removed `handleApproveMigrations()` and `handleSkipMigrations()` functions
+  - Updated toast notifications for auto-migration/deployment results
+
+**Flow:**
+1. Code generation completes
+2. Code validation passes
+3. SQL files detected → Auto-run migrations → Report status
+4. Edge Functions detected → Auto-deploy → Report status
+5. Show final result with migration/deployment status
+
 ## Pending Issues
 
 ### ~~P1: Supabase Project Creation Token Expiration~~ - FIXED (Jan 28, 2026)
