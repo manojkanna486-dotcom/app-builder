@@ -268,13 +268,13 @@ async def supabase_oauth_login(project_id: str = Query(..., description="App Bui
 async def supabase_oauth_callback(code: str = Query(...), state: str = Query(...)):
     """Handle Supabase OAuth callback"""
     
-    # Verify state
-    if state not in oauth_states:
+    # Verify state (PKCE states are short-lived, in-memory)
+    if state not in oauth_pkce_states:
         logger.error(f"Invalid OAuth state: {state}")
         # Redirect to frontend with error
         return RedirectResponse(url="/?error=invalid_state")
     
-    state_data = oauth_states.pop(state)
+    state_data = oauth_pkce_states.pop(state)
     project_id = state_data["project_id"]
     code_verifier = state_data["code_verifier"]
     
