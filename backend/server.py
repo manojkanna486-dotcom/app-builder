@@ -2408,6 +2408,36 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                     files = fixed_files
                     summary = f"{summary}. Auto-fixed: {fix_summary}"
             
+            # MERGE FILES: For diff-based updates, merge changed files with unchanged files
+            if use_diff_approach and existing_files:
+                yield f"data: {json.dumps({'type': 'status', 'message': '🔄 Merging changes with existing files...'})}\n\n"
+                
+                # Create a map of returned files by path
+                returned_files_map = {f["path"]: f for f in files}
+                
+                # Start with existing files and update/add as needed
+                merged_files = []
+                updated_paths = set()
+                
+                for existing_file in existing_files:
+                    path = existing_file["path"]
+                    if path in returned_files_map:
+                        # File was modified - use new version
+                        merged_files.append(returned_files_map[path])
+                        updated_paths.add(path)
+                    else:
+                        # File unchanged - keep existing
+                        merged_files.append(existing_file)
+                
+                # Add any new files
+                for f in files:
+                    if f["path"] not in updated_paths:
+                        merged_files.append(f)
+                        updated_paths.add(f["path"])
+                
+                files = merged_files
+                logger.info(f"Merged files: {len(existing_files)} existing + {len(returned_files_map)} modified/new = {len(files)} total")
+            
             # ==================== TESTING AGENT ====================
             test_results = None
             if request.enable_testing and testing_agent:
