@@ -1154,15 +1154,75 @@ IMPORTANT:
 INTENT_DIFF_PROMPT = """Analyze this update request and identify what needs to change.
 
 CURRENT APP SUMMARY: {summary}
+FILE LIST: {file_list}
 USER REQUEST: {request}
 
 Return JSON:
-{
-  "change_type": "ui_change|feature_add|bug_fix|refactor",
-  "affected_components": ["List of component names that need changes"],
+{{
+  "change_type": "ui_change|feature_add|bug_fix|refactor|new_feature",
+  "affected_files": ["Exact file paths that need modifications"],
+  "new_files": ["New file paths to create, if any"],
   "scope": "minor|moderate|major",
   "description": "Brief description of what needs to change"
-}"""
+}}
+
+RULES:
+- Only list files that ACTUALLY need changes
+- Be conservative - don't include files that don't need modification
+- For UI changes, typically only the component file needs changes
+- For new features, identify the minimal set of files"""
+
+# Diff-based update prompt - only sends affected files
+DIFF_UPDATE_PROMPT = """You are an elite developer. Make ONLY the requested changes.
+
+FILES TO MODIFY:
+{affected_files_content}
+
+USER REQUEST: {user_request}
+
+RULES:
+1. Return ONLY the files that changed (not unchanged files)
+2. Return complete file content for each modified file
+3. You can add new files if needed
+4. Keep changes minimal and focused
+
+OUTPUT FORMAT (JSON only):
+{{
+  "files": [
+    {{"path": "filename", "content": "complete file content", "file_type": "frontend|edge_function|sql", "action": "modified|created"}}
+  ],
+  "summary": "Brief description of changes",
+  "changes": ["List of specific changes made"]
+}}
+
+IMPORTANT: Only return files you actually modified or created. Unchanged files should NOT be included."""
+
+DIFF_UPDATE_FULLSTACK_PROMPT = """You are an elite full-stack developer. Make ONLY the requested changes.
+
+SUPABASE PROJECT URL: {supabase_url}
+
+FILES TO MODIFY:
+{affected_files_content}
+
+USER REQUEST: {user_request}
+
+RULES:
+1. Return ONLY the files that changed (not unchanged files)
+2. Return complete file content for each modified file
+3. Add new Edge Functions or SQL migrations only if needed
+4. Keep changes minimal and focused
+
+OUTPUT FORMAT (JSON only):
+{{
+  "files": [
+    {{"path": "filename", "content": "complete file content", "file_type": "frontend|edge_function|sql", "action": "modified|created"}}
+  ],
+  "summary": "Brief description of changes",
+  "changes": ["List of specific changes made"],
+  "new_tables": ["Any new database tables created"]
+}}
+
+IMPORTANT: Only return files you actually modified or created. Unchanged files should NOT be included."""
 
 # ==================== FULL-STACK GENERATION PROMPTS ====================
 
