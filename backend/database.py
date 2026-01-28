@@ -61,6 +61,16 @@ class DatabaseInterface:
     
     async def delete_project_data(self, project_id: str) -> bool:
         raise NotImplementedError
+    
+    # OAuth Token Storage (optional - only needed for Supabase OAuth)
+    async def store_oauth_token(self, token_state: str, token_data: dict) -> bool:
+        raise NotImplementedError
+    
+    async def get_oauth_token(self, token_state: str) -> Optional[dict]:
+        raise NotImplementedError
+    
+    async def delete_oauth_token(self, token_state: str) -> bool:
+        raise NotImplementedError
 
 
 class MongoDatabase(DatabaseInterface):
