@@ -124,6 +124,34 @@ class MongoDatabase(DatabaseInterface):
         await self.db.versions.delete_many({"project_id": project_id})
         await self.db.chat_messages.delete_many({"project_id": project_id})
         return True
+    
+    # OAuth Token Storage
+    async def store_oauth_token(self, token_state: str, token_data: dict) -> bool:
+        """Store OAuth token data with TTL"""
+        token_data["token_state"] = token_state
+        token_data["created_at"] = datetime.now(timezone.utc).isoformat()
+        await self.db.oauth_tokens.update_one(
+            {"token_state": token_state},
+            {"$set": token_data},
+            upsert=True
+        )
+        return True
+    
+    async def get_oauth_token(self, token_state: str) -> Optional[dict]:
+        """Retrieve OAuth token data"""
+        return await self.db.oauth_tokens.find_one({"token_state": token_state}, {"_id": 0})
+    
+    async def delete_oauth_token(self, token_state: str) -> bool:
+        """Delete OAuth token after use"""
+        result = await self.db.oauth_tokens.delete_one({"token_state": token_state})
+        return result.deleted_count > 0
+    
+    async def cleanup_expired_tokens(self, max_age_hours: int = 24) -> int:
+        """Clean up expired OAuth tokens"""
+        from datetime import timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+        result = await self.db.oauth_tokens.delete_many({"created_at": {"$lt": cutoff}})
+        return result.deleted_count
 
 
 class SupabaseDatabase(DatabaseInterface):
