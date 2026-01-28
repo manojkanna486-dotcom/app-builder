@@ -2409,6 +2409,12 @@ async def run_background_generation(task_id: str, project_id: str, prompt: str, 
             "current_step": "Analyzing request..."
         })
         
+        # Build conversation context (remembers previous messages)
+        recent_messages, conversation_summary = await build_conversation_context(project_id, prompt)
+        context_prompt = build_context_prompt(conversation_summary, recent_messages)
+        
+        logger.info(f"Built context: {len(recent_messages)} recent msgs, summary: {len(conversation_summary)} chars")
+        
         # Get latest version
         latest_version = await database.get_latest_version(project_id)
         new_version_number = (latest_version["version_number"] + 1) if latest_version else 1
@@ -2452,6 +2458,9 @@ async def run_background_generation(task_id: str, project_id: str, prompt: str, 
                 system_content = DIFF_UPDATE_PROMPT.replace("{affected_files_content}", affected_content or "No existing files")
                 system_content = system_content.replace("{user_request}", prompt)
             
+            # Prepend conversation context to system prompt
+            system_content = context_prompt + system_content
+            
             messages_to_send = [
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": f"Make the following changes: {prompt}"}
@@ -2460,13 +2469,16 @@ async def run_background_generation(task_id: str, project_id: str, prompt: str, 
             # Full generation for new projects
             if is_fullstack:
                 system_content = FULLSTACK_SYSTEM_PROMPT.replace("{supabase_url}", supabase_url)
+                # Prepend conversation context
+                system_content = context_prompt + system_content
                 messages_to_send = [
                     {"role": "system", "content": system_content},
                     {"role": "user", "content": f"Create a full-stack application with Supabase backend: {prompt}"}
                 ]
             else:
+                system_content = context_prompt + SYSTEM_PROMPT
                 messages_to_send = [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system_content},
                     {"role": "user", "content": f"Create a React application: {prompt}"}
                 ]
         
