@@ -465,13 +465,13 @@ async def create_supabase_project(request: SupabaseProjectCreate, token_state: s
 async def connect_supabase_project(supabase_project_ref: str, token_state: str = Query(...)):
     """Connect a Supabase project to an App Builder project - fetches credentials automatically"""
     
-    token_key = f"token_{token_state}"
-    if token_key not in oauth_states:
-        raise HTTPException(status_code=401, detail="Invalid or expired token state")
+    # Get token from database (with auto-refresh if expired)
+    token_data = await get_valid_oauth_token(token_state)
+    if not token_data:
+        raise HTTPException(status_code=401, detail="Invalid or expired token. Please reconnect your Supabase account.")
     
-    token_data = oauth_states[token_key]
     access_token = token_data["access_token"]
-    app_project_id = token_data["project_id"]
+    app_project_id = token_data.get("project_id")
     
     # SECURITY: Verify the user has access to this specific project
     try:
@@ -543,8 +543,8 @@ async def connect_supabase_project(supabase_project_ref: str, token_state: str =
             "supabase_connected_at": datetime.now(timezone.utc).isoformat()
         })
         
-        # Clean up token state
-        del oauth_states[token_key]
+        # Clean up token from database (no longer needed)
+        await database.delete_oauth_token(token_state)
         
         logger.info(f"Connected Supabase project {supabase_project_ref} to App Builder project {app_project_id}")
         
