@@ -304,17 +304,13 @@ async def supabase_oauth_callback(code: str = Query(...), state: str = Query(...
         
         logger.info(f"OAuth token exchange successful for project {project_id}")
         
-        # Store tokens in the project (temporarily in memory, will be used to fetch projects)
-        # We'll redirect to a page where user can select a project
-        
-        # Store tokens temporarily with project_id
+        # Store tokens in DATABASE for persistence (survives server restarts)
         token_state = secrets.token_urlsafe(16)
-        oauth_states[f"token_{token_state}"] = {
+        await database.store_oauth_token(token_state, {
             "project_id": project_id,
             "access_token": access_token,
             "refresh_token": refresh_token,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
+        })
         
         logger.info(f"OAuth successful for project {project_id}, token_state: {token_state}")
         
@@ -333,11 +329,11 @@ async def supabase_oauth_callback(code: str = Query(...), state: str = Query(...
 async def list_supabase_projects(token_state: str = Query(...)):
     """List user's Supabase projects using OAuth token"""
     
-    token_key = f"token_{token_state}"
-    if token_key not in oauth_states:
-        raise HTTPException(status_code=401, detail="Invalid or expired token state")
+    # Get token from database (with auto-refresh if expired)
+    token_data = await get_valid_oauth_token(token_state)
+    if not token_data:
+        raise HTTPException(status_code=401, detail="Invalid or expired token. Please reconnect your Supabase account.")
     
-    token_data = oauth_states[token_key]
     access_token = token_data["access_token"]
     
     try:
