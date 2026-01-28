@@ -2234,12 +2234,11 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Create a React application: {request.prompt}"}
             ]
-        is_update = False
+        # Note: is_update flag no longer needed outside stream_generator
     
     async def stream_generator():
         nonlocal affected_analysis, use_diff_approach
         full_content = ""
-        current_file = None
         files_detected = []
         messages_to_send = []
         
