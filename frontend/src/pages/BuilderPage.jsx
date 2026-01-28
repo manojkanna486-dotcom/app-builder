@@ -403,22 +403,17 @@ export default function BuilderPage() {
                 } else if (data.max_attempts_reached) {
                   toast.error(`❌ Tests still failing after ${data.attempt} attempts. Please review the code.`);
                 }
-              } else if (data.type === "migration_approval_needed") {
-                // User approval needed for migrations
-                setPendingMigrations(data.migrations);
-                toast.info(`🗄️ ${data.migrations.length} migration(s) awaiting your approval`, { duration: 5000 });
               } else if (data.type === "migration_result") {
-                // Handle migration result (after approval)
-                setPendingMigrations(null);
+                // Handle auto-migration result
                 if (data.status === "success") {
                   toast.success(`🗄️ Database migrations executed successfully!`);
                 } else if (data.status === "partial") {
-                  toast.warning(`⚠️ Some migrations need manual execution`);
+                  toast.warning(`⚠️ Some migrations executed, others need manual execution`);
                 } else if (data.status === "pending") {
                   const sqlEditorUrl = data.sql_editor_url;
                   toast.info(
                     <div>
-                      📝 Migrations ready for execution
+                      📝 Migrations ready for manual execution
                       {sqlEditorUrl && (
                         <a href={sqlEditorUrl} target="_blank" rel="noopener noreferrer" 
                            className="ml-2 underline text-blue-400">
@@ -428,11 +423,17 @@ export default function BuilderPage() {
                     </div>,
                     { duration: 10000 }
                   );
+                } else if (data.status === "error") {
+                  toast.error(`❌ Migration failed: ${data.message || "Unknown error"}`);
                 }
               } else if (data.type === "deploy_result") {
-                // Handle deployment result
-                if (data.status === "ready") {
-                  toast.info(`⚡ Edge Functions ready for deployment`);
+                // Handle auto-deployment result
+                if (data.status === "deployed") {
+                  toast.success(`⚡ Edge Functions deployed successfully!`);
+                } else if (data.status === "ready") {
+                  toast.info(`📦 Edge Functions ready for manual deployment`);
+                } else if (data.status === "error") {
+                  toast.error(`❌ Deployment failed: ${data.message || "Unknown error"}`);
                 }
               } else if (data.type === "complete") {
                 // Generation complete
