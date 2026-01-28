@@ -2206,31 +2206,23 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
     is_fullstack = project.get("supabase_connected", False)
     supabase_url = project.get("supabase_url", "")
     
+    # Variables to track affected files for diff-based generation
+    existing_files = latest_version.get("files", []) if latest_version else []
+    affected_analysis = None
+    use_diff_approach = False
+    
     # Build messages based on project type
     if latest_version and latest_version.get("files"):
-        current_code = ""
-        for f in latest_version["files"]:
-            file_type = f.get("file_type", "frontend")
-            current_code += f"// File: {f['path']} (type: {file_type})\n{f['content']}\n\n"
+        # For updates, use diff-based approach
+        use_diff_approach = True
         
-        if is_fullstack:
-            # Full-stack update
-            system_content = FULLSTACK_UPDATE_PROMPT.replace("{supabase_url}", supabase_url).replace("{current_code}", current_code).replace("{user_request}", request.prompt)
-            messages = [
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": f"Update the full-stack application: {request.prompt}"}
-            ]
-        else:
-            # Frontend-only update
-            system_content = UPDATE_SYSTEM_PROMPT.replace("{current_code}", current_code).replace("{user_request}", request.prompt)
-            messages = [
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": f"Update the code based on this request: {request.prompt}"}
-            ]
+        # Pass 1: Analyze which files need changes (done in stream_generator for async)
+        # We'll do this inside the stream generator
+        
         is_update = True
     else:
         if is_fullstack:
-            # New full-stack app
+            # New full-stack app - use full generation
             system_content = FULLSTACK_SYSTEM_PROMPT.replace("{supabase_url}", supabase_url)
             messages = [
                 {"role": "system", "content": system_content},
@@ -2245,22 +2237,72 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
         is_update = False
     
     async def stream_generator():
+        nonlocal affected_analysis, use_diff_approach
         full_content = ""
         current_file = None
         files_detected = []
+        messages_to_send = []
         
         try:
             # Send initial status based on project type
             yield f"data: {json.dumps({'type': 'status', 'message': 'Analyzing request...'})}\n\n"
             await asyncio.sleep(0.1)
             
-            if is_fullstack:
-                yield f"data: {json.dumps({'type': 'status', 'message': '🚀 Generating full-stack app (Frontend + Edge Functions + Database)...'})}\n\n"
+            if use_diff_approach and existing_files:
+                # DIFF-BASED APPROACH: Analyze which files need changes first
+                yield f"data: {json.dumps({'type': 'status', 'message': '🔍 Analyzing which files need changes...'})}\n\n"
+                
+                project_summary = project.get("summary", "")
+                affected_analysis = await analyze_affected_files(existing_files, project_summary, request.prompt)
+                
+                affected_files = affected_analysis.get("affected_files", [])
+                new_files = affected_analysis.get("new_files", [])
+                scope = affected_analysis.get("scope", "unknown")
+                
+                # Log the analysis for debugging
+                logger.info(f"Diff analysis: scope={scope}, affected={len(affected_files)}, new={len(new_files)}, total_existing={len(existing_files)}")
+                
+                yield f"data: {json.dumps({'type': 'status', 'message': f'📝 Scope: {scope} - {len(affected_files)} file(s) to modify'})}\n\n"
+                
+                # Get content of only affected files
+                affected_content = get_files_content(existing_files, affected_files)
+                
+                # Use diff-based prompt (much smaller context)
+                if is_fullstack:
+                    system_content = DIFF_UPDATE_FULLSTACK_PROMPT.replace("{supabase_url}", supabase_url)
+                    system_content = system_content.replace("{affected_files_content}", affected_content or "No existing files to modify")
+                    system_content = system_content.replace("{user_request}", request.prompt)
+                else:
+                    system_content = DIFF_UPDATE_PROMPT.replace("{affected_files_content}", affected_content or "No existing files to modify")
+                    system_content = system_content.replace("{user_request}", request.prompt)
+                
+                messages_to_send = [
+                    {"role": "system", "content": system_content},
+                    {"role": "user", "content": f"Make the following changes: {request.prompt}"}
+                ]
+                
+                yield f"data: {json.dumps({'type': 'status', 'message': '🚀 Generating changes (incremental mode)...'})}\n\n"
             else:
-                yield f"data: {json.dumps({'type': 'status', 'message': 'Generating code structure...' if not is_update else 'Planning changes...'})}\n\n"
+                # Full generation for new projects
+                if is_fullstack:
+                    yield f"data: {json.dumps({'type': 'status', 'message': '🚀 Generating full-stack app (Frontend + Edge Functions + Database)...'})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'status', 'message': 'Generating code structure...'})}\n\n"
+                
+                if is_fullstack:
+                    system_content = FULLSTACK_SYSTEM_PROMPT.replace("{supabase_url}", supabase_url)
+                    messages_to_send = [
+                        {"role": "system", "content": system_content},
+                        {"role": "user", "content": f"Create a full-stack application with Supabase backend: {request.prompt}"}
+                    ]
+                else:
+                    messages_to_send = [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": f"Create a React application: {request.prompt}"}
+                    ]
             
             # Stream from LLM
-            async for chunk in call_openrouter_stream(messages):
+            async for chunk in call_openrouter_stream(messages_to_send):
                 full_content += chunk
                 
                 # Detect file paths being written
