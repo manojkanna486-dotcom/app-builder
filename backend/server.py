@@ -1510,7 +1510,13 @@ FULLSTACK_SYSTEM_PROMPT = """You are an elite full-stack developer. Generate com
 - Supabase Edge Functions backend (TypeScript/Deno)
 - PostgreSQL database schema (SQL)
 
-The user has connected their Supabase project. Generate production-ready code.
+IMPORTANT - BACKEND IS CONNECTED!
+The user has connected their Supabase project. This means:
+1. Generate real database schema (SQL migrations)
+2. Connect frontend directly to Supabase (no mock data needed)
+3. Implement full CRUD with real database operations
+4. Use Supabase Auth if authentication is needed
+5. Create Edge Functions for complex backend logic
 
 RESPONSIVE DESIGN (MANDATORY - ALL APPS MUST BE FULLY RESPONSIVE):
 1. Mobile-first approach: Design for 320px screens first, then scale up
@@ -1564,9 +1570,26 @@ FRONTEND CODE RULES:
 - Initialize Supabase client with the provided URL
 - Use environment variable for anon key: const supabaseUrl = '{supabase_url}'; const supabaseKey = 'SUPABASE_ANON_KEY';
 - Fetch data from Supabase tables directly using supabase.from('table').select()
-- Handle loading and error states
+- Handle loading and error states properly
 - Use Tailwind CSS with RESPONSIVE classes (sm:, md:, lg:, xl:)
 - ALL layouts must work on mobile, tablet, and desktop
+- Show loading spinners while fetching data
+- Show error messages if database operations fail
+
+SUPABASE OPERATIONS EXAMPLE:
+```javascript
+// Fetch data
+const {{ data, error }} = await supabase.from('tweets').select('*').order('created_at', {{ ascending: false }});
+
+// Insert data
+const {{ data, error }} = await supabase.from('tweets').insert([{{ content: 'Hello', user_id: userId }}]);
+
+// Update data  
+const {{ data, error }} = await supabase.from('tweets').update({{ content: 'Updated' }}).eq('id', tweetId);
+
+// Delete data
+const {{ data, error }} = await supabase.from('tweets').delete().eq('id', tweetId);
+```
 
 EDGE FUNCTION TEMPLATE:
 ```typescript
