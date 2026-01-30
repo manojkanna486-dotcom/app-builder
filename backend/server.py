@@ -3815,13 +3815,32 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
                         and ".env" not in f.get("path", "")
                         and (f.get("path", "").endswith(".jsx") or f.get("path", "").endswith(".js") or f.get("path", "").endswith(".tsx"))]
     
-    # Build all component code
+    # Build all component code - with duplicate detection
     all_code_parts = []
+    defined_components = set()  # Track component names already defined
+    
     for f in sorted_files:
         # Double-check: skip any .env files that somehow got through
         if ".env" in f.get("path", ""):
             continue
+        
+        file_path = f.get("path", "")
         cleaned = clean_component_code(f["content"])
+        
+        # Extract component name from file path (e.g., Header.jsx -> Header)
+        component_name = None
+        if file_path.endswith(".jsx") or file_path.endswith(".tsx"):
+            # Get filename without extension
+            filename = file_path.split("/")[-1]
+            component_name = filename.replace(".jsx", "").replace(".tsx", "")
+        
+        # Check if this component is already defined (duplicate detection)
+        if component_name and component_name != "App":
+            if component_name in defined_components:
+                logger.warning(f"Skipping duplicate component: {component_name} from {file_path}")
+                continue
+            defined_components.add(component_name)
+        
         # Add a comment marker for debugging
         all_code_parts.append(f"// === File: {f['path']} ===\n{cleaned}")
     
