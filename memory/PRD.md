@@ -350,7 +350,22 @@ SUPABASE_OAUTH_REDIRECT_URI="https://fullstack-builder-29.preview.emergentagent.
 
 ## Pending Issues
 
-### ~~P1: Supabase Project Creation Token Expiration~~ - FIXED (Jan 28, 2026)
+None - all major issues resolved.
+
+## Bug Fixes Applied This Session
+
+### Fix 1: `validate_generated_code` → `validate_react_code`
+- Background generation was calling undefined function
+- Changed to use existing `validate_react_code()`
+
+### Fix 2: OpenRouter response parsing
+- `call_openrouter()` was returning raw API response
+- Fixed to extract `choices[0].message.content` properly
+
+### Fix 3: Duplicate component detection in preview
+- Diff-based generation could create files that duplicate components already in App.jsx
+- Added `defined_components` set to track and skip duplicate definitions
+- Now properly skips duplicate Header, MobileNav, etc.
 
 ## Upcoming Tasks
 1. Verify Edge Function deployment end-to-end
