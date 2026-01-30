@@ -2543,7 +2543,7 @@ async def run_background_generation(task_id: str, project_id: str, prompt: str, 
         })
         
         # Validate code
-        validation_errors = validate_generated_code(files)
+        validation_errors = validate_react_code(files)
         if validation_errors:
             fixed_files, fix_summary = await auto_fix_code(files, validation_errors, project.get("summary", ""))
             if fixed_files:
