@@ -355,31 +355,101 @@ export default function BuilderPage() {
 
   const doGenerate = async (userPrompt) => {
     setGenerating(true);
-    setGenerationStatus("Starting background generation...");
-    setGenerationProgress(0);
-    setViewMode("code");
+    setGenerationStatus("Starting...");
+    setStreamingCode("");
+    setViewMode("code"); // Switch to code view to show streaming
 
     try {
-      // Start background generation
-      const startRes = await axios.post(`${API}/projects/${projectId}/generate/background`, {
-        prompt: userPrompt,
+      // Use streaming endpoint for real-time code display
+      const response = await fetch(`${API}/projects/${projectId}/generate/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt: userPrompt }),
       });
 
-      if (startRes.data.status === "already_running") {
-        toast.info("Generation already in progress...");
-        setGenerationTaskId(startRes.data.task_id);
-      } else {
-        setGenerationTaskId(startRes.data.task_id);
-        toast.success("🚀 Generation started! You can close the browser - it will continue in the background.");
+      if (!response.ok) {
+        throw new Error("Generation failed");
       }
 
-      // Poll for completion
-      await pollGenerationStatus(startRes.data.task_id);
-      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === "status") {
+                setGenerationStatus(data.message);
+              } else if (data.type === "code") {
+                setStreamingCode((prev) => prev + data.content);
+              } else if (data.type === "test_result") {
+                if (data.status === "PASS") {
+                  toast.success(`🧪 All tests passed!`);
+                } else if (data.retrying) {
+                  toast.warning(`🔄 Tests failed (attempt ${data.attempt}). Auto-fixing...`);
+                }
+              } else if (data.type === "migration_result") {
+                if (data.status === "success") {
+                  toast.success(`🗄️ Database migrations executed!`);
+                } else if (data.status === "error") {
+                  toast.error(`❌ Migration failed: ${data.message || "Unknown error"}`);
+                }
+              } else if (data.type === "deploy_result") {
+                if (data.status === "deployed") {
+                  toast.success(`⚡ Edge Functions deployed!`);
+                }
+              } else if (data.type === "complete") {
+                // Generation complete
+                if (data.files?.length > 0) {
+                  setFiles(data.files);
+                  const stillExists = data.files.some((f) => f.path === selectedFile);
+                  if (!stillExists) {
+                    setSelectedFile(data.files[0].path);
+                  }
+                }
+                
+                // Update preview
+                const previewRes = await axios.get(`${API}/projects/${projectId}/preview`);
+                setPreviewHtml(previewRes.data.html);
+
+                // Refresh messages and versions
+                const [messagesRes, versionsRes] = await Promise.all([
+                  axios.get(`${API}/projects/${projectId}/messages`),
+                  axios.get(`${API}/projects/${projectId}/versions`),
+                ]);
+                setMessages(messagesRes.data);
+                setVersions(versionsRes.data);
+                setProject((prev) => ({ ...prev, current_version: data.version }));
+
+                toast.success(`✅ Version ${data.version} generated with ${data.files?.length || 0} files!`);
+                setViewMode("preview");
+              } else if (data.type === "error") {
+                throw new Error(data.message);
+              }
+            } catch (parseErr) {
+              // Ignore JSON parse errors for incomplete chunks
+            }
+          }
+        }
+      }
     } catch (err) {
-      toast.error(err.response?.data?.detail || err.message || "Generation failed");
+      toast.error(err.message || "Generation failed");
+    } finally {
       setGenerating(false);
       setGenerationStatus("");
+      setStreamingCode("");
     }
   };
 
