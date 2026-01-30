@@ -2026,7 +2026,11 @@ async def analyze_prompt(project_id: str, request: PromptRequest):
     
     try:
         response = await call_openrouter(messages)
-        content = response["choices"][0]["message"]["content"]
+        if not response:
+            logger.error("Test agent: No response from LLM")
+            return {"status": "FAIL", "passed": 0, "failed": 0, "total": 0, "details": []}
+        
+        content = response.get("content", "")
         
         # Parse response
         try:
