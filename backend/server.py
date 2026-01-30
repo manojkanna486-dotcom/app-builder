@@ -1842,7 +1842,14 @@ async def auto_fix_code(files: List[dict], errors: List[str], project_summary: s
     
     try:
         response = await call_openrouter(messages)
-        content = response["choices"][0]["message"]["content"]
+        if not response:
+            logger.error("Auto-fix: No response from LLM")
+            return None, None
+        
+        content = response.get("content", "")
+        if not content:
+            logger.error("Auto-fix: Empty content from LLM")
+            return None, None
         
         # Parse the response
         import re
