@@ -2152,8 +2152,18 @@ async def generate_code(project_id: str, request: PromptRequest):
         # Call LLM
         response = await call_openrouter(messages)
         
+        if not response:
+            logger.error("Clarification: No response from LLM")
+            return ClarificationResponse(
+                requirements={},
+                clarifying_questions=[],
+                suggested_features=[],
+                is_clear=True,
+                original_prompt=request.prompt
+            )
+        
         # Parse response
-        content = response["choices"][0]["message"]["content"]
+        content = response.get("content", "")
         logger.info(f"LLM response length: {len(content)}")
         logger.info(f"LLM response preview: {content[:300]}")
         
