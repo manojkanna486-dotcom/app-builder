@@ -352,6 +352,27 @@ SUPABASE_OAUTH_REDIRECT_URI="https://react-api-maker.preview.emergentagent.com/a
 
 None - all major issues resolved.
 
+### Jan 31, 2026 - Code Generation Bug Fix (P0 - FIXED)
+**Issue:** New app generation appeared to fail (showed "Files: 0" in the UI)
+
+**Root Causes Identified:**
+1. Code generation was not actually failing - it was taking longer than expected due to the full pipeline (LLM generation + auto-fix + testing)
+2. Missing Lucide icons in the preview mock library caused preview errors ("BarChart3 is not defined")
+3. Previous testing showed OpenRouter API credits being exhausted, which would cause actual failures
+
+**Fixes Applied:**
+1. Added comprehensive debug logging to `auto_fix_code()` function to trace LLM responses and parsing
+2. Added 20+ missing Lucide icons to the preview mock library:
+   - `BarChart2`, `BarChart3`, `LineChart`, `Share`, `Repeat`
+   - `Smile`, `Frown`, `MessageSquare`, `ThumbsUp`, `ThumbsDown`
+   - `Users`, `UserPlus`, `UserMinus`, `PenLine`, `Pencil`
+   - `Trash`, `Reply`, `Forward`, `CornerDownLeft`
+
+**Verification:**
+- Tested generation of "Simple counter app" - completed successfully with 7 files, all 6 tests passed
+- Preview rendering confirmed working with all icons loading correctly
+- Counter app shows full functionality: increment/decrement, custom amounts, history tracking
+
 ## Bug Fixes Applied This Session
 
 ### Fix 1: `validate_generated_code` → `validate_react_code`
