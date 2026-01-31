@@ -1,0 +1,1358 @@
+<analysis>**original_problem_statement:**
+The user wants to build a full-stack App Builder that generates FastAPI backends and React frontends based on user prompts. The mandatory technology for all generated projects is Supabase (PostgreSQL) for the database, authentication, and backend hosting (via Edge Functions).
+
+PRODUCT REQUIREMENTS:
+- **Full-Stack Generation:** The builder must produce complete, deployable applications from user prompts.
+- **Supabase OAuth Integration:** Users must connect their Supabase account via an OAuth flow to automatically fetch credentials and select a project.
+- **Mock Data for Frontend:** Generated frontends should use mock data when a database is not connected, and switch to real data once connected.
+- **Automated Deployment & Migration:** After code generation, the system should automatically run SQL migrations and deploy Supabase Edge Functions if Supabase is connected.
+- **Real-time Code Generation:** The user wants to see the code being generated in real-time.
+- **Asynchronous & Persistent Generation:** Code generation should continue in the background even if the browser is closed.
+- **Contextual Conversation:** The app should remember the conversation history to provide better context for subsequent code generation requests.
+- **Automated Testing:** A built-in testing agent should verify the functionality of the generated app.
+- **Requirement Clarification:** The system must analyze the user's initial prompt, ask clarifying questions, and get user approval before starting code generation.
+
+**User's preferred language**: English
+
+**what currently exists?**
+The application is a full-stack App Builder that generates FastAPI + React code from user prompts. It features Supabase OAuth2 for connecting user accounts, a live preview panel, and export options.
+
+Key implemented features:
+- **Hybrid Generation:** Real-time code streaming is shown in the UI, while a background task ensures generation completes even if the browser is closed.
+- **Diff-Based Updates:** An optimized two-pass system is used for code updates to minimize LLM context usage.
+- **Persistent OAuth Tokens:** Supabase OAuth tokens are stored in the database to prevent expiration issues.
+- **Automatic Migrations:** SQL migrations and Edge Function deployments run automatically after code generation if a Supabase project is connected.
+- **Conversation Memory:** The system builds and sends conversation history (with summarization) to the LLM for better contextual awareness.
+- **Robust Preview:** The live preview renderer has been fixed to handle various edge cases like  files and missing components.
+
+**Last working item**:
+- **Last item agent was working:** The agent was implementing the user's request to use mock data for frontends when a database is not connected. It updated the system prompts ( and ) in  to reflect this logic. To test this, it attempted to generate a Twitter clone app. The generation process started but failed to produce any files.
+- **Status:** IN PROGRESS
+- **Agent Testing Done:** N
+- **Which testing method agent to use?** The agent should use ==> /var/log/supervisor/backend.err.log <==
+2026-01-28 18:48:17,469 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-28 18:48:19,790 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-28 18:48:34,685 - server - ERROR - Background generation error: name 'validate_generated_code' is not defined
+2026-01-28 18:55:00,976 - server - INFO - Built context: 13 recent msgs, summary: 0 chars
+2026-01-28 18:55:01,822 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-28 18:55:03,820 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [48] using WatchFiles
+INFO:     Started server process [80]
+INFO:     Waiting for application startup.
+2026-01-29 07:43:06,860 - database - INFO - MongoDB connection initialized
+2026-01-29 07:43:06,860 - server - INFO - Database initialized: mongodb
+2026-01-29 07:43:06,860 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [46] using WatchFiles
+INFO:     Started server process [90]
+INFO:     Waiting for application startup.
+2026-01-30 18:09:06,143 - database - INFO - MongoDB connection initialized
+2026-01-30 18:09:06,143 - server - INFO - Database initialized: mongodb
+2026-01-30 18:09:06,143 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [90]
+INFO:     Started server process [362]
+INFO:     Waiting for application startup.
+2026-01-30 18:12:59,985 - database - INFO - MongoDB connection initialized
+2026-01-30 18:12:59,985 - server - INFO - Database initialized: mongodb
+2026-01-30 18:12:59,985 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 18:13:16,510 - server - INFO - Built context: 13 recent msgs, summary: 0 chars
+2026-01-30 18:13:17,387 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:13:19,472 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:13:36,440 - httpx - INFO - HTTP Request: POST https://hiytmtoorgpzeinxhgte.supabase.co/pg/query "HTTP/1.1 404 Not Found"
+2026-01-30 18:13:36,442 - server - INFO - pg-meta not available, trying REST API for supabase/migrations/001_initial.sql
+2026-01-30 18:13:36,462 - server - INFO - Edge Function 'tasks' prepared for deployment
+2026-01-30 18:13:36,463 - server - INFO - Background generation completed for project a0480c75-b986-41a3-826d-c6ae6423182a, version 6
+2026-01-30 18:14:22,567 - server - INFO - Built context: 14 recent msgs, summary: 0 chars
+2026-01-30 18:14:23,444 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:14:25,273 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:14:35,697 - httpx - INFO - HTTP Request: POST https://hiytmtoorgpzeinxhgte.supabase.co/pg/query "HTTP/1.1 404 Not Found"
+2026-01-30 18:14:35,697 - server - INFO - pg-meta not available, trying REST API for supabase/migrations/001_initial.sql
+2026-01-30 18:14:35,717 - server - INFO - Edge Function 'tasks' prepared for deployment
+2026-01-30 18:14:35,719 - server - INFO - Background generation completed for project a0480c75-b986-41a3-826d-c6ae6423182a, version 7
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [362]
+INFO:     Started server process [1081]
+INFO:     Waiting for application startup.
+2026-01-30 18:16:24,631 - database - INFO - MongoDB connection initialized
+2026-01-30 18:16:24,632 - server - INFO - Database initialized: mongodb
+2026-01-30 18:16:24,632 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 18:16:29,212 - server - INFO - Redirecting to Supabase OAuth: https://api.supabase.com/v1/oauth/authorize?client_id=react-api-maker&redirect_uri=https%3A%2F%2Ffullstack-builder-29.preview.eme...
+2026-01-30 18:16:33,968 - server - WARNING - Skipping duplicate component: Header from src/components/Header.jsx
+2026-01-30 18:16:33,968 - server - WARNING - Skipping duplicate component: MobileNav from src/components/MobileNav.jsx
+2026-01-30 18:16:41,465 - server - WARNING - Skipping duplicate component: Header from src/components/Header.jsx
+2026-01-30 18:16:41,466 - server - WARNING - Skipping duplicate component: MobileNav from src/components/MobileNav.jsx
+2026-01-30 18:16:56,475 - server - WARNING - Skipping duplicate component: Header from src/components/Header.jsx
+2026-01-30 18:16:56,475 - server - WARNING - Skipping duplicate component: MobileNav from src/components/MobileNav.jsx
+2026-01-30 18:16:56,487 - server - WARNING - Skipping duplicate component: Header from src/components/Header.jsx
+2026-01-30 18:16:56,487 - server - WARNING - Skipping duplicate component: MobileNav from src/components/MobileNav.jsx
+2026-01-30 18:18:42,032 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:19:11,130 - clarification_agent - ERROR - Error analyzing prompt: Expecting ',' delimiter: line 177 column 6 (char 7912)
+2026-01-30 18:19:43,270 - server - INFO - Built context: 2 recent msgs, summary: 0 chars
+2026-01-30 18:19:44,217 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:20:58,101 - server - INFO - Built context: 1 recent msgs, summary: 0 chars
+2026-01-30 18:20:58,985 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:21:50,875 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:21:59,711 - server - ERROR - Auto-fix failed: 'choices'
+2026-01-30 18:21:59,714 - server - INFO - Background generation completed for project a1157693-e68a-4f39-b8bd-1dad124ab6e2, version 1
+2026-01-30 18:22:17,956 - server - ERROR - Error parsing LLM response: Unterminated string starting at: line 1 column 47040 (char 47039)
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1081]
+INFO:     Started server process [1883]
+INFO:     Waiting for application startup.
+2026-01-30 18:22:36,206 - database - INFO - MongoDB connection initialized
+2026-01-30 18:22:36,206 - server - INFO - Database initialized: mongodb
+2026-01-30 18:22:36,206 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1883]
+INFO:     Started server process [1990]
+INFO:     Waiting for application startup.
+2026-01-30 18:23:07,426 - database - INFO - MongoDB connection initialized
+2026-01-30 18:23:07,426 - server - INFO - Database initialized: mongodb
+2026-01-30 18:23:07,426 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1990]
+INFO:     Started server process [2049]
+INFO:     Waiting for application startup.
+2026-01-30 18:23:16,928 - database - INFO - MongoDB connection initialized
+2026-01-30 18:23:16,928 - server - INFO - Database initialized: mongodb
+2026-01-30 18:23:16,928 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 18:23:47,038 - server - INFO - Built context: 1 recent msgs, summary: 0 chars
+2026-01-30 18:23:47,871 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:24:25,258 - server - INFO - Background generation completed for project 15bff529-c176-420d-8655-6c36204d349f, version 1
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2049]
+INFO:     Started server process [2652]
+INFO:     Waiting for application startup.
+2026-01-30 18:26:49,685 - database - INFO - MongoDB connection initialized
+2026-01-30 18:26:49,685 - server - INFO - Database initialized: mongodb
+2026-01-30 18:26:49,685 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2652]
+INFO:     Started server process [2864]
+INFO:     Waiting for application startup.
+2026-01-30 18:28:15,036 - database - INFO - MongoDB connection initialized
+2026-01-30 18:28:15,036 - server - INFO - Database initialized: mongodb
+2026-01-30 18:28:15,036 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 18:29:00,371 - server - INFO - Built context: 1 recent msgs, summary: 0 chars
+2026-01-30 18:29:01,358 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:30:11,593 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:30:42,101 - server - WARNING - Auto-fix did not improve the code
+2026-01-30 18:30:42,104 - server - INFO - Background generation completed for project db987f30-33f8-473d-8801-4d5d51aa232f, version 1
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [47] using WatchFiles
+INFO:     Started server process [85]
+INFO:     Waiting for application startup.
+2026-01-30 19:12:32,610 - database - INFO - MongoDB connection initialized
+2026-01-30 19:12:32,611 - server - INFO - Database initialized: mongodb
+2026-01-30 19:12:32,611 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 19:14:19,050 - server - INFO - Redirecting to Supabase OAuth: https://api.supabase.com/v1/oauth/authorize?client_id=react-api-maker&redirect_uri=https%3A%2F%2Ffullstack-builder-29.preview.eme...
+2026-01-30 19:15:39,557 - server - INFO - Redirecting to Supabase OAuth: https://api.supabase.com/v1/oauth/authorize?client_id=react-api-maker&redirect_uri=https%3A%2F%2Ffullstack-builder-29.preview.eme...
+2026-01-30 19:16:13,066 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:17:06,142 - server - INFO - Built context: 1 recent msgs, summary: 0 chars
+2026-01-30 19:17:07,139 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:18:16,986 - server - INFO - Redirecting to Supabase OAuth: https://api.supabase.com/v1/oauth/authorize?client_id=react-api-maker&redirect_uri=https%3A%2F%2Ffullstack-builder-29.preview.eme...
+2026-01-30 19:18:35,963 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:19:01,262 - server - WARNING - Auto-fix did not improve the code
+2026-01-30 19:19:01,264 - server - INFO - Background generation completed for project 677d2843-c505-4d33-8a85-5fd834f921a6, version 1
+2026-01-30 19:21:30,934 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:21:32,376 - server - INFO - Diff analysis: scope=minor, affected=2, new=0, total_existing=7
+2026-01-30 19:21:33,200 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:26:13,963 - httpx - INFO - HTTP Request: POST https://codesandbox.io/api/v1/sandboxes/define?json=1 "HTTP/1.1 200 OK"
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [85]
+INFO:     Started server process [770]
+INFO:     Waiting for application startup.
+2026-01-30 19:32:46,274 - database - INFO - MongoDB connection initialized
+2026-01-30 19:32:46,274 - server - INFO - Database initialized: mongodb
+2026-01-30 19:32:46,274 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [770]
+INFO:     Started server process [790]
+INFO:     Waiting for application startup.
+2026-01-30 19:33:11,815 - database - INFO - MongoDB connection initialized
+2026-01-30 19:33:11,815 - server - INFO - Database initialized: mongodb
+2026-01-30 19:33:11,815 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 19:33:33,371 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:34:13,862 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [48] using WatchFiles
+INFO:     Started server process [86]
+INFO:     Waiting for application startup.
+2026-01-31 05:13:32,103 - database - INFO - MongoDB connection initialized
+2026-01-31 05:13:32,103 - server - INFO - Database initialized: mongodb
+2026-01-31 05:13:32,103 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [46] using WatchFiles
+
+==> /var/log/supervisor/backend.out.log <==
+INFO:     10.64.129.7:57234 - "GET /api/projects/a1157693-e68a-4f39-b8bd-1dad124ab6e2/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.13:42008 - "GET /api/projects/a1157693-e68a-4f39-b8bd-1dad124ab6e2 HTTP/1.1" 200 OK
+INFO:     10.64.135.173:36138 - "GET /api/projects/a1157693-e68a-4f39-b8bd-1dad124ab6e2/preview HTTP/1.1" 200 OK
+INFO:     10.64.136.226:50762 - "GET /api/projects/a1157693-e68a-4f39-b8bd-1dad124ab6e2/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57264 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57264 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.135.173:40560 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.9:45418 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.136.245:40282 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.135.173:40560 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57264 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.129.9:45418 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.9:45418 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.129.10:39738 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.7:46438 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.7:46438 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.9:45418 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.136.245:40282 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.7:46438 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57264 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.10:39738 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.13:51382 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.13:40054 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.129.10:38764 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.135.173:37404 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.13:40054 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.136.226:44664 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.9:59208 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.9:59222 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.135.173:37404 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.136.226:44664 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.10:38764 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.10:38764 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.136.245:56302 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.7:54204 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.10:38764 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.13:40054 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.136.226:44664 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.13:40054 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.135.173:37404 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.204:35004 - "GET /api/auth/supabase/login?project_id=react-api-maker HTTP/1.1" 307 Temporary Redirect
+INFO:     10.64.131.204:36946 - "GET /api/auth/supabase/login?project_id=react-api-maker HTTP/1.1" 307 Temporary Redirect
+INFO:     10.64.131.202:44996 - "DELETE /api/projects/dd799b1e-2957-4ef3-ab83-cfb5b220431a HTTP/1.1" 200 OK
+INFO:     10.64.131.205:55326 - "POST /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.202:45006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.206:36996 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6 HTTP/1.1" 200 OK
+INFO:     10.64.131.206:36998 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.202:45006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.202:45012 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:50874 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6 HTTP/1.1" 200 OK
+INFO:     10.64.131.203:50878 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.205:55326 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.205:55326 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:36998 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.205:48956 - "POST /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/analyze HTTP/1.1" 200 OK
+INFO:     10.64.131.202:44972 - "POST /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/background HTTP/1.1" 200 OK
+INFO:     10.64.131.206:37412 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:44972 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:42890 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:42890 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:42890 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:46374 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:51296 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:51296 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:38814 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:38814 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:60438 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:42610 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:56142 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:42610 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:43172 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:43172 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:51638 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:51638 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:51638 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49906 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:41250 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:40466 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:48080 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:48080 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:36960 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:55068 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:36960 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:35876 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47314 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:35876 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:35876 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:35876 - "GET /api/auth/supabase/login?project_id=react-api-maker HTTP/1.1" 307 Temporary Redirect
+INFO:     10.64.131.203:56752 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:56752 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:56752 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:55720 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:41558 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:38638 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:55720 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:55720 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:56174 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:44600 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:44600 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:41562 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39178 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39178 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:60378 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39178 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:40904 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:40904 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:47858 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:40904 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47254 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:59914 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47256 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47256 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:41894 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:41748 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.202:41758 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.206:41894 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.202:41758 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:41894 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.204:49140 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47256 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.136.226:42710 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.135.173:46656 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.226:42710 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.13:34118 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.13:34128 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.10:52776 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.135.173:46656 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.135.173:46656 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.136.226:42710 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.136.226:40662 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.7:44510 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.13:34128 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.135.173:46656 - "OPTIONS /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/analyze HTTP/1.1" 200 OK
+INFO:     10.64.129.7:44510 - "POST /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/analyze HTTP/1.1" 200 OK
+INFO:     10.64.129.9:46618 - "OPTIONS /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/stream HTTP/1.1" 200 OK
+INFO:     10.64.129.9:46618 - "POST /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/stream HTTP/1.1" 200 OK
+INFO:     10.64.131.206:54118 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.205:51498 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.245:51882 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.203:45880 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.245:51882 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.136.245:34654 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.135.173:51476 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.202:55906 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.7:52714 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.129.7:52714 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.10:48128 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.13:52354 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57578 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.13:52360 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.138.62:48952 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.7:48138 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.226:51796 - "POST /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/sandbox HTTP/1.1" 200 OK
+INFO:     10.64.131.205:53616 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.203:58272 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.206:34830 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36510 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f HTTP/1.1" 200 OK
+INFO:     10.64.131.206:34830 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49780 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46278 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49780 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.204:48664 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36510 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49780 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36510 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36516 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46286 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46298 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36516 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46298 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.204:48666 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36516 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46298 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49794 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.206:34846 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39876 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36526 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.203:43426 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59902 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6 HTTP/1.1" 200 OK
+INFO:     10.64.131.202:46312 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39888 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:42844 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39888 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6 HTTP/1.1" 200 OK
+INFO:     10.64.131.203:43426 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.202:46312 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:42844 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59902 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.202:37296 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.206:34832 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.129.9:44120 - "POST /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.226:53830 - "POST /api/projects/072b8676-ab1e-4268-868e-b791e6f85c25/generate/stream HTTP/1.1" 200 OK
+INFO:     10.64.136.226:58688 - "POST /api/projects/072b8676-ab1e-4268-868e-b791e6f85c25/generate/stream HTTP/1.1" 200 OK
+INFO:     10.64.131.7:34962 - "GET /api/projects/072b8676-ab1e-4268-868e-b791e6f85c25/versions/latest HTTP/1.1" 200 OK
+INFO:     10.64.131.34:41734 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.7:56596 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.129.9:35084 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.129.13:55440 - "GET /api/projects HTTP/1.1" 200 OK to check for errors, and then  to re-trigger the generation and debug the  function.
+- **User Testing Done:** N
+
+**All Pending/In progress Issue list**:
+- **Issue 1: Code generation for new applications is failing. (P0)**
+  - **Attempted fixes:** The agent modified the system prompts in  to instruct the LLM on using mock data. The subsequent test generation failed.
+  - **Next debug checklist:**
+    1. Re-trigger the generation of a new app (e.g., Twitter clone).
+    2. Immediately check the backend logs for errors: ==> /var/log/supervisor/backend.err.log <==
+2026-01-28 18:48:17,469 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-28 18:48:19,790 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-28 18:48:34,685 - server - ERROR - Background generation error: name 'validate_generated_code' is not defined
+2026-01-28 18:55:00,976 - server - INFO - Built context: 13 recent msgs, summary: 0 chars
+2026-01-28 18:55:01,822 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-28 18:55:03,820 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [48] using WatchFiles
+INFO:     Started server process [80]
+INFO:     Waiting for application startup.
+2026-01-29 07:43:06,860 - database - INFO - MongoDB connection initialized
+2026-01-29 07:43:06,860 - server - INFO - Database initialized: mongodb
+2026-01-29 07:43:06,860 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [46] using WatchFiles
+INFO:     Started server process [90]
+INFO:     Waiting for application startup.
+2026-01-30 18:09:06,143 - database - INFO - MongoDB connection initialized
+2026-01-30 18:09:06,143 - server - INFO - Database initialized: mongodb
+2026-01-30 18:09:06,143 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [90]
+INFO:     Started server process [362]
+INFO:     Waiting for application startup.
+2026-01-30 18:12:59,985 - database - INFO - MongoDB connection initialized
+2026-01-30 18:12:59,985 - server - INFO - Database initialized: mongodb
+2026-01-30 18:12:59,985 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 18:13:16,510 - server - INFO - Built context: 13 recent msgs, summary: 0 chars
+2026-01-30 18:13:17,387 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:13:19,472 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:13:36,440 - httpx - INFO - HTTP Request: POST https://hiytmtoorgpzeinxhgte.supabase.co/pg/query "HTTP/1.1 404 Not Found"
+2026-01-30 18:13:36,442 - server - INFO - pg-meta not available, trying REST API for supabase/migrations/001_initial.sql
+2026-01-30 18:13:36,462 - server - INFO - Edge Function 'tasks' prepared for deployment
+2026-01-30 18:13:36,463 - server - INFO - Background generation completed for project a0480c75-b986-41a3-826d-c6ae6423182a, version 6
+2026-01-30 18:14:22,567 - server - INFO - Built context: 14 recent msgs, summary: 0 chars
+2026-01-30 18:14:23,444 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:14:25,273 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:14:35,697 - httpx - INFO - HTTP Request: POST https://hiytmtoorgpzeinxhgte.supabase.co/pg/query "HTTP/1.1 404 Not Found"
+2026-01-30 18:14:35,697 - server - INFO - pg-meta not available, trying REST API for supabase/migrations/001_initial.sql
+2026-01-30 18:14:35,717 - server - INFO - Edge Function 'tasks' prepared for deployment
+2026-01-30 18:14:35,719 - server - INFO - Background generation completed for project a0480c75-b986-41a3-826d-c6ae6423182a, version 7
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [362]
+INFO:     Started server process [1081]
+INFO:     Waiting for application startup.
+2026-01-30 18:16:24,631 - database - INFO - MongoDB connection initialized
+2026-01-30 18:16:24,632 - server - INFO - Database initialized: mongodb
+2026-01-30 18:16:24,632 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 18:16:29,212 - server - INFO - Redirecting to Supabase OAuth: https://api.supabase.com/v1/oauth/authorize?client_id=react-api-maker&redirect_uri=https%3A%2F%2Ffullstack-builder-29.preview.eme...
+2026-01-30 18:16:33,968 - server - WARNING - Skipping duplicate component: Header from src/components/Header.jsx
+2026-01-30 18:16:33,968 - server - WARNING - Skipping duplicate component: MobileNav from src/components/MobileNav.jsx
+2026-01-30 18:16:41,465 - server - WARNING - Skipping duplicate component: Header from src/components/Header.jsx
+2026-01-30 18:16:41,466 - server - WARNING - Skipping duplicate component: MobileNav from src/components/MobileNav.jsx
+2026-01-30 18:16:56,475 - server - WARNING - Skipping duplicate component: Header from src/components/Header.jsx
+2026-01-30 18:16:56,475 - server - WARNING - Skipping duplicate component: MobileNav from src/components/MobileNav.jsx
+2026-01-30 18:16:56,487 - server - WARNING - Skipping duplicate component: Header from src/components/Header.jsx
+2026-01-30 18:16:56,487 - server - WARNING - Skipping duplicate component: MobileNav from src/components/MobileNav.jsx
+2026-01-30 18:18:42,032 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:19:11,130 - clarification_agent - ERROR - Error analyzing prompt: Expecting ',' delimiter: line 177 column 6 (char 7912)
+2026-01-30 18:19:43,270 - server - INFO - Built context: 2 recent msgs, summary: 0 chars
+2026-01-30 18:19:44,217 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:20:58,101 - server - INFO - Built context: 1 recent msgs, summary: 0 chars
+2026-01-30 18:20:58,985 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:21:50,875 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:21:59,711 - server - ERROR - Auto-fix failed: 'choices'
+2026-01-30 18:21:59,714 - server - INFO - Background generation completed for project a1157693-e68a-4f39-b8bd-1dad124ab6e2, version 1
+2026-01-30 18:22:17,956 - server - ERROR - Error parsing LLM response: Unterminated string starting at: line 1 column 47040 (char 47039)
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1081]
+INFO:     Started server process [1883]
+INFO:     Waiting for application startup.
+2026-01-30 18:22:36,206 - database - INFO - MongoDB connection initialized
+2026-01-30 18:22:36,206 - server - INFO - Database initialized: mongodb
+2026-01-30 18:22:36,206 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1883]
+INFO:     Started server process [1990]
+INFO:     Waiting for application startup.
+2026-01-30 18:23:07,426 - database - INFO - MongoDB connection initialized
+2026-01-30 18:23:07,426 - server - INFO - Database initialized: mongodb
+2026-01-30 18:23:07,426 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1990]
+INFO:     Started server process [2049]
+INFO:     Waiting for application startup.
+2026-01-30 18:23:16,928 - database - INFO - MongoDB connection initialized
+2026-01-30 18:23:16,928 - server - INFO - Database initialized: mongodb
+2026-01-30 18:23:16,928 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 18:23:47,038 - server - INFO - Built context: 1 recent msgs, summary: 0 chars
+2026-01-30 18:23:47,871 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:24:25,258 - server - INFO - Background generation completed for project 15bff529-c176-420d-8655-6c36204d349f, version 1
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2049]
+INFO:     Started server process [2652]
+INFO:     Waiting for application startup.
+2026-01-30 18:26:49,685 - database - INFO - MongoDB connection initialized
+2026-01-30 18:26:49,685 - server - INFO - Database initialized: mongodb
+2026-01-30 18:26:49,685 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2652]
+INFO:     Started server process [2864]
+INFO:     Waiting for application startup.
+2026-01-30 18:28:15,036 - database - INFO - MongoDB connection initialized
+2026-01-30 18:28:15,036 - server - INFO - Database initialized: mongodb
+2026-01-30 18:28:15,036 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 18:29:00,371 - server - INFO - Built context: 1 recent msgs, summary: 0 chars
+2026-01-30 18:29:01,358 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:30:11,593 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:30:42,101 - server - WARNING - Auto-fix did not improve the code
+2026-01-30 18:30:42,104 - server - INFO - Background generation completed for project db987f30-33f8-473d-8801-4d5d51aa232f, version 1
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [47] using WatchFiles
+INFO:     Started server process [85]
+INFO:     Waiting for application startup.
+2026-01-30 19:12:32,610 - database - INFO - MongoDB connection initialized
+2026-01-30 19:12:32,611 - server - INFO - Database initialized: mongodb
+2026-01-30 19:12:32,611 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 19:14:19,050 - server - INFO - Redirecting to Supabase OAuth: https://api.supabase.com/v1/oauth/authorize?client_id=react-api-maker&redirect_uri=https%3A%2F%2Ffullstack-builder-29.preview.eme...
+2026-01-30 19:15:39,557 - server - INFO - Redirecting to Supabase OAuth: https://api.supabase.com/v1/oauth/authorize?client_id=react-api-maker&redirect_uri=https%3A%2F%2Ffullstack-builder-29.preview.eme...
+2026-01-30 19:16:13,066 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:17:06,142 - server - INFO - Built context: 1 recent msgs, summary: 0 chars
+2026-01-30 19:17:07,139 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:18:16,986 - server - INFO - Redirecting to Supabase OAuth: https://api.supabase.com/v1/oauth/authorize?client_id=react-api-maker&redirect_uri=https%3A%2F%2Ffullstack-builder-29.preview.eme...
+2026-01-30 19:18:35,963 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:19:01,262 - server - WARNING - Auto-fix did not improve the code
+2026-01-30 19:19:01,264 - server - INFO - Background generation completed for project 677d2843-c505-4d33-8a85-5fd834f921a6, version 1
+2026-01-30 19:21:30,934 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:21:32,376 - server - INFO - Diff analysis: scope=minor, affected=2, new=0, total_existing=7
+2026-01-30 19:21:33,200 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:26:13,963 - httpx - INFO - HTTP Request: POST https://codesandbox.io/api/v1/sandboxes/define?json=1 "HTTP/1.1 200 OK"
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [85]
+INFO:     Started server process [770]
+INFO:     Waiting for application startup.
+2026-01-30 19:32:46,274 - database - INFO - MongoDB connection initialized
+2026-01-30 19:32:46,274 - server - INFO - Database initialized: mongodb
+2026-01-30 19:32:46,274 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [770]
+INFO:     Started server process [790]
+INFO:     Waiting for application startup.
+2026-01-30 19:33:11,815 - database - INFO - MongoDB connection initialized
+2026-01-30 19:33:11,815 - server - INFO - Database initialized: mongodb
+2026-01-30 19:33:11,815 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 19:33:33,371 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:34:13,862 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [48] using WatchFiles
+INFO:     Started server process [86]
+INFO:     Waiting for application startup.
+2026-01-31 05:13:32,103 - database - INFO - MongoDB connection initialized
+2026-01-31 05:13:32,103 - server - INFO - Database initialized: mongodb
+2026-01-31 05:13:32,103 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [46] using WatchFiles
+
+==> /var/log/supervisor/backend.out.log <==
+INFO:     10.64.129.7:57234 - "GET /api/projects/a1157693-e68a-4f39-b8bd-1dad124ab6e2/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.13:42008 - "GET /api/projects/a1157693-e68a-4f39-b8bd-1dad124ab6e2 HTTP/1.1" 200 OK
+INFO:     10.64.135.173:36138 - "GET /api/projects/a1157693-e68a-4f39-b8bd-1dad124ab6e2/preview HTTP/1.1" 200 OK
+INFO:     10.64.136.226:50762 - "GET /api/projects/a1157693-e68a-4f39-b8bd-1dad124ab6e2/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57264 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57264 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.135.173:40560 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.9:45418 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.136.245:40282 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.135.173:40560 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57264 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.129.9:45418 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.9:45418 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.129.10:39738 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.7:46438 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.7:46438 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.9:45418 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.136.245:40282 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.7:46438 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57264 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.10:39738 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.13:51382 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.13:40054 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.129.10:38764 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.135.173:37404 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.13:40054 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.136.226:44664 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.9:59208 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.9:59222 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.135.173:37404 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.136.226:44664 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.10:38764 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.10:38764 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.136.245:56302 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.7:54204 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.10:38764 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.13:40054 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.136.226:44664 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.13:40054 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.135.173:37404 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.204:35004 - "GET /api/auth/supabase/login?project_id=react-api-maker HTTP/1.1" 307 Temporary Redirect
+INFO:     10.64.131.204:36946 - "GET /api/auth/supabase/login?project_id=react-api-maker HTTP/1.1" 307 Temporary Redirect
+INFO:     10.64.131.202:44996 - "DELETE /api/projects/dd799b1e-2957-4ef3-ab83-cfb5b220431a HTTP/1.1" 200 OK
+INFO:     10.64.131.205:55326 - "POST /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.202:45006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.206:36996 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6 HTTP/1.1" 200 OK
+INFO:     10.64.131.206:36998 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.202:45006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.202:45012 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:50874 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6 HTTP/1.1" 200 OK
+INFO:     10.64.131.203:50878 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.205:55326 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.205:55326 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:36998 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.205:48956 - "POST /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/analyze HTTP/1.1" 200 OK
+INFO:     10.64.131.202:44972 - "POST /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/background HTTP/1.1" 200 OK
+INFO:     10.64.131.206:37412 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:44972 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:42890 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:42890 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:42890 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:46374 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:51296 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:51296 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:38814 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:38814 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:60438 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:42610 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:56142 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:42610 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:43172 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:43172 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:51638 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:51638 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:51638 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49906 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:41250 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:40466 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:48080 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:48080 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:36960 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:55068 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:36960 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:35876 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47314 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:35876 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:35876 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:35876 - "GET /api/auth/supabase/login?project_id=react-api-maker HTTP/1.1" 307 Temporary Redirect
+INFO:     10.64.131.203:56752 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:56752 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:56752 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:55720 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:41558 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:38638 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:55720 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:55720 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:56174 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:44600 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:44600 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:41562 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39178 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39178 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:60378 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39178 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:40904 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:40904 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:47858 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:40904 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47254 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:59914 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47256 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47256 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:41894 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:41748 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.202:41758 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.206:41894 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.202:41758 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:41894 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.204:49140 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47256 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.136.226:42710 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.135.173:46656 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.226:42710 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.13:34118 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.13:34128 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.10:52776 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.135.173:46656 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.135.173:46656 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.136.226:42710 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.136.226:40662 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.7:44510 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.13:34128 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.135.173:46656 - "OPTIONS /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/analyze HTTP/1.1" 200 OK
+INFO:     10.64.129.7:44510 - "POST /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/analyze HTTP/1.1" 200 OK
+INFO:     10.64.129.9:46618 - "OPTIONS /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/stream HTTP/1.1" 200 OK
+INFO:     10.64.129.9:46618 - "POST /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/stream HTTP/1.1" 200 OK
+INFO:     10.64.131.206:54118 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.205:51498 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.245:51882 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.203:45880 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.245:51882 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.136.245:34654 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.135.173:51476 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.202:55906 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.7:52714 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.129.7:52714 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.10:48128 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.13:52354 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57578 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.13:52360 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.138.62:48952 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.7:48138 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.226:51796 - "POST /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/sandbox HTTP/1.1" 200 OK
+INFO:     10.64.131.205:53616 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.203:58272 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.206:34830 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36510 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f HTTP/1.1" 200 OK
+INFO:     10.64.131.206:34830 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49780 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46278 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49780 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.204:48664 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36510 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49780 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36510 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36516 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46286 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46298 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36516 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46298 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.204:48666 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36516 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46298 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49794 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.206:34846 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39876 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36526 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.203:43426 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59902 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6 HTTP/1.1" 200 OK
+INFO:     10.64.131.202:46312 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39888 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:42844 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39888 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6 HTTP/1.1" 200 OK
+INFO:     10.64.131.203:43426 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.202:46312 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:42844 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59902 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.202:37296 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.206:34832 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.129.9:44120 - "POST /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.226:53830 - "POST /api/projects/072b8676-ab1e-4268-868e-b791e6f85c25/generate/stream HTTP/1.1" 200 OK
+INFO:     10.64.136.226:58688 - "POST /api/projects/072b8676-ab1e-4268-868e-b791e6f85c25/generate/stream HTTP/1.1" 200 OK
+INFO:     10.64.131.7:34962 - "GET /api/projects/072b8676-ab1e-4268-868e-b791e6f85c25/versions/latest HTTP/1.1" 200 OK
+INFO:     10.64.131.34:41734 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.7:56596 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.129.9:35084 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.129.13:55440 - "GET /api/projects HTTP/1.1" 200 OK.
+    3. The failure is likely due to the recent prompt changes. The LLM might be returning a response format that the backend parser doesn't expect, or it may be an error in the  logic when  is false.
+    4. Trace the execution flow within  in , paying close attention to prompt construction, the call to , and the file parsing logic.
+  - **Why fix this issue and what will be achieved with the fix?** This is a critical P0 bug. The primary function of the application is to generate new apps from prompts. If this fails, the application is unusable.
+  - **Status:** IN PROGRESS
+  - **Is recurring issue?** N
+  - **Should Test frontend/backend/both after fix?** both
+  - **Blocked on other issue:** None.
+
+**In progress Task List**:
+- **Task 1: Implement and Test Mock Data Generation (P0)**
+  - **Where to resume:** The agent has already updated the prompts in . The immediate task is to resolve Issue 1: Code generation for new applications is failing. which is blocking this task. Once the generation is working again, the agent must verify that a newly generated app (without a Supabase connection) correctly uses mock data in its preview.
+  - **What will be achieved with this?** Generated apps will have a functional and interactive UI preview even without a database connection, significantly improving the user experience.
+  - **Status:** BLOCKED
+  - **Should Test frontend/backend/both after fix?** both
+  - **Blocked on something:** Issue 1: Code generation for new applications is failing.
+
+**Upcoming and Future Tasks**
+- **Upcoming Tasks:**
+  - **P1: Verify Edge Function Deployment:** The backend logic to deploy Edge Functions exists but has not been tested end-to-end. This needs to be verified with a generated project that includes functions.
+- **Future Tasks:**
+  - Add a Cancel Generation button to stop an in-progress stream.
+  - Implement syntax highlighting in the code viewer panel.
+  - Implement migration history and a rollback feature.
+  - Refactor the monolithic  and  files.
+
+**Completed work in this session**
+- **Fixed Critical Blank Preview Bug:** Resolved a complex bug where  and missing  files caused a blank live preview.
+- **Optimized LLM Context with Diff-Based Generation:** Implemented a two-pass system to identify changed files and generate diffs, significantly reducing context window usage for updates.
+- **Fixed Supabase Token Expiration:** Re-architected OAuth token handling to persist refresh tokens in the database.
+- **Implemented Auto-Migration & Deployment:** Modified the generation flow to automatically run migrations and deploy Edge Functions when Supabase is connected.
+- **Implemented & Fixed Async Background Generation:** Added and fixed a background task system for code generation.
+- **Implemented Conversation Context Memory:** The app now sends conversation history (with summarization) to the LLM for better contextual understanding.
+- **Restored Real-time Code Streaming:** Reverted the UI to show real-time code streaming during generation, as requested by the user.
+- **Fixed Numerous Generation Bugs:** Resolved multiple bugs related to new app creation, including incorrect API response parsing and missing Lucide icons in the preview mock.
+
+**Earlier issues found/mentioned but not fixed**
+- None.
+
+**Known issue recurrence from previous fork**
+- None.
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+- **Backend:** FastAPI, Pydantic, Motor (MongoDB), , .
+- **Frontend:** React, Tailwind CSS, shadcn/ui.
+- **Databases:** MongoDB (for App Builder metadata), PostgreSQL (Supabase for generated apps).
+- **Authentication:** Supabase OAuth2 (PKCE).
+- **Code Generation:** A hybrid model using real-time streaming to the UI and background tasks for processing, with a diff-based approach for updates.
+- **3rd Party APIs:** OpenRouter (LLM), Supabase Management API.
+
+**key DB schema**
+- ****: Stores App Builder project metadata.
+- ****: Stores persistent OAuth tokens for users.
+- ****: Tracks the status of background generation jobs.
+
+**changes in tech stack**
+- No changes to the core stack.
+
+**All files of reference**
+- : The central file for all application logic. The current bug is likely within the  function or the prompts it uses (, ).
+- : The main UI component. Its  function initiates the code generation stream.
+- : The database interface, updated to handle OAuth tokens and background task state.
+
+**Areas that need refactoring**:
+-  (>4000 lines) and  (>1600 lines) are extremely large and brittle. They urgently need to be broken down into smaller, more manageable modules.
+
+**key api endpoints**
+- : Initiates real-time streaming code generation.
+- : Initiates background code generation.
+- : Polls the status of a background generation task.
+- : Initiates the Supabase OAuth flow.
+
+**Critical Info for New Agent**
+- Your immediate and only priority is to fix the **P0 bug: new app generation is failing**. The app is not usable until this is resolved.
+- Start your debugging by re-running the failed Twitter clone generation and immediately checking the backend logs for errors (==> /var/log/supervisor/backend.err.log <==
+2026-01-28 18:48:34,685 - server - ERROR - Background generation error: name 'validate_generated_code' is not defined
+2026-01-28 18:55:00,976 - server - INFO - Built context: 13 recent msgs, summary: 0 chars
+2026-01-28 18:55:01,822 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-28 18:55:03,820 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [48] using WatchFiles
+INFO:     Started server process [80]
+INFO:     Waiting for application startup.
+2026-01-29 07:43:06,860 - database - INFO - MongoDB connection initialized
+2026-01-29 07:43:06,860 - server - INFO - Database initialized: mongodb
+2026-01-29 07:43:06,860 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [46] using WatchFiles
+INFO:     Started server process [90]
+INFO:     Waiting for application startup.
+2026-01-30 18:09:06,143 - database - INFO - MongoDB connection initialized
+2026-01-30 18:09:06,143 - server - INFO - Database initialized: mongodb
+2026-01-30 18:09:06,143 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [90]
+INFO:     Started server process [362]
+INFO:     Waiting for application startup.
+2026-01-30 18:12:59,985 - database - INFO - MongoDB connection initialized
+2026-01-30 18:12:59,985 - server - INFO - Database initialized: mongodb
+2026-01-30 18:12:59,985 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 18:13:16,510 - server - INFO - Built context: 13 recent msgs, summary: 0 chars
+2026-01-30 18:13:17,387 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:13:19,472 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:13:36,440 - httpx - INFO - HTTP Request: POST https://hiytmtoorgpzeinxhgte.supabase.co/pg/query "HTTP/1.1 404 Not Found"
+2026-01-30 18:13:36,442 - server - INFO - pg-meta not available, trying REST API for supabase/migrations/001_initial.sql
+2026-01-30 18:13:36,462 - server - INFO - Edge Function 'tasks' prepared for deployment
+2026-01-30 18:13:36,463 - server - INFO - Background generation completed for project a0480c75-b986-41a3-826d-c6ae6423182a, version 6
+2026-01-30 18:14:22,567 - server - INFO - Built context: 14 recent msgs, summary: 0 chars
+2026-01-30 18:14:23,444 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:14:25,273 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:14:35,697 - httpx - INFO - HTTP Request: POST https://hiytmtoorgpzeinxhgte.supabase.co/pg/query "HTTP/1.1 404 Not Found"
+2026-01-30 18:14:35,697 - server - INFO - pg-meta not available, trying REST API for supabase/migrations/001_initial.sql
+2026-01-30 18:14:35,717 - server - INFO - Edge Function 'tasks' prepared for deployment
+2026-01-30 18:14:35,719 - server - INFO - Background generation completed for project a0480c75-b986-41a3-826d-c6ae6423182a, version 7
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [362]
+INFO:     Started server process [1081]
+INFO:     Waiting for application startup.
+2026-01-30 18:16:24,631 - database - INFO - MongoDB connection initialized
+2026-01-30 18:16:24,632 - server - INFO - Database initialized: mongodb
+2026-01-30 18:16:24,632 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 18:16:29,212 - server - INFO - Redirecting to Supabase OAuth: https://api.supabase.com/v1/oauth/authorize?client_id=react-api-maker&redirect_uri=https%3A%2F%2Ffullstack-builder-29.preview.eme...
+2026-01-30 18:16:33,968 - server - WARNING - Skipping duplicate component: Header from src/components/Header.jsx
+2026-01-30 18:16:33,968 - server - WARNING - Skipping duplicate component: MobileNav from src/components/MobileNav.jsx
+2026-01-30 18:16:41,465 - server - WARNING - Skipping duplicate component: Header from src/components/Header.jsx
+2026-01-30 18:16:41,466 - server - WARNING - Skipping duplicate component: MobileNav from src/components/MobileNav.jsx
+2026-01-30 18:16:56,475 - server - WARNING - Skipping duplicate component: Header from src/components/Header.jsx
+2026-01-30 18:16:56,475 - server - WARNING - Skipping duplicate component: MobileNav from src/components/MobileNav.jsx
+2026-01-30 18:16:56,487 - server - WARNING - Skipping duplicate component: Header from src/components/Header.jsx
+2026-01-30 18:16:56,487 - server - WARNING - Skipping duplicate component: MobileNav from src/components/MobileNav.jsx
+2026-01-30 18:18:42,032 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:19:11,130 - clarification_agent - ERROR - Error analyzing prompt: Expecting ',' delimiter: line 177 column 6 (char 7912)
+2026-01-30 18:19:43,270 - server - INFO - Built context: 2 recent msgs, summary: 0 chars
+2026-01-30 18:19:44,217 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:20:58,101 - server - INFO - Built context: 1 recent msgs, summary: 0 chars
+2026-01-30 18:20:58,985 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:21:50,875 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:21:59,711 - server - ERROR - Auto-fix failed: 'choices'
+2026-01-30 18:21:59,714 - server - INFO - Background generation completed for project a1157693-e68a-4f39-b8bd-1dad124ab6e2, version 1
+2026-01-30 18:22:17,956 - server - ERROR - Error parsing LLM response: Unterminated string starting at: line 1 column 47040 (char 47039)
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1081]
+INFO:     Started server process [1883]
+INFO:     Waiting for application startup.
+2026-01-30 18:22:36,206 - database - INFO - MongoDB connection initialized
+2026-01-30 18:22:36,206 - server - INFO - Database initialized: mongodb
+2026-01-30 18:22:36,206 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1883]
+INFO:     Started server process [1990]
+INFO:     Waiting for application startup.
+2026-01-30 18:23:07,426 - database - INFO - MongoDB connection initialized
+2026-01-30 18:23:07,426 - server - INFO - Database initialized: mongodb
+2026-01-30 18:23:07,426 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1990]
+INFO:     Started server process [2049]
+INFO:     Waiting for application startup.
+2026-01-30 18:23:16,928 - database - INFO - MongoDB connection initialized
+2026-01-30 18:23:16,928 - server - INFO - Database initialized: mongodb
+2026-01-30 18:23:16,928 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 18:23:47,038 - server - INFO - Built context: 1 recent msgs, summary: 0 chars
+2026-01-30 18:23:47,871 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:24:25,258 - server - INFO - Background generation completed for project 15bff529-c176-420d-8655-6c36204d349f, version 1
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2049]
+INFO:     Started server process [2652]
+INFO:     Waiting for application startup.
+2026-01-30 18:26:49,685 - database - INFO - MongoDB connection initialized
+2026-01-30 18:26:49,685 - server - INFO - Database initialized: mongodb
+2026-01-30 18:26:49,685 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2652]
+INFO:     Started server process [2864]
+INFO:     Waiting for application startup.
+2026-01-30 18:28:15,036 - database - INFO - MongoDB connection initialized
+2026-01-30 18:28:15,036 - server - INFO - Database initialized: mongodb
+2026-01-30 18:28:15,036 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 18:29:00,371 - server - INFO - Built context: 1 recent msgs, summary: 0 chars
+2026-01-30 18:29:01,358 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:30:11,593 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 18:30:42,101 - server - WARNING - Auto-fix did not improve the code
+2026-01-30 18:30:42,104 - server - INFO - Background generation completed for project db987f30-33f8-473d-8801-4d5d51aa232f, version 1
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [47] using WatchFiles
+INFO:     Started server process [85]
+INFO:     Waiting for application startup.
+2026-01-30 19:12:32,610 - database - INFO - MongoDB connection initialized
+2026-01-30 19:12:32,611 - server - INFO - Database initialized: mongodb
+2026-01-30 19:12:32,611 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 19:14:19,050 - server - INFO - Redirecting to Supabase OAuth: https://api.supabase.com/v1/oauth/authorize?client_id=react-api-maker&redirect_uri=https%3A%2F%2Ffullstack-builder-29.preview.eme...
+2026-01-30 19:15:39,557 - server - INFO - Redirecting to Supabase OAuth: https://api.supabase.com/v1/oauth/authorize?client_id=react-api-maker&redirect_uri=https%3A%2F%2Ffullstack-builder-29.preview.eme...
+2026-01-30 19:16:13,066 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:17:06,142 - server - INFO - Built context: 1 recent msgs, summary: 0 chars
+2026-01-30 19:17:07,139 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:18:16,986 - server - INFO - Redirecting to Supabase OAuth: https://api.supabase.com/v1/oauth/authorize?client_id=react-api-maker&redirect_uri=https%3A%2F%2Ffullstack-builder-29.preview.eme...
+2026-01-30 19:18:35,963 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:19:01,262 - server - WARNING - Auto-fix did not improve the code
+2026-01-30 19:19:01,264 - server - INFO - Background generation completed for project 677d2843-c505-4d33-8a85-5fd834f921a6, version 1
+2026-01-30 19:21:30,934 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:21:32,376 - server - INFO - Diff analysis: scope=minor, affected=2, new=0, total_existing=7
+2026-01-30 19:21:33,200 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:26:13,963 - httpx - INFO - HTTP Request: POST https://codesandbox.io/api/v1/sandboxes/define?json=1 "HTTP/1.1 200 OK"
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [85]
+INFO:     Started server process [770]
+INFO:     Waiting for application startup.
+2026-01-30 19:32:46,274 - database - INFO - MongoDB connection initialized
+2026-01-30 19:32:46,274 - server - INFO - Database initialized: mongodb
+2026-01-30 19:32:46,274 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [770]
+INFO:     Started server process [790]
+INFO:     Waiting for application startup.
+2026-01-30 19:33:11,815 - database - INFO - MongoDB connection initialized
+2026-01-30 19:33:11,815 - server - INFO - Database initialized: mongodb
+2026-01-30 19:33:11,815 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+2026-01-30 19:33:33,371 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-30 19:34:13,862 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [48] using WatchFiles
+INFO:     Started server process [86]
+INFO:     Waiting for application startup.
+2026-01-31 05:13:32,103 - database - INFO - MongoDB connection initialized
+2026-01-31 05:13:32,103 - server - INFO - Database initialized: mongodb
+2026-01-31 05:13:32,103 - server - INFO - Testing Agent and Clarification Agent initialized
+INFO:     Application startup complete.
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [46] using WatchFiles
+INFO:     Started server process [91]
+INFO:     Waiting for application startup.
+
+==> /var/log/supervisor/backend.out.log <==
+INFO:     10.64.129.7:57234 - "GET /api/projects/a1157693-e68a-4f39-b8bd-1dad124ab6e2/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.13:42008 - "GET /api/projects/a1157693-e68a-4f39-b8bd-1dad124ab6e2 HTTP/1.1" 200 OK
+INFO:     10.64.135.173:36138 - "GET /api/projects/a1157693-e68a-4f39-b8bd-1dad124ab6e2/preview HTTP/1.1" 200 OK
+INFO:     10.64.136.226:50762 - "GET /api/projects/a1157693-e68a-4f39-b8bd-1dad124ab6e2/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57264 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57264 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.135.173:40560 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.9:45418 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.136.245:40282 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.135.173:40560 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57264 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.129.9:45418 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.9:45418 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.129.10:39738 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.7:46438 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.7:46438 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.9:45418 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.136.245:40282 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.7:46438 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57264 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.10:39738 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.13:51382 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.13:40054 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.129.10:38764 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.135.173:37404 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.13:40054 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.136.226:44664 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.9:59208 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.9:59222 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.135.173:37404 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.136.226:44664 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.10:38764 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.10:38764 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.136.245:56302 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.7:54204 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.10:38764 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.13:40054 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.136.226:44664 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.13:40054 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.135.173:37404 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.204:35004 - "GET /api/auth/supabase/login?project_id=react-api-maker HTTP/1.1" 307 Temporary Redirect
+INFO:     10.64.131.204:36946 - "GET /api/auth/supabase/login?project_id=react-api-maker HTTP/1.1" 307 Temporary Redirect
+INFO:     10.64.131.202:44996 - "DELETE /api/projects/dd799b1e-2957-4ef3-ab83-cfb5b220431a HTTP/1.1" 200 OK
+INFO:     10.64.131.205:55326 - "POST /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.202:45006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.206:36996 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6 HTTP/1.1" 200 OK
+INFO:     10.64.131.206:36998 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.202:45006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.202:45012 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:50874 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6 HTTP/1.1" 200 OK
+INFO:     10.64.131.203:50878 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.205:55326 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.205:55326 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:36998 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.205:48956 - "POST /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/analyze HTTP/1.1" 200 OK
+INFO:     10.64.131.202:44972 - "POST /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/background HTTP/1.1" 200 OK
+INFO:     10.64.131.206:37412 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:44972 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:42890 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:42890 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:42890 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:46374 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:51296 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:51296 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:38814 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:38814 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:60438 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:42610 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:56142 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:42610 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:43172 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:43172 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:51638 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:51638 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:51638 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49906 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:41250 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:40466 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:48080 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:48080 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:36960 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:55068 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:36960 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:35876 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47314 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:35876 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:35876 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:35876 - "GET /api/auth/supabase/login?project_id=react-api-maker HTTP/1.1" 307 Temporary Redirect
+INFO:     10.64.131.203:56752 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:56752 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:56752 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:55720 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:41558 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:38638 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:55720 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:55720 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:56174 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:44600 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:44600 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:41562 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39178 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39178 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:60378 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39178 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:40904 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:40904 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:47858 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:40904 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47254 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:59914 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47256 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59006 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47256 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:41894 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:41748 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.202:41758 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.206:41894 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.202:41758 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.206:41894 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.204:49140 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.205:47256 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.136.226:42710 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.135.173:46656 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.226:42710 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.13:34118 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.13:34128 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.10:52776 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.135.173:46656 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.135.173:46656 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.136.226:42710 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.136.226:40662 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.129.7:44510 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.13:34128 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.135.173:46656 - "OPTIONS /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/analyze HTTP/1.1" 200 OK
+INFO:     10.64.129.7:44510 - "POST /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/analyze HTTP/1.1" 200 OK
+INFO:     10.64.129.9:46618 - "OPTIONS /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/stream HTTP/1.1" 200 OK
+INFO:     10.64.129.9:46618 - "POST /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/stream HTTP/1.1" 200 OK
+INFO:     10.64.131.206:54118 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.205:51498 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.245:51882 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.203:45880 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.245:51882 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.136.245:34654 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.135.173:51476 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.202:55906 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.7:52714 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.129.7:52714 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f HTTP/1.1" 200 OK
+INFO:     10.64.129.10:48128 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/preview HTTP/1.1" 200 OK
+INFO:     10.64.129.13:52354 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/versions HTTP/1.1" 200 OK
+INFO:     10.64.136.226:57578 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/messages HTTP/1.1" 200 OK
+INFO:     10.64.129.13:52360 - "GET /api/projects/db987f30-33f8-473d-8801-4d5d51aa232f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.138.62:48952 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.7:48138 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.226:51796 - "POST /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/sandbox HTTP/1.1" 200 OK
+INFO:     10.64.131.205:53616 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.203:58272 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.206:34830 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36510 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f HTTP/1.1" 200 OK
+INFO:     10.64.131.206:34830 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49780 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46278 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49780 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.204:48664 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36510 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49780 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36510 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36516 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46286 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46298 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36516 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46298 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.204:48666 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36516 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.203:46298 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:49794 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.206:34846 - "GET /api/projects/15bff529-c176-420d-8655-6c36204d349f/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39876 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.202:36526 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.203:43426 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59902 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6 HTTP/1.1" 200 OK
+INFO:     10.64.131.202:46312 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39888 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:42844 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.206:39888 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6 HTTP/1.1" 200 OK
+INFO:     10.64.131.203:43426 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/versions HTTP/1.1" 200 OK
+INFO:     10.64.131.202:46312 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/generate/status HTTP/1.1" 200 OK
+INFO:     10.64.131.205:42844 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/preview HTTP/1.1" 200 OK
+INFO:     10.64.131.204:59902 - "GET /api/projects/677d2843-c505-4d33-8a85-5fd834f921a6/messages HTTP/1.1" 200 OK
+INFO:     10.64.131.202:37296 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.206:34832 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.129.9:44120 - "POST /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.136.226:53830 - "POST /api/projects/072b8676-ab1e-4268-868e-b791e6f85c25/generate/stream HTTP/1.1" 200 OK
+INFO:     10.64.136.226:58688 - "POST /api/projects/072b8676-ab1e-4268-868e-b791e6f85c25/generate/stream HTTP/1.1" 200 OK
+INFO:     10.64.131.7:34962 - "GET /api/projects/072b8676-ab1e-4268-868e-b791e6f85c25/versions/latest HTTP/1.1" 200 OK
+INFO:     10.64.131.34:41734 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.131.7:56596 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.129.9:35084 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     10.64.129.13:55440 - "GET /api/projects HTTP/1.1" 200 OK). The issue is almost certainly related to the very last change made: updating the system prompts for mock data generation.
+- Once the P0 bug is fixed, you must complete the original task: verify that the mock data implementation works as intended for new apps created without a Supabase connection.
+
+**documents and test reports created in this job**
+-  (Updated regularly)
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **User:** Async code generation is not working fine, please test it and fix it. (Status: **RESOLVED**)
+2.  **User:** Please fix all the errors and make sure app works as expected. (Status: **RESOLVED**)
+3.  **User:** Code don't being generated in new apps, can you please fix it. (Status: **RESOLVED**)
+4.  **User:** I cannot see any code while the code is generating. (Status: **RESOLVED**)
+5.  **User:** until be is connected mock the mock data fe once be connected, connect to the db, and build be, test the twitter app once. (Status: **IN PROGRESS**)
+6.  **User:** Generation is running. Let me wait and check the status. (Status: **IN PROGRESS**)
+7.  **User:** Files: 0. (Status: **IN PROGRESS**)
+8.  **User:** Let me check the logs and try again. (Status: **IN PROGRESS**)
+
+**Project Health Check:**
+- **Broken:** The core feature of generating a new application from a prompt is broken.
+- **Working:** Updating existing applications, live preview, Supabase OAuth, and conversation context are functional.
+
+**3rd Party Integrations**
+- **OpenRouter:** For LLM-based code generation.
+- **Supabase:** For database, auth, and OAuth2 Management.
+- **Vercel & CodeSandbox:** For deployment and sandboxing.
+
+**Testing status**
+- **Testing agent used after significant changes:** NO
+- **Troubleshoot agent used after agent stuck in loop:** NO
+- **Test files created:** None
+- **Known regressions:** The ability to generate new applications has regressed and is currently broken.
+
+**Credentials to test flow:**
+- All necessary credentials are in . Testing the Supabase connection requires going through the user-facing OAuth flow in the UI.
+
+**What agent forgot to execute**
+- After observing that the test generation for the Twitter clone produced zero files, the agent did not proceed to check the backend logs to diagnose the cause of the failure before the session ended.</analysis>
