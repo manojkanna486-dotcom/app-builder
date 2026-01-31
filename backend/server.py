@@ -1882,27 +1882,41 @@ async def auto_fix_code(files: List[dict], errors: List[str], project_summary: s
     ]
     
     try:
+        logger.info("Auto-fix: Calling LLM...")
         response = await call_openrouter(messages)
         if not response:
             logger.error("Auto-fix: No response from LLM")
             return None, None
         
         content = response.get("content", "")
+        logger.info(f"Auto-fix: Got response with {len(content)} chars")
         if not content:
             logger.error("Auto-fix: Empty content from LLM")
             return None, None
         
         # Parse the response
         import re
+        result = None
         code_block_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content)
         if code_block_match:
             json_content = code_block_match.group(1).strip()
-            result = json.loads(json_content, strict=False)
-        else:
-            result = json.loads(content, strict=False)
+            logger.info(f"Auto-fix: Found code block with {len(json_content)} chars")
+            try:
+                result = json.loads(json_content, strict=False)
+            except json.JSONDecodeError as je:
+                logger.error(f"Auto-fix: JSON parse error in code block: {je}")
+        
+        if not result:
+            logger.info("Auto-fix: Trying direct JSON parse")
+            try:
+                result = json.loads(content, strict=False)
+            except json.JSONDecodeError as je:
+                logger.error(f"Auto-fix: Direct JSON parse failed: {je}")
+                return None, None
         
         fixed_files = result.get("files", [])
         fix_summary = result.get("fix_summary", "Auto-fixed code errors")
+        logger.info(f"Auto-fix: Parsed {len(fixed_files)} files")
         
         if fixed_files:
             # Validate the fix
@@ -1911,13 +1925,16 @@ async def auto_fix_code(files: List[dict], errors: List[str], project_summary: s
                 logger.info(f"Auto-fix reduced errors from {len(errors)} to {len(new_errors)}")
                 return fixed_files, fix_summary
             else:
-                logger.warning("Auto-fix did not improve the code")
+                logger.warning(f"Auto-fix did not improve the code (still {len(new_errors)} errors)")
                 return None, None
         
+        logger.warning("Auto-fix: No files in result")
         return None, None
         
     except Exception as e:
-        logger.error(f"Auto-fix failed: {e}")
+        logger.error(f"Auto-fix failed with exception: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"Auto-fix traceback: {traceback.format_exc()}")
         return None, None
 
 # ==================== VERSION ROUTES ====================
