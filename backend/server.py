@@ -2639,7 +2639,7 @@ async def build_app(project_id: str, request: PromptRequest):
                 })
                 
                 # Save assistant message
-                await database.add_message({
+                await database.create_message({
                     "id": str(uuid.uuid4()),
                     "project_id": project_id,
                     "role": "assistant",
