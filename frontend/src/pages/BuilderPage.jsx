@@ -333,6 +333,14 @@ export default function BuilderPage() {
     if (!prompt.trim() || generating || analyzing) return;
 
     const userPrompt = prompt.trim();
+    
+    // ENFORCE SUPABASE CONNECTION
+    if (!project?.supabase_connected) {
+      toast.error("Please connect your Supabase project first before building an app");
+      setShowSupabaseModal(true);
+      return;
+    }
+    
     setPrompt("");
     
     // Add user message immediately
@@ -344,38 +352,198 @@ export default function BuilderPage() {
     };
     setMessages((prev) => [...prev, tempUserMsg]);
     
-    // Check if clarification is needed (only for new projects without existing code)
-    const needsClarification = await analyzePrompt(userPrompt);
-    
-    if (!needsClarification) {
-      await doGenerate(userPrompt);
+    // First, clarify requirements
+    try {
+      setAnalyzing(true);
+      setGenerationStatus("Analyzing requirements...");
+      
+      const clarifyRes = await axios.post(`${API}/projects/${projectId}/clarify`, {
+        prompt: userPrompt,
+      });
+      
+      if (clarifyRes.data.status === "supabase_required") {
+        toast.error("Please connect your Supabase project first");
+        setShowSupabaseModal(true);
+        setAnalyzing(false);
+        return;
+      }
+      
+      const analysis = clarifyRes.data.analysis;
+      
+      // Check if clarification questions are needed
+      if (!analysis.is_clear && analysis.clarifying_questions?.length > 0) {
+        setClarificationQuestions({
+          analysis: analysis,
+          questions: analysis.clarifying_questions,
+          requirements: analysis.requirements,
+        });
+        setOriginalPrompt(userPrompt);
+        setClarificationAnswers({});
+        setAnalyzing(false);
+        return;
+      }
+      
+      // No clarification needed - proceed with build
+      setAnalyzing(false);
+      await doBuild(userPrompt, analysis);
+      
+    } catch (err) {
+      console.error("Clarification error:", err);
+      setAnalyzing(false);
+      // If clarification fails, try direct build
+      await doBuild(userPrompt, null);
     }
-    // If needs clarification, the UI will show the questions
   };
 
-  const doGenerate = async (userPrompt) => {
+  // Submit clarification answers and build
+  const handleSubmitClarification = async () => {
+    const analysis = clarificationQuestions?.analysis;
+    
+    try {
+      // Confirm requirements with user answers
+      const confirmRes = await axios.post(`${API}/projects/${projectId}/confirm-requirements`, {
+        analysis: analysis,
+        user_answers: clarificationAnswers,
+      });
+      
+      setClarificationQuestions(null);
+      setClarificationAnswers({});
+      
+      // Proceed with build using refined requirements
+      await doBuild(originalPrompt, confirmRes.data.refined_requirements);
+      setOriginalPrompt("");
+      
+    } catch (err) {
+      console.error("Confirm requirements error:", err);
+      toast.error("Failed to confirm requirements");
+    }
+  };
+
+  // Skip clarification and build with original analysis
+  const handleSkipClarification = async () => {
+    const analysis = clarificationQuestions?.analysis;
+    const promptToUse = originalPrompt;
+    
+    setClarificationQuestions(null);
+    setClarificationAnswers({});
+    setOriginalPrompt("");
+    
+    await doBuild(promptToUse, analysis);
+  };
+
+  // Main build function using multi-agent pipeline
+  const doBuild = async (userPrompt, requirements = null) => {
     setGenerating(true);
-    setGenerationStatus("Starting...");
+    setGenerationStatus("🚀 Starting build pipeline...");
     setStreamingCode("");
-    setViewMode("code"); // Switch to code view to show streaming
+    setViewMode("code");
 
     try {
-      // Use streaming endpoint for real-time code display
-      const response = await fetch(`${API}/projects/${projectId}/generate/stream`, {
+      // Use the new /build endpoint for multi-agent pipeline
+      const response = await fetch(`${API}/projects/${projectId}/build`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ prompt: userPrompt }),
+        body: JSON.stringify({ 
+          prompt: userPrompt,
+          confirmed_requirements: requirements,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error("Generation failed");
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Build failed");
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === "status") {
+                setGenerationStatus(data.message || data.stage);
+              } else if (data.type === "code") {
+                setStreamingCode((prev) => prev + data.content);
+              } else if (data.type === "deploy_result") {
+                if (data.status === "success") {
+                  toast.success("📦 Deployed to Supabase!");
+                } else if (data.errors?.length > 0) {
+                  toast.warning(`⚠️ Deployment had ${data.errors.length} errors`);
+                }
+              } else if (data.type === "test_result") {
+                if (data.failed === 0) {
+                  toast.success(`✅ All ${data.total} tests passed!`);
+                } else {
+                  toast.warning(`🧪 ${data.passed}/${data.total} tests passed`);
+                }
+              } else if (data.type === "fix_result") {
+                if (data.status === "success") {
+                  toast.info(`🔧 Applied ${data.fixes?.length || 0} fixes`);
+                }
+              } else if (data.type === "version_saved") {
+                toast.success(`🎉 Version ${data.version} saved with ${data.files_count} files!`);
+              } else if (data.type === "complete") {
+                if (data.files?.length > 0) {
+                  setFiles(data.files);
+                  const stillExists = data.files.some((f) => f.path === selectedFile);
+                  if (!stillExists) {
+                    setSelectedFile(data.files[0].path);
+                  }
+                }
+                
+                // Refresh preview and data
+                const [previewRes, messagesRes, versionsRes] = await Promise.all([
+                  axios.get(`${API}/projects/${projectId}/preview`),
+                  axios.get(`${API}/projects/${projectId}/messages`),
+                  axios.get(`${API}/projects/${projectId}/versions`),
+                ]);
+                
+                setPreviewHtml(previewRes.data.html);
+                setMessages(messagesRes.data);
+                setVersions(versionsRes.data);
+                
+                if (data.status === "success") {
+                  toast.success("🎉 App built successfully!");
+                } else if (data.status === "partial") {
+                  toast.warning(data.message || "Build completed with some issues");
+                }
+                
+                setViewMode("preview");
+              } else if (data.type === "error") {
+                throw new Error(data.message);
+              }
+            } catch (parseErr) {
+              // Ignore JSON parse errors for incomplete chunks
+            }
+          }
+        }
+      }
+    } catch (err) {
+      toast.error(err.message || "Build failed");
+    } finally {
+      setGenerating(false);
+      setGenerationStatus("");
+      setStreamingCode("");
+    }
+  };
+
+  // Legacy doGenerate for backwards compatibility (redirect to doBuild)
+  const doGenerate = async (userPrompt) => {
+    await doBuild(userPrompt, null);
+  };
 
       while (true) {
         const { done, value } = await reader.read();
