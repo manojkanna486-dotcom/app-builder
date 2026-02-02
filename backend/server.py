@@ -145,7 +145,7 @@ class Project(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     current_version: int = 0
-    # Supabase integration
+    # Supabase integration (REQUIRED)
     supabase_connected: bool = False
     supabase_url: Optional[str] = None
     supabase_anon_key: Optional[str] = None
@@ -155,6 +155,9 @@ class Project(BaseModel):
     supabase_project_name: Optional[str] = None
     supabase_region: Optional[str] = None
     supabase_connected_at: Optional[str] = None
+    # Requirements tracking (stored after clarification)
+    requirements: Optional[Dict[str, Any]] = None
+    requirements_confirmed: bool = False
 
 class VersionFile(BaseModel):
     path: str
