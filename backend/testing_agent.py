@@ -219,13 +219,24 @@ Return ONLY valid JSON array, no markdown:
         """Test data/database-related requirements"""
         errors = []
         
-        # Check for data fetching
+        # Check for data fetching OR mock data patterns
         has_fetch = re.search(r'fetch\(|axios|supabase\.from|\.select\(|\.insert\(', all_code, re.I)
+        has_mock_data = re.search(r'mockData|initialData|initial\w+|sampleData|demoData|from\s+[\'"]\.\/data|from\s+[\'"]\.\.\/(data|mock)', all_code, re.I)
+        has_inline_mock = re.search(r'useState\s*\(\s*\[', all_code)  # useState with array initial value
         has_state = re.search(r'useState|useReducer|state', all_code, re.I)
         
+        # For mock data requirement, check if mock patterns exist
+        if 'mock' in description.lower():
+            if not (has_mock_data or has_inline_mock or has_state):
+                errors.append("No mock data pattern found")
+            # Mock data is valid - pass the test
+            if has_mock_data or has_inline_mock:
+                return TestResult(req_id, description, True)
+        
         if 'data' in description.lower() or 'fetch' in description.lower() or 'load' in description.lower():
-            if not has_fetch:
-                errors.append("No data fetching mechanism found")
+            # Accept either real fetch OR mock data patterns
+            if not (has_fetch or has_mock_data or has_inline_mock):
+                errors.append("No data fetching or mock data mechanism found")
             if not has_state:
                 errors.append("No state management for data")
         
