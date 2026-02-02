@@ -2536,19 +2536,25 @@ async def build_app(project_id: str, request: PromptRequest):
             detail="Supabase connection required. Please connect your Supabase project first."
         )
     
-    # Get OAuth access token for Supabase Management API
-    oauth_state = project.get("oauth_state")
+    # Get access token - try OAuth first, then fall back to service role key
     access_token = None
+    oauth_state = project.get("oauth_state")
     if oauth_state:
         token_data = await get_valid_oauth_token(oauth_state)
         if token_data:
             access_token = token_data.get("access_token")
     
+    # If no OAuth token, use service role key for direct database access
     if not access_token:
-        raise HTTPException(
-            status_code=401,
-            detail="Supabase OAuth token expired. Please reconnect your Supabase project."
-        )
+        service_key = project.get("supabase_service_key")
+        if service_key:
+            access_token = service_key  # Use service role key as fallback
+            logger.info(f"Using service role key for project {project_id}")
+        else:
+            raise HTTPException(
+                status_code=401,
+                detail="Supabase credentials missing. Please reconnect with service role key."
+            )
     
     # Use confirmed requirements or analyze prompt
     requirements = project.get("requirements")
@@ -2573,7 +2579,8 @@ async def build_app(project_id: str, request: PromptRequest):
     supabase_config = {
         "url": project.get("supabase_url"),
         "anon_key": project.get("supabase_anon_key"),
-        "project_ref": project.get("supabase_project_ref")
+        "service_key": project.get("supabase_service_key"),
+        "project_ref": project.get("supabase_project_ref") or extract_project_ref(project.get("supabase_url", ""))
     }
     
     async def generate_stream():
