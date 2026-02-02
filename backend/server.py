@@ -2429,30 +2429,51 @@ async def clarify_requirements(project_id: str, request: ClarifyRequest):
     """
     Analyze user prompt and extract requirements with clarifying questions.
     Call this BEFORE generate/stream to get user confirmation.
+    REQUIRES: Supabase must be connected first.
     """
-    if not clarification_agent:
-        raise HTTPException(status_code=500, detail="Clarification agent not initialized")
+    if not orchestrator:
+        raise HTTPException(status_code=500, detail="Agent orchestrator not initialized")
     
     # Get project for context
     project = await database.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    # Check Supabase connection - REQUIRED
+    if not project.get("supabase_connected"):
+        return {
+            "status": "supabase_required",
+            "message": "Please connect your Supabase project before creating an app",
+            "requires_supabase": True
+        }
+    
     # Build context
     context = {
-        "supabase_connected": project.get("supabase_connected", False),
+        "supabase_connected": True,
+        "supabase_url": project.get("supabase_url", ""),
         "project_name": project.get("name", ""),
-        "existing_summary": project.get("summary", "")
+        "existing_summary": project.get("summary", ""),
+        "existing_requirements": project.get("requirements")
     }
     
-    # Analyze prompt
-    analysis = await clarification_agent.analyze_prompt(request.prompt, context)
+    # Analyze prompt using orchestrator
+    analysis = await orchestrator.analyze_prompt(request.prompt, context)
+    
+    # Store requirements in project (not confirmed yet)
+    await database.update_project(project_id, {
+        "requirements": analysis,
+        "requirements_confirmed": False,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    })
     
     return {
         "status": "success",
         "analysis": analysis,
-        "questions": clarification_agent.format_questions_for_display(analysis),
-        "formatted_requirements": clarification_agent.format_requirements_for_display(analysis)
+        "is_clear": analysis.get("is_clear", False),
+        "questions": analysis.get("clarifying_questions", []),
+        "requirements": analysis.get("requirements", []),
+        "database_schema": analysis.get("database_schema", {}),
+        "pages": analysis.get("pages", [])
     }
 
 
@@ -2462,20 +2483,179 @@ async def confirm_requirements(project_id: str, request: ConfirmRequirementsRequ
     Refine requirements based on user's answers to clarifying questions.
     Returns final requirements ready for code generation.
     """
-    if not clarification_agent:
-        raise HTTPException(status_code=500, detail="Clarification agent not initialized")
+    if not orchestrator:
+        raise HTTPException(status_code=500, detail="Agent orchestrator not initialized")
+    
+    # Get project
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
     
     # Refine requirements with user answers
-    refined = await clarification_agent.refine_requirements(
+    refined = await orchestrator.refine_requirements(
         request.analysis, 
         request.user_answers
     )
+    
+    # Store confirmed requirements
+    await database.update_project(project_id, {
+        "requirements": refined,
+        "requirements_confirmed": True,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    })
     
     return {
         "status": "success",
         "refined_requirements": refined,
         "ready_for_generation": True
     }
+
+
+# ==================== MULTI-AGENT GENERATION PIPELINE ====================
+
+@api_router.post("/projects/{project_id}/build")
+async def build_app(project_id: str, request: PromptRequest):
+    """
+    Run the complete multi-agent pipeline to build an app.
+    Flow: Clarify → Generate → Deploy → Test → Fix (max 3 retries)
+    
+    REQUIRES: Supabase must be connected.
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=500, detail="Agent orchestrator not initialized")
+    
+    # Get project
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check Supabase connection - REQUIRED
+    if not project.get("supabase_connected"):
+        raise HTTPException(
+            status_code=400, 
+            detail="Supabase connection required. Please connect your Supabase project first."
+        )
+    
+    # Get OAuth access token for Supabase Management API
+    oauth_state = project.get("oauth_state")
+    access_token = None
+    if oauth_state:
+        token_data = await get_valid_oauth_token(oauth_state)
+        if token_data:
+            access_token = token_data.get("access_token")
+    
+    if not access_token:
+        raise HTTPException(
+            status_code=401,
+            detail="Supabase OAuth token expired. Please reconnect your Supabase project."
+        )
+    
+    # Use confirmed requirements or analyze prompt
+    requirements = project.get("requirements")
+    if not requirements or not project.get("requirements_confirmed"):
+        # Quick analysis without clarification
+        requirements = await orchestrator.analyze_prompt(request.prompt, {
+            "supabase_connected": True,
+            "supabase_url": project.get("supabase_url", ""),
+            "project_name": project.get("name", "")
+        })
+        requirements["is_clear"] = True  # Skip clarification for direct build
+    
+    # Get existing files for updates
+    existing_files = None
+    is_update = project.get("current_version", 0) > 0
+    if is_update:
+        latest_version = await database.get_latest_version(project_id)
+        if latest_version:
+            existing_files = latest_version.get("files", [])
+    
+    # Prepare Supabase config
+    supabase_config = {
+        "url": project.get("supabase_url"),
+        "anon_key": project.get("supabase_anon_key"),
+        "project_ref": project.get("supabase_project_ref")
+    }
+    
+    async def generate_stream():
+        """Stream the pipeline execution"""
+        current_files = []
+        final_summary = ""
+        
+        try:
+            async for update in orchestrator.run_pipeline_stream(
+                requirements=requirements,
+                supabase_config=supabase_config,
+                access_token=access_token,
+                existing_files=existing_files,
+                is_update=is_update,
+                max_fix_retries=3
+            ):
+                yield update
+                
+                # Track final files
+                if update.get("type") == "complete":
+                    current_files = update.get("files", current_files)
+                elif update.get("files"):
+                    current_files = update.get("files")
+            
+            # Save version if we have files
+            if current_files:
+                version_number = project.get("current_version", 0) + 1
+                
+                version_data = {
+                    "id": str(uuid.uuid4()),
+                    "project_id": project_id,
+                    "version_number": version_number,
+                    "prompt": request.prompt,
+                    "files": current_files,
+                    "status": "success",
+                    "delta_plan": {
+                        "summary": final_summary,
+                        "requirements": requirements
+                    },
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                
+                await database.create_version(version_data)
+                await database.update_project(project_id, {
+                    "current_version": version_number,
+                    "summary": final_summary,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                })
+                
+                # Save assistant message
+                await database.add_message({
+                    "id": str(uuid.uuid4()),
+                    "project_id": project_id,
+                    "role": "assistant",
+                    "content": f"Built version {version_number} with {len(current_files)} files.",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+                
+                yield f"data: {json.dumps({'type': 'version_saved', 'version': version_number, 'files_count': len(current_files)})}\n\n"
+                
+        except Exception as e:
+            logger.error(f"Build pipeline error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    # Save user message
+    await database.add_message({
+        "id": str(uuid.uuid4()),
+        "project_id": project_id,
+        "role": "user",
+        "content": request.prompt,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 # ==================== BACKGROUND GENERATION ====================
 
