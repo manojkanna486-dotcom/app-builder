@@ -313,7 +313,7 @@ export default function BuilderPage() {
       
       if (clarifyRes.data.status === "supabase_required") {
         toast.error("Please connect your Supabase project first");
-        setShowSupabaseModal(true);
+        handleSupabaseOAuth();
         setAnalyzing(false);
         return;
       }
