@@ -323,9 +323,11 @@ export default function BuilderPage() {
       // Check if clarification questions are needed
       if (!analysis.is_clear && analysis.clarifying_questions?.length > 0) {
         setClarificationQuestions({
+          needs_clarification: true,  // Flag for UI to show questions
           analysis: analysis,
           questions: analysis.clarifying_questions,
           requirements: analysis.requirements,
+          project_summary: analysis.app_description,
         });
         setOriginalPrompt(userPrompt);
         setClarificationAnswers({});
