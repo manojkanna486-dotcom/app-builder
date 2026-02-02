@@ -415,8 +415,28 @@ export default function BuilderPage() {
         }),
       });
 
-      // For streaming endpoints, just start reading even if status check fails
-      // Error will come through the stream
+      // Check for HTTP errors before trying to read stream
+      if (!response.ok) {
+        // Response is not streaming, it's an error JSON
+        const errorText = await response.text();
+        let errorMessage = `Build failed (${response.status})`;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.detail || errorMessage;
+          
+          // Special handling for OAuth expiration
+          if (errorMessage.includes("OAuth token expired") || errorMessage.includes("reconnect")) {
+            toast.error("Supabase connection expired. Please reconnect.");
+            handleSupabaseOAuth();
+            return;
+          }
+        } catch {
+          if (errorText) errorMessage = errorText;
+        }
+        throw new Error(errorMessage);
+      }
+      
+      // For streaming endpoints, read the stream
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
