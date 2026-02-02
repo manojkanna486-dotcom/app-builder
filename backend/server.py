@@ -4172,6 +4172,14 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
             }} }};
         }}
         
+        // Mock import.meta.env for Vite-style env variables
+        if (typeof window !== 'undefined') {{
+            window.importMetaEnv = {{
+                VITE_SUPABASE_URL: SUPABASE_URL,
+                VITE_SUPABASE_ANON_KEY: SUPABASE_ANON_KEY
+            }};
+        }}
+        
         // Override any variables that might be used for Supabase config
         const supabaseUrl = SUPABASE_URL;
         const supabaseAnonKey = SUPABASE_ANON_KEY;
