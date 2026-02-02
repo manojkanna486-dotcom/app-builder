@@ -35,29 +35,46 @@ class DeploymentAgent:
             "errors": []
         }
         
+        supabase_url = supabase_config.get("url")
+        service_key = supabase_config.get("service_key")
         project_ref = supabase_config.get("project_ref")
-        if not project_ref:
+        
+        if not supabase_url:
             result["status"] = "error"
-            result["errors"].append("No Supabase project connected")
+            result["errors"].append("No Supabase URL configured")
             return result
         
         # Separate migration files and edge functions
         migration_files = [f for f in files if f.get("file_type") == "sql"]
         edge_function_files = [f for f in files if f.get("file_type") == "edge_function"]
         
-        # Run migrations first
+        # Run migrations using service role key (direct SQL execution)
         if migration_files:
-            migration_result = await self._run_migrations(
-                project_ref, 
-                access_token, 
-                migration_files
-            )
+            if service_key:
+                migration_result = await self._run_migrations_direct(
+                    supabase_url, 
+                    service_key, 
+                    migration_files
+                )
+            elif access_token and project_ref:
+                # Fallback to Management API if OAuth available
+                migration_result = await self._run_migrations_management_api(
+                    project_ref, 
+                    access_token, 
+                    migration_files
+                )
+            else:
+                migration_result = {
+                    "executed": [],
+                    "errors": [{"path": "all", "error": "No service key or OAuth token available for migrations"}]
+                }
+            
             result["migrations"] = migration_result.get("executed", [])
             if migration_result.get("errors"):
                 result["errors"].extend(migration_result["errors"])
         
-        # Deploy Edge Functions
-        if edge_function_files:
+        # Deploy Edge Functions (requires Management API / OAuth)
+        if edge_function_files and access_token and project_ref:
             deploy_result = await self._deploy_edge_functions(
                 project_ref,
                 access_token,
@@ -66,19 +83,151 @@ class DeploymentAgent:
             result["edge_functions"] = deploy_result.get("deployed", [])
             if deploy_result.get("errors"):
                 result["errors"].extend(deploy_result["errors"])
+        elif edge_function_files:
+            result["errors"].append({
+                "path": "edge_functions",
+                "error": "Edge Function deployment requires OAuth connection"
+            })
         
         if result["errors"]:
             result["status"] = "partial" if result["migrations"] or result["edge_functions"] else "error"
         
         return result
     
-    async def _run_migrations(
+    async def _run_migrations_direct(
+        self, 
+        supabase_url: str, 
+        service_key: str, 
+        migration_files: List[Dict]
+    ) -> Dict:
+        """Execute SQL migrations directly via Supabase REST API using service role key"""
+        
+        result = {
+            "executed": [],
+            "errors": []
+        }
+        
+        # Sort migrations by filename
+        sorted_migrations = sorted(migration_files, key=lambda f: f.get("path", ""))
+        
+        headers = {
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+        }
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            for migration in sorted_migrations:
+                sql = migration.get("content", "")
+                path = migration.get("path", "unknown")
+                
+                if not sql.strip():
+                    continue
+                
+                try:
+                    # Execute SQL via Supabase's RPC endpoint
+                    # First, try to use the pg_query function if available
+                    # Otherwise, we'll need to execute statements one by one
+                    
+                    # Split SQL into individual statements
+                    statements = self._split_sql_statements(sql)
+                    
+                    executed_count = 0
+                    for stmt in statements:
+                        stmt = stmt.strip()
+                        if not stmt:
+                            continue
+                        
+                        # Try to execute via rpc call
+                        response = await client.post(
+                            f"{supabase_url}/rest/v1/rpc/exec_sql",
+                            headers=headers,
+                            json={"query": stmt}
+                        )
+                        
+                        if response.status_code == 404:
+                            # exec_sql function doesn't exist, try direct approach
+                            # For CREATE TABLE, we can't use REST API directly
+                            # Log and continue - the table creation will be handled differently
+                            logger.warning(f"exec_sql not available, migration may need manual execution: {path}")
+                            result["errors"].append({
+                                "path": path,
+                                "error": "Direct SQL execution not available. Please run migration manually in Supabase Dashboard."
+                            })
+                            break
+                        elif response.status_code in [200, 201, 204]:
+                            executed_count += 1
+                        else:
+                            error_text = response.text
+                            try:
+                                error_data = response.json()
+                                error_text = error_data.get("message", error_text)
+                            except:
+                                pass
+                            
+                            # Check if it's a "already exists" error - that's OK
+                            if "already exists" in error_text.lower():
+                                logger.info(f"Migration {path}: Object already exists (OK)")
+                                executed_count += 1
+                            else:
+                                result["errors"].append({
+                                    "path": path,
+                                    "error": error_text
+                                })
+                    
+                    if executed_count > 0:
+                        result["executed"].append({
+                            "path": path,
+                            "status": "success",
+                            "statements": executed_count
+                        })
+                        logger.info(f"Migration executed: {path} ({executed_count} statements)")
+                        
+                except Exception as e:
+                    result["errors"].append({
+                        "path": path,
+                        "error": str(e)
+                    })
+                    logger.error(f"Migration exception: {path} - {e}")
+        
+        return result
+    
+    def _split_sql_statements(self, sql: str) -> List[str]:
+        """Split SQL into individual statements"""
+        # Simple split by semicolon, but handle edge cases
+        statements = []
+        current = ""
+        in_string = False
+        string_char = None
+        
+        for char in sql:
+            if char in ("'", '"') and not in_string:
+                in_string = True
+                string_char = char
+            elif char == string_char and in_string:
+                in_string = False
+                string_char = None
+            
+            if char == ';' and not in_string:
+                if current.strip():
+                    statements.append(current.strip())
+                current = ""
+            else:
+                current += char
+        
+        if current.strip():
+            statements.append(current.strip())
+        
+        return statements
+    
+    async def _run_migrations_management_api(
         self, 
         project_ref: str, 
         access_token: str, 
         migration_files: List[Dict]
     ) -> Dict:
-        """Execute SQL migrations on Supabase"""
+        """Execute SQL migrations via Supabase Management API (OAuth required)"""
         
         result = {
             "executed": [],
@@ -90,7 +239,6 @@ class DeploymentAgent:
             "Content-Type": "application/json"
         }
         
-        # Sort migrations by filename (they should be timestamped)
         sorted_migrations = sorted(migration_files, key=lambda f: f.get("path", ""))
         
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -102,12 +250,40 @@ class DeploymentAgent:
                     continue
                 
                 try:
-                    # Execute SQL via Supabase Management API
                     response = await client.post(
                         f"{self.management_api}/projects/{project_ref}/database/query",
                         headers=headers,
                         json={"query": sql}
                     )
+                    
+                    if response.status_code in [200, 201]:
+                        result["executed"].append({
+                            "path": path,
+                            "status": "success"
+                        })
+                        logger.info(f"Migration executed: {path}")
+                    else:
+                        error_msg = response.text
+                        try:
+                            error_data = response.json()
+                            error_msg = error_data.get("message", error_msg)
+                        except:
+                            pass
+                        
+                        result["errors"].append({
+                            "path": path,
+                            "error": error_msg
+                        })
+                        logger.error(f"Migration failed: {path} - {error_msg}")
+                        
+                except Exception as e:
+                    result["errors"].append({
+                        "path": path,
+                        "error": str(e)
+                    })
+                    logger.error(f"Migration exception: {path} - {e}")
+        
+        return result
                     
                     if response.status_code == 200 or response.status_code == 201:
                         result["executed"].append({
