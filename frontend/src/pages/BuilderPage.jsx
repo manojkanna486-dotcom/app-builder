@@ -283,10 +283,11 @@ export default function BuilderPage() {
 
     const userPrompt = prompt.trim();
     
-    // ENFORCE SUPABASE CONNECTION
+    // ENFORCE SUPABASE CONNECTION - Use OAuth flow
     if (!project?.supabase_connected) {
       toast.error("Please connect your Supabase project first before building an app");
-      setShowSupabaseModal(true);
+      // Trigger OAuth flow instead of manual modal
+      handleSupabaseOAuth();
       return;
     }
     
