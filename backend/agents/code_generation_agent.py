@@ -173,9 +173,21 @@ class CodeGenerationAgent:
     ) -> str:
         """Build the prompt for code generation"""
         
+        logger.info(f"Building generation prompt with requirements type: {type(requirements)}")
+        
+        # Handle case where requirements might be stored differently
+        if isinstance(requirements, str):
+            logger.error(f"Requirements is a string: {requirements[:200]}")
+            requirements = {"requirements": [], "app_name": "App", "app_description": "", "pages": ["Home"]}
+        
+        reqs_list = requirements.get("requirements", [])
+        if isinstance(reqs_list, str):
+            logger.error(f"Requirements list is a string")
+            reqs_list = []
+        
         req_list = "\n".join([
-            f"- [{r['id']}] ({r['category']}) {r['description']} [Priority: {r['priority']}]"
-            for r in requirements.get("requirements", [])
+            f"- [{r.get('id', 'N/A')}] ({r.get('category', 'feature')}) {r.get('description', '')} [Priority: {r.get('priority', 'medium')}]"
+            for r in reqs_list if isinstance(r, dict)
         ])
         
         schema_info = ""
