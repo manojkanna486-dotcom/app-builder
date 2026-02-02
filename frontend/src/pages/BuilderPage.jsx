@@ -258,8 +258,14 @@ export default function BuilderPage() {
         setSelectedFile(versionsRes.data[0].files[0].path);
       }
     } catch (err) {
-      toast.error("Failed to load project");
-      navigate("/");
+      console.error("fetchProjectData error:", err);
+      // Only navigate away if project doesn't exist (404)
+      if (err.response?.status === 404) {
+        toast.error("Project not found");
+        navigate("/");
+      } else {
+        toast.error("Some data failed to load, but you can continue");
+      }
     } finally {
       setLoading(false);
     }
