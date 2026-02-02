@@ -1227,20 +1227,26 @@ async def call_openrouter(messages: List[Dict]):
         "temperature": 0.7
     }
     
-    async with httpx.AsyncClient(timeout=180.0) as http_client:
-        response = await http_client.post(f"{OPENROUTER_BASE_URL}/chat/completions", json=payload, headers=headers)
-        if response.status_code != 200:
-            logger.error(f"OpenRouter error: {response.text}")
-            return None
-        
-        data = response.json()
-        # Extract content from OpenRouter response structure
-        try:
-            content = data["choices"][0]["message"]["content"]
-            return {"content": content}
-        except (KeyError, IndexError) as e:
-            logger.error(f"Failed to extract content from OpenRouter response: {e}")
-            return None
+    try:
+        async with httpx.AsyncClient(timeout=180.0) as http_client:
+            response = await http_client.post(f"{OPENROUTER_BASE_URL}/chat/completions", json=payload, headers=headers)
+            logger.info(f"call_openrouter: status={response.status_code}")
+            if response.status_code != 200:
+                logger.error(f"OpenRouter error: {response.text}")
+                return None
+            
+            data = response.json()
+            # Extract content from OpenRouter response structure
+            try:
+                content = data["choices"][0]["message"]["content"]
+                logger.info(f"call_openrouter: extracted {len(content)} chars")
+                return {"content": content}
+            except (KeyError, IndexError) as e:
+                logger.error(f"Failed to extract content from OpenRouter response: {e}, response: {str(data)[:500]}")
+                return None
+    except Exception as e:
+        logger.error(f"call_openrouter exception: {type(e).__name__}: {e}")
+        return None
 
 async def call_openrouter_stream(messages: List[Dict]):
     """Call OpenRouter API with streaming"""
