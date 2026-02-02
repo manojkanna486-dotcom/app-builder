@@ -289,14 +289,18 @@ export default function BuilderPage() {
 
     const userPrompt = prompt.trim();
     
+    console.log("handleGenerate called, project:", project);
+    
     // ENFORCE SUPABASE CONNECTION - Use OAuth flow
     if (!project?.supabase_connected) {
+      console.log("Supabase not connected, triggering OAuth");
       toast.error("Please connect your Supabase project first before building an app");
       // Trigger OAuth flow instead of manual modal
       handleSupabaseOAuth();
       return;
     }
     
+    console.log("Supabase connected, proceeding with generation");
     setPrompt("");
     
     // Add user message immediately
