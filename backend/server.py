@@ -58,6 +58,14 @@ logger = logging.getLogger(__name__)
 
 # ==================== OAUTH TOKEN HELPERS ====================
 
+def extract_project_ref(supabase_url: str) -> Optional[str]:
+    """Extract project reference from Supabase URL like https://xxxxx.supabase.co"""
+    if not supabase_url:
+        return None
+    import re
+    match = re.search(r'https://([a-z0-9]+)\.supabase\.co', supabase_url)
+    return match.group(1) if match else None
+
 async def get_valid_oauth_token(token_state: str) -> Optional[dict]:
     """
     Get OAuth token from database and refresh if expired.
