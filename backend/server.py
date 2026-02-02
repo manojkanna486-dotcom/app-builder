@@ -4211,16 +4211,17 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_db_client():
-    global database, testing_agent, clarification_agent
+    global database, orchestrator
     database = get_database()
     await database.init()
     logger.info(f"Database initialized: {os.environ.get('DB_TYPE', 'mongodb')}")
     
-    # Initialize agents
+    # Initialize multi-agent orchestrator
     if OPENROUTER_API_KEY:
-        testing_agent = TestingAgent(OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
-        clarification_agent = ClarificationAgent(OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
-        logger.info("Testing Agent and Clarification Agent initialized")
+        orchestrator = AgentOrchestrator(OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
+        logger.info("Agent Orchestrator initialized with all agents")
+    else:
+        logger.warning("OPENROUTER_API_KEY not set - agents will not be available")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
