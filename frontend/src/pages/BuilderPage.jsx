@@ -277,26 +277,6 @@ export default function BuilderPage() {
       [questionId]: answer,
     }));
   };
-    const answers = Object.values(clarificationAnswers).filter(Boolean);
-    const enhancedPrompt = `${originalPrompt}\n\nAdditional context:\n${answers.map(a => `- ${a}`).join('\n')}`;
-    
-    setClarificationQuestions(null);
-    setClarificationAnswers({});
-    setOriginalPrompt("");
-    
-    // Proceed with generation
-    await doGenerate(enhancedPrompt);
-  };
-
-  // Skip clarification and generate with original prompt
-  const handleSkipClarification = async () => {
-    const promptToUse = originalPrompt;
-    setClarificationQuestions(null);
-    setClarificationAnswers({});
-    setOriginalPrompt("");
-    
-    await doGenerate(promptToUse);
-  };
 
   const handleGenerate = async () => {
     if (!prompt.trim() || generating || analyzing) return;
