@@ -284,35 +284,6 @@ class DeploymentAgent:
                     logger.error(f"Migration exception: {path} - {e}")
         
         return result
-                    
-                    if response.status_code == 200 or response.status_code == 201:
-                        result["executed"].append({
-                            "path": path,
-                            "status": "success"
-                        })
-                        logger.info(f"Migration executed: {path}")
-                    else:
-                        error_msg = response.text
-                        try:
-                            error_data = response.json()
-                            error_msg = error_data.get("message", error_msg)
-                        except:
-                            pass
-                        
-                        result["errors"].append({
-                            "path": path,
-                            "error": error_msg
-                        })
-                        logger.error(f"Migration failed: {path} - {error_msg}")
-                        
-                except Exception as e:
-                    result["errors"].append({
-                        "path": path,
-                        "error": str(e)
-                    })
-                    logger.error(f"Migration exception: {path} - {e}")
-        
-        return result
     
     async def _deploy_edge_functions(
         self, 
