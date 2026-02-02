@@ -426,8 +426,8 @@ export default function BuilderPage() {
           
           // Special handling for OAuth expiration
           if (errorMessage.includes("OAuth token expired") || errorMessage.includes("reconnect")) {
-            toast.error("Supabase connection expired. Please reconnect.");
-            handleSupabaseOAuth();
+            toast.error("Supabase session expired. Click 'Disconnect' then reconnect to continue.");
+            setGenerating(false);
             return;
           }
         } catch {
