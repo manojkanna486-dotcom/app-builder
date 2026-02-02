@@ -186,7 +186,7 @@ class ChatMessage(BaseModel):
 class PromptRequest(BaseModel):
     prompt: str
     enable_testing: bool = True  # Enable auto-testing by default
-    max_test_retries: int = 3    # Max retry attempts
+    max_test_retries: int = 1    # Max retry attempts (keep low for faster generation)
     confirmed_requirements: Optional[Dict] = None  # Pre-confirmed requirements from clarification
     user_answers: Optional[Dict[str, str]] = None  # Answers to clarifying questions
 
