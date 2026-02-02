@@ -401,8 +401,16 @@ export default function BuilderPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Build failed");
+        // For non-streaming errors, try to get error message
+        const text = await response.text();
+        let errorMessage = "Build failed";
+        try {
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.detail || errorMessage;
+        } catch {
+          errorMessage = text || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
       const reader = response.body.getReader();
