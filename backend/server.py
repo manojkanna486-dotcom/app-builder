@@ -26,19 +26,15 @@ load_dotenv(ROOT_DIR / '.env')
 from database import get_database, DatabaseInterface
 database: DatabaseInterface = None
 
-# Testing Agent for generated apps
-from testing_agent import TestingAgent, MAX_RETRY_ATTEMPTS
-
-# Clarification Agent for requirement extraction
-from clarification_agent import ClarificationAgent, RESPONSIVE_REQUIREMENTS
+# Multi-Agent System
+from agents import AgentOrchestrator, TestingAgent, ClarificationAgent
 
 # OpenRouter config
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-# Initialize agents
-testing_agent = None
-clarification_agent = None
+# Initialize orchestrator (will be set in lifespan)
+orchestrator: AgentOrchestrator = None
 
 # Supabase OAuth config
 SUPABASE_OAUTH_CLIENT_ID = os.environ.get('SUPABASE_OAUTH_CLIENT_ID')
