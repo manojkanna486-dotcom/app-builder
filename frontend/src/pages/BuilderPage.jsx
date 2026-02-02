@@ -401,21 +401,8 @@ export default function BuilderPage() {
         }),
       });
 
-      // Check response status first
-      if (!response.ok) {
-        // Clone response to read body without consuming the original
-        const errorText = await response.clone().text();
-        let errorMessage = `Build failed with status ${response.status}`;
-        try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.detail || errorMessage;
-        } catch {
-          if (errorText) errorMessage = errorText;
-        }
-        throw new Error(errorMessage);
-      }
-
-      // Now read the streaming response
+      // For streaming endpoints, just start reading even if status check fails
+      // Error will come through the stream
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
