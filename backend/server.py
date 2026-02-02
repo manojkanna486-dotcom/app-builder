@@ -2605,13 +2605,22 @@ async def build_app(project_id: str, request: PromptRequest):
                 is_update=is_update,
                 max_fix_retries=3
             ):
+                # yield the SSE-formatted string directly
                 yield update
                 
-                # Track final files
-                if update.get("type") == "complete":
-                    current_files = update.get("files", current_files)
-                elif update.get("files"):
-                    current_files = update.get("files")
+                # Parse the update to track state
+                try:
+                    if update.startswith("data: "):
+                        data_str = update[6:].strip()
+                        if data_str:
+                            data = json.loads(data_str)
+                            # Track final files
+                            if data.get("type") == "complete":
+                                current_files = data.get("files", current_files)
+                            elif data.get("files"):
+                                current_files = data.get("files")
+                except:
+                    pass  # Ignore parse errors for partial chunks
             
             # Save version if we have files
             if current_files:
