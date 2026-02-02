@@ -3127,49 +3127,54 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                             yield f"data: {json.dumps({'type': 'status', 'message': f'⚠️ Tests failed ({failed_count}/{total_count}). Attempt {attempt}/{max_attempts}. Fixing issues...'})}\n\n"
                             yield f"data: {json.dumps({'type': 'test_result', 'status': 'FAIL', 'attempt': attempt, 'results': test_results, 'retrying': True})}\n\n"
                             
-                            # Generate fix prompt
-                            fix_prompt = await testing_agent.generate_fix_prompt(request.prompt, current_files, test_results)
-                            
-                            # Regenerate with fix prompt
-                            yield f"data: {json.dumps({'type': 'status', 'message': '🔧 Regenerating code to fix issues...'})}\n\n"
-                            
-                            # Call LLM to fix issues
-                            fix_messages = [
-                                {"role": "system", "content": SYSTEM_PROMPT if not is_fullstack else FULLSTACK_SYSTEM_PROMPT.replace("{supabase_url}", supabase_url)},
-                                {"role": "user", "content": fix_prompt}
-                            ]
-                            
-                            fix_content = ""
-                            async for chunk in call_openrouter_stream(fix_messages):
-                                fix_content += chunk
-                            
-                            # Parse fixed code
                             try:
-                                fix_result = json.loads(fix_content, strict=False)
-                                if fix_result.get("files"):
-                                    current_files = fix_result["files"]
-                                    current_summary = fix_result.get("summary", current_summary)
-                                    # Re-apply file types
-                                    for f in current_files:
-                                        path = f.get("path", "")
-                                        if ".sql" in path:
-                                            f["file_type"] = "sql"
-                                        elif "supabase/functions" in path or path.endswith(".ts"):
-                                            f["file_type"] = "edge_function"
-                                        elif not f.get("file_type"):
-                                            f["file_type"] = "frontend"
-                            except:
-                                # Try to extract JSON from response
-                                import re
-                                json_match = re.search(r'\{[\s\S]*"files"[\s\S]*\}', fix_content)
-                                if json_match:
-                                    try:
-                                        fix_result = json.loads(json_match.group(), strict=False)
-                                        if fix_result.get("files"):
-                                            current_files = fix_result["files"]
-                                            current_summary = fix_result.get("summary", current_summary)
-                                    except:
-                                        pass
+                                # Generate fix prompt
+                                fix_prompt = await testing_agent.generate_fix_prompt(request.prompt, current_files, test_results)
+                                
+                                # Regenerate with fix prompt
+                                yield f"data: {json.dumps({'type': 'status', 'message': '🔧 Regenerating code to fix issues...'})}\n\n"
+                                
+                                # Call LLM to fix issues
+                                fix_messages = [
+                                    {"role": "system", "content": SYSTEM_PROMPT if not is_fullstack else FULLSTACK_SYSTEM_PROMPT.replace("{supabase_url}", supabase_url)},
+                                    {"role": "user", "content": fix_prompt}
+                                ]
+                                
+                                fix_content = ""
+                                async for chunk in call_openrouter_stream(fix_messages):
+                                    fix_content += chunk
+                                
+                                # Parse fixed code
+                                try:
+                                    fix_result = json.loads(fix_content, strict=False)
+                                    if fix_result.get("files"):
+                                        current_files = fix_result["files"]
+                                        current_summary = fix_result.get("summary", current_summary)
+                                        # Re-apply file types
+                                        for f in current_files:
+                                            path = f.get("path", "")
+                                            if ".sql" in path:
+                                                f["file_type"] = "sql"
+                                            elif "supabase/functions" in path or path.endswith(".ts"):
+                                                f["file_type"] = "edge_function"
+                                            elif not f.get("file_type"):
+                                                f["file_type"] = "frontend"
+                                except:
+                                    # Try to extract JSON from response
+                                    import re
+                                    json_match = re.search(r'\{[\s\S]*"files"[\s\S]*\}', fix_content)
+                                    if json_match:
+                                        try:
+                                            fix_result = json.loads(json_match.group(), strict=False)
+                                            if fix_result.get("files"):
+                                                current_files = fix_result["files"]
+                                                current_summary = fix_result.get("summary", current_summary)
+                                        except:
+                                            logger.warning("Fix attempt failed to parse JSON, keeping original files")
+                            except Exception as fix_error:
+                                logger.error(f"Fix attempt failed: {fix_error}")
+                                yield f"data: {json.dumps({'type': 'status', 'message': f'⚠️ Fix attempt failed, proceeding with original code'})}\n\n"
+                                break  # Exit retry loop, save original files
                         else:
                             yield f"data: {json.dumps({'type': 'status', 'message': f'❌ Tests still failing after {max_attempts} attempts ({failed_count}/{total_count} failed)'})}\n\n"
                             yield f"data: {json.dumps({'type': 'test_result', 'status': 'FAIL', 'attempt': attempt, 'results': test_results, 'retrying': False, 'max_attempts_reached': True})}\n\n"
