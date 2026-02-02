@@ -270,33 +270,6 @@ export default function BuilderPage() {
     return file?.content || "// No file selected";
   };
 
-  // Analyze prompt for clarification
-  const analyzePrompt = async (userPrompt) => {
-    try {
-      setAnalyzing(true);
-      console.log("Analyzing prompt:", userPrompt);
-      const res = await axios.post(`${API}/projects/${projectId}/analyze`, {
-        prompt: userPrompt,
-      });
-      console.log("Analysis response:", res.data);
-      
-      if (res.data.needs_clarification && res.data.questions?.length > 0) {
-        console.log("Setting clarification questions:", res.data);
-        setClarificationQuestions(res.data);
-        setOriginalPrompt(userPrompt);
-        setClarificationAnswers({});
-        return true; // Needs clarification
-      }
-      console.log("No clarification needed");
-      return false; // Proceed with generation
-    } catch (err) {
-      console.error("Analysis error:", err);
-      return false; // On error, proceed without clarification
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
   // Handle clarification answer selection
   const handleClarificationAnswer = (questionId, answer) => {
     setClarificationAnswers((prev) => ({
@@ -304,10 +277,6 @@ export default function BuilderPage() {
       [questionId]: answer,
     }));
   };
-
-  // Submit clarification answers and generate
-  const handleSubmitClarification = async () => {
-    // Build enhanced prompt
     const answers = Object.values(clarificationAnswers).filter(Boolean);
     const enhancedPrompt = `${originalPrompt}\n\nAdditional context:\n${answers.map(a => `- ${a}`).join('\n')}`;
     
