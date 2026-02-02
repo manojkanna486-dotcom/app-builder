@@ -2654,7 +2654,7 @@ async def build_app(project_id: str, request: PromptRequest):
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
     
     # Save user message
-    await database.add_message({
+    await database.create_message({
         "id": str(uuid.uuid4()),
         "project_id": project_id,
         "role": "user",
