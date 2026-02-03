@@ -121,6 +121,13 @@ class MongoDatabase(DatabaseInterface):
             sort=[("version_number", -1)]
         )
     
+    async def get_all_versions(self, project_id: str) -> List[dict]:
+        """Get all versions for a project, sorted by version number descending"""
+        return await self.db.versions.find(
+            {"project_id": project_id, "status": {"$in": ["success", "partial"]}},
+            {"_id": 0}
+        ).sort("version_number", -1).to_list(100)
+    
     async def create_message(self, message: dict) -> dict:
         await self.db.chat_messages.insert_one(message)
         return message
