@@ -1,130 +1,134 @@
-# App Builder - Product Requirements Document
+# Multi-Agent App Builder - Product Requirements Document
 
 ## Original Problem Statement
-Build a multi-agent web app builder similar to Emergent. The system should:
-- Generate full-stack React + Supabase applications from user prompts
-- Require Supabase connection before allowing app creation
-- Create and run SQL migrations automatically
-- Deploy Edge Functions to Supabase
-- Test generated apps against requirements
-- Fix issues automatically (max 3 retries)
-- Store requirements and validate against them
+Build a full-stack "App Builder" that generates FastAPI backends and React frontends based on user prompts. The application uses a multi-agent system to orchestrate the entire software creation process.
 
-## Tech Stack (Fixed)
-- **Frontend**: React with Tailwind CSS, Lucide React icons
-- **Backend**: Supabase (PostgreSQL + Edge Functions + Auth)
-- **No mock data** - All data comes from Supabase
+## Core Requirements
 
-## Multi-Agent Architecture
+### Mandatory Integration: Supabase
+- All generated apps use Supabase (PostgreSQL) for database and auth
+- A project cannot be started until a user connects their Supabase account
+- System handles automated database migrations via Service Role Key
 
-### Agent 1: Clarification Agent (`/app/backend/agents/clarification_agent.py`)
-- Analyzes user prompts
-- Extracts structured requirements
-- Identifies database schema needs
-- Asks minimal clarifying questions (1-2 only)
-- Stores requirements in project for validation
+### Multi-Agent Generation Pipeline
+1. **Clarification Agent:** Analyzes prompts, extracts requirements, asks clarifying questions
+2. **Code Generation Agent:** Writes React and FastAPI code based on finalized requirements
+3. **Deployment Agent:** Deploys the application, runs database migrations
+4. **Testing Agent:** Runs automated tests to validate requirements
+5. **Dev Agent:** Fixes code if tests fail (max 3 retries)
 
-### Agent 2: Code Generation Agent (`/app/backend/agents/code_generation_agent.py`)
-- Generates React frontend components
-- Creates SQL migrations with RLS policies
-- Generates Edge Functions (TypeScript/Deno)
-- Creates Supabase client configuration
-- Supports streaming for real-time UI updates
+### Async Job System (NEW - Feb 2026)
+Jobs run independently of browser sessions:
+1. Run independently of any browser/UI session
+2. Continue execution until completed or canceled
+3. Persist progress after every step
+4. Resumable after failure or restart
 
-### Agent 3: Deployment Agent (`/app/backend/agents/deployment_agent.py`)
-- Executes SQL migrations via Supabase Management API
-- Deploys Edge Functions to Supabase
-- Verifies deployment success
-- Handles partial deployments
+## Architecture
 
-### Agent 4: Testing Agent (`/app/backend/agents/testing_agent.py`)
-- Deep testing against stored requirements
-- Syntax validation (JSX, SQL, TypeScript)
-- Category-specific testing (data, auth, UI)
-- LLM-powered feature verification
-- Generates fix reports
-
-### Agent 5: Dev Agent (`/app/backend/agents/dev_agent.py`)
-- Fixes issues identified by Testing Agent
-- Max 3 retry attempts
-- Returns fixed files
-- Supports streaming for real-time updates
-
-### Agent Orchestrator (`/app/backend/agents/orchestrator.py`)
-- Coordinates the pipeline: Clarify → Generate → Deploy → Test → Fix
-- Manages retry loops
-- Yields status updates for UI
-- Handles errors gracefully
-
-## Pipeline Flow
 ```
-User Prompt
-    ↓
-[Supabase Check] → If not connected, show error
-    ↓
-[Clarification Agent] → Extract requirements, ask questions if needed
-    ↓
-[Code Generation Agent] → Generate React + Supabase code (streaming)
-    ↓
-[Deployment Agent] → Run migrations, deploy Edge Functions
-    ↓
-[Testing Agent] → Deep test against requirements
-    ↓
-If tests fail:
-    [Dev Agent] → Fix issues (max 3 retries)
-    → Loop back to Deploy
-    ↓
-[Complete] → Save version, update preview
+/app/
+├── backend/
+│   ├── .env
+│   ├── agents/
+│   │   ├── clarification_agent.py
+│   │   ├── code_generation_agent.py
+│   │   ├── deployment_agent.py
+│   │   ├── dev_agent.py
+│   │   ├── orchestrator.py
+│   │   └── testing_agent.py
+│   ├── job_manager.py         # NEW: Async job system
+│   ├── database.py
+│   ├── server.py
+│   └── requirements.txt
+└── frontend/
+    └── src/
+        ├── pages/
+        │   └── BuilderPage.jsx
+        └── ...
 ```
+
+## What's Been Implemented
+
+### Session: Feb 3, 2026
+- **Fixed Blank Preview (P1):** Resolved duplicate icon declarations and missing `auth` helper in preview HTML
+- **Fixed Config File Processing:** Preview now skips tailwind.config.js, vite.config.js, etc.
+- **Implemented Async Job System:**
+  - `/api/projects/{id}/jobs/start` - Start a background build job
+  - `/api/projects/{id}/jobs/{job_id}` - Get job status
+  - `/api/projects/{id}/jobs/active` - Check for active jobs
+  - `/api/projects/{id}/jobs/{job_id}/cancel` - Cancel a job
+  - `/api/projects/{id}/jobs/{job_id}/resume` - Resume a failed job
+- **Job persistence:** Jobs stored in MongoDB, resumable on server restart
+- **Frontend polling:** UI polls for job status updates
+
+### Previous Sessions
+- Multi-agent orchestrator architecture
+- Supabase OAuth connection flow
+- Clarification UI for user questions
+- SSE streaming for real-time updates
+
+## Known Issues
+
+### P0 - Critical
+- OAuth redirect URL not configured for mobile devices (user config issue)
+
+### P1 - High  
+- FIXED: Preview was blank (duplicate icons + missing auth helper)
+
+### P2 - Medium
+- "Skip & Use Defaults" button needs debugging
+- Incremental updates may miss component dependencies (e.g., AuthForm)
 
 ## API Endpoints
 
-### Clarification
-- `POST /api/projects/{id}/clarify` - Analyze prompt, extract requirements
-- `POST /api/projects/{id}/confirm-requirements` - Confirm with user answers
+### Job Management
+- `POST /api/projects/{id}/jobs/start` - Start async build
+- `GET /api/projects/{id}/jobs` - List all jobs
+- `GET /api/projects/{id}/jobs/active` - Get active job
+- `GET /api/projects/{id}/jobs/{job_id}` - Get job status
+- `POST /api/projects/{id}/jobs/{job_id}/cancel` - Cancel job
+- `POST /api/projects/{id}/jobs/{job_id}/resume` - Resume job
 
-### Build Pipeline
-- `POST /api/projects/{id}/build` - Run complete multi-agent pipeline (streaming)
+### Existing
+- `POST /api/projects` - Create project
+- `GET /api/projects/{id}/preview` - Get preview HTML
+- `POST /api/projects/{id}/clarify` - Start clarification
+- `POST /api/projects/{id}/build` - Legacy build (SSE streaming)
 
-### Legacy (still available)
-- `POST /api/projects/{id}/generate/stream` - Legacy generation endpoint
+## Database Schema
 
-## Database Schema Updates
+### projects
+- id, name, description
+- supabase_url, supabase_anon_key, supabase_service_key
+- supabase_connected, current_version
+- requirements (from clarification agent)
 
-### Project Model
-- Added `requirements: Dict` - Stores extracted requirements
-- Added `requirements_confirmed: bool` - Whether requirements are confirmed
+### async_jobs (NEW)
+- id, project_id, prompt
+- status, current_step, progress
+- requirements, supabase_config
+- files, step_results
+- error, fix_attempts, max_fix_attempts
+- created_at, started_at, completed_at
 
-## Implementation Status
+## Next Tasks
 
-### ✅ Completed (Feb 2, 2026)
-1. Created multi-agent system architecture
-2. Implemented all 5 agents + orchestrator
-3. Added Supabase connection requirement
-4. Updated frontend to enforce Supabase connection
-5. Created /build endpoint with streaming pipeline
-6. Requirements storage and validation
+### P0 - Immediate
+1. Ensure incremental updates include all dependencies
+2. Test complete E2E flow: prompt → clarification → generation → preview
 
-### 🔧 To Test
-1. Full pipeline with Supabase OAuth connection
-2. Migration execution on real Supabase project
-3. Edge Function deployment
-4. Fix loop (3 retries)
+### P1 - Soon
+1. Refine Deployment Agent for SQL migrations
+2. Debug "Skip & Use Defaults" button
+3. Verify Dev Agent fix loop
 
-## File References
-- `/app/backend/agents/` - All agent implementations
-- `/app/backend/server.py` - Main API server
-- `/app/frontend/src/pages/BuilderPage.jsx` - Main UI component
+### P2 - Backlog
+- Cancel generation button
+- Syntax highlighting in code viewer
+- Migration history/rollback
+- Refactor monolithic BuilderPage.jsx
 
-## User Flow
-1. User creates new project
-2. System prompts to connect Supabase (REQUIRED)
-3. User connects via OAuth or manual credentials
-4. User enters prompt describing what to build
-5. Clarification Agent analyzes and asks questions (if needed)
-6. User confirms requirements
-7. Code Generation creates files (streaming to UI)
-8. Deployment runs migrations and deploys functions
-9. Testing validates against requirements
-10. If issues: Dev Agent fixes (up to 3x)
-11. Version saved, preview updated
+## 3rd Party Integrations
+- **OpenRouter:** LLM-based code generation
+- **Supabase:** Database, auth, and backend for generated apps
