@@ -4777,20 +4777,25 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_db_client():
-    global database, orchestrator
+    global database, orchestrator, legacy_orchestrator
     database = get_database()
     await database.init()
     logger.info(f"Database initialized: {os.environ.get('DB_TYPE', 'mongodb')}")
     
-    # Initialize multi-agent orchestrator
+    # Initialize multi-agent orchestrators
     if OPENROUTER_API_KEY:
-        orchestrator = AgentOrchestrator(OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
-        logger.info("Agent Orchestrator initialized with all agents")
+        # New architecture orchestrator
+        orchestrator = Orchestrator(OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
+        logger.info("New Orchestrator (v2) initialized with all agents")
         
-        # Initialize async job manager
+        # Legacy orchestrator for backwards compatibility
+        legacy_orchestrator = AgentOrchestrator(OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
+        logger.info("Legacy Orchestrator initialized")
+        
+        # Initialize async job manager with new orchestrator
         global job_manager_instance
         job_manager_instance = init_job_manager(database, orchestrator)
-        logger.info("Job Manager initialized")
+        logger.info("Job Manager initialized with new Orchestrator")
         
         # Resume any interrupted jobs from previous server run
         await job_manager_instance.resume_incomplete_jobs()
