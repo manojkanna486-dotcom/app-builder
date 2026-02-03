@@ -395,125 +395,38 @@ export default function BuilderPage() {
     await doBuild(promptToUse, analysis);
   };
 
-  // Main build function using multi-agent pipeline
+  // Main build function using async job system
+  // Jobs run independently of browser sessions, persist progress, and are resumable
   const doBuild = async (userPrompt, requirements = null) => {
     setGenerating(true);
-    setGenerationStatus("🚀 Starting build pipeline...");
+    setGenerationStatus("🚀 Starting async build job...");
     setStreamingCode("");
     setViewMode("code");
 
     try {
-      // Use the new /build endpoint for multi-agent pipeline
-      const response = await fetch(`${API}/projects/${projectId}/build`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          prompt: userPrompt,
-          confirmed_requirements: requirements,
-        }),
+      // Start the async job - this will continue even if browser closes
+      const startRes = await axios.post(`${API}/projects/${projectId}/jobs/start`, {
+        prompt: userPrompt,
+        confirmed_requirements: requirements,
       });
 
-      // Check for HTTP errors before trying to read stream
-      if (!response.ok) {
-        // Response is not streaming, it's an error JSON
-        const errorText = await response.text();
-        let errorMessage = `Build failed (${response.status})`;
-        try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.detail || errorMessage;
-          
-          // Special handling for OAuth expiration
-          if (errorMessage.includes("OAuth token expired") || errorMessage.includes("reconnect")) {
-            toast.error("Supabase session expired. Click 'Disconnect' then reconnect to continue.");
-            setGenerating(false);
-            return;
-          }
-        } catch {
-          if (errorText) errorMessage = errorText;
-        }
-        throw new Error(errorMessage);
-      }
+      const jobId = startRes.data.job_id;
+      setGenerationTaskId(jobId);
       
-      // For streaming endpoints, read the stream
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              
-              if (data.type === "status") {
-                setGenerationStatus(data.message || data.stage);
-              } else if (data.type === "code") {
-                setStreamingCode((prev) => prev + data.content);
-              } else if (data.type === "deploy_result") {
-                if (data.status === "success") {
-                  toast.success("📦 Deployed to Supabase!");
-                } else if (data.errors?.length > 0) {
-                  toast.warning(`⚠️ Deployment had ${data.errors.length} errors`);
-                }
-              } else if (data.type === "test_result") {
-                if (data.failed === 0) {
-                  toast.success(`✅ All ${data.total} tests passed!`);
-                } else {
-                  toast.warning(`🧪 ${data.passed}/${data.total} tests passed`);
-                }
-              } else if (data.type === "fix_result") {
-                if (data.status === "success") {
-                  toast.info(`🔧 Applied ${data.fixes?.length || 0} fixes`);
-                }
-              } else if (data.type === "version_saved") {
-                toast.success(`🎉 Version ${data.version} saved with ${data.files_count} files!`);
-              } else if (data.type === "complete") {
-                if (data.files?.length > 0) {
-                  setFiles(data.files);
-                  const stillExists = data.files.some((f) => f.path === selectedFile);
-                  if (!stillExists) {
-                    setSelectedFile(data.files[0].path);
-                  }
-                }
-                
-                // Refresh preview and data
-                const [previewRes, messagesRes, versionsRes] = await Promise.all([
-                  axios.get(`${API}/projects/${projectId}/preview`),
-                  axios.get(`${API}/projects/${projectId}/messages`),
-                  axios.get(`${API}/projects/${projectId}/versions`),
-                ]);
-                
-                setPreviewHtml(previewRes.data.html);
-                setMessages(messagesRes.data);
-                setVersions(versionsRes.data);
-                
-                if (data.status === "success") {
-                  toast.success("🎉 App built successfully!");
-                } else if (data.status === "partial") {
-                  toast.warning(data.message || "Build completed with some issues");
-                }
-                
-                setViewMode("preview");
-              } else if (data.type === "error") {
-                throw new Error(data.message);
-              }
-            } catch (parseErr) {
-              // Ignore JSON parse errors for incomplete chunks
-            }
-          }
-        }
-      }
+      toast.success("Build job started! It will continue even if you close the browser.");
+      
+      // Poll for job status
+      await pollJobStatus(jobId);
+      
     } catch (err) {
-      toast.error(err.message || "Build failed");
+      const errorMessage = err.response?.data?.detail || err.message || "Build failed";
+      
+      // Special handling for OAuth expiration
+      if (errorMessage.includes("OAuth token expired") || errorMessage.includes("reconnect")) {
+        toast.error("Supabase session expired. Click 'Disconnect' then reconnect to continue.");
+      } else {
+        toast.error(errorMessage);
+      }
     } finally {
       setGenerating(false);
       setGenerationStatus("");
@@ -521,12 +434,89 @@ export default function BuilderPage() {
     }
   };
 
+  // Poll for async job status
+  const pollJobStatus = async (jobId) => {
+    const pollInterval = 2000; // 2 seconds
+    const maxPollTime = 600000; // 10 minutes max
+    const startTime = Date.now();
+
+    const poll = async () => {
+      try {
+        const statusRes = await axios.get(`${API}/projects/${projectId}/jobs/${jobId}`);
+        const job = statusRes.data;
+
+        // Update UI with job status
+        const statusMap = {
+          pending: "⏳ Job queued...",
+          running: "🚀 Starting...",
+          clarifying: "📋 Analyzing requirements...",
+          generating: "💻 Generating code...",
+          deploying: "📦 Deploying to Supabase...",
+          testing: "🧪 Running tests...",
+          fixing: `🔧 Fixing issues (attempt ${job.fix_attempts || 0}/3)...`,
+          completed: "✅ Completed!",
+          failed: "❌ Failed",
+          canceled: "🚫 Canceled",
+        };
+
+        setGenerationStatus(statusMap[job.status] || job.current_step || job.status);
+        setGenerationProgress(job.progress || 0);
+
+        // Show step results in streaming code area
+        if (job.step_results) {
+          const resultText = Object.entries(job.step_results)
+            .map(([step, result]) => `// ${step}: ${JSON.stringify(result).slice(0, 200)}...`)
+            .join('\n');
+          setStreamingCode(resultText);
+        }
+
+        if (job.status === "completed") {
+          // Load the completed results
+          await loadGenerationResults();
+          setGenerating(false);
+          setGenerationStatus("");
+          setGenerationTaskId(null);
+          toast.success(`🎉 Version ${job.version_number || 'new'} built successfully!`);
+          return;
+        } else if (job.status === "failed") {
+          setGenerating(false);
+          setGenerationStatus("");
+          setGenerationTaskId(null);
+          toast.error(`❌ Build failed: ${job.error || "Unknown error"}`);
+          return;
+        } else if (job.status === "canceled") {
+          setGenerating(false);
+          setGenerationStatus("");
+          setGenerationTaskId(null);
+          toast.info("🚫 Build was canceled");
+          return;
+        }
+
+        // Still running - continue polling
+        if (Date.now() - startTime < maxPollTime) {
+          setTimeout(poll, pollInterval);
+        } else {
+          toast.info("Build is still running in the background. Refresh the page to check status.");
+          setGenerating(false);
+        }
+      } catch (err) {
+        console.error("Poll error:", err);
+        // Continue polling on error
+        if (Date.now() - startTime < maxPollTime) {
+          setTimeout(poll, pollInterval);
+        }
+      }
+    };
+
+    await poll();
+  };
+
   // Legacy doGenerate for backwards compatibility (redirect to doBuild)
   const doGenerate = async (userPrompt) => {
     await doBuild(userPrompt, null);
   };
 
-  // Poll for generation status
+  // Poll for generation status (legacy - for old tasks)
   const pollGenerationStatus = async (taskId) => {
     const pollInterval = 2000; // 2 seconds
     const maxPollTime = 600000; // 10 minutes max
