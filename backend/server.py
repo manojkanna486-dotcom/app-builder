@@ -3676,7 +3676,6 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
 
 # ==================== PREVIEW GENERATION ====================
 
-@api_router.get("/projects/{project_id}/preview")
 async def get_merged_files_for_project(project_id: str) -> List[dict]:
     """
     Get merged files from all versions of a project.
@@ -3695,6 +3694,7 @@ async def get_merged_files_for_project(project_id: str) -> List[dict]:
     
     return list(merged_files.values())
 
+@api_router.get("/projects/{project_id}/preview")
 async def get_preview_html(project_id: str):
     """Generate HTML for iframe preview (returns JSON with html field)"""
     
