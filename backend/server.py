@@ -4478,13 +4478,32 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
             const { path } = useContext(RouterContext);
             const routes = React.Children.toArray(children);
             
+            // Normalize path
+            const normalizedPath = path === '' ? '/' : path;
+            
+            // Try exact match first
             for (const route of routes) {
-                if (route.props.path === path || route.props.path === '*') {
+                const routePath = route.props.path;
+                if (routePath === normalizedPath) {
                     return route.props.element || route.props.children;
                 }
             }
             
-            // Default to first route or children
+            // Try partial match (e.g., /feed matches /)
+            for (const route of routes) {
+                const routePath = route.props.path;
+                if (routePath && routePath !== '*' && normalizedPath.startsWith(routePath) && routePath.length > 1) {
+                    return route.props.element || route.props.children;
+                }
+            }
+            
+            // Check wildcard route
+            const wildcardRoute = routes.find(r => r.props.path === '*');
+            if (wildcardRoute) {
+                return wildcardRoute.props.element || wildcardRoute.props.children;
+            }
+            
+            // Default to first route
             return routes[0]?.props?.element || routes[0]?.props?.children || children;
         };
         
