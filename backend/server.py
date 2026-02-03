@@ -4260,12 +4260,34 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
     all_code_parts = []
     defined_components = set()  # Track component names already defined
     
+    # Config files to skip - these are not runnable code in browser context
+    config_files_to_skip = [
+        'tailwind.config.js', 'tailwind.config.ts',
+        'vite.config.js', 'vite.config.ts',
+        'postcss.config.js', 'postcss.config.ts',
+        'tsconfig.json', 'package.json',
+        'eslint.config.js', '.eslintrc.js',
+        'babel.config.js', '.babelrc'
+    ]
+    
     for f in sorted_files:
         # Double-check: skip any .env files that somehow got through
         if ".env" in f.get("path", ""):
             continue
         
         file_path = f.get("path", "")
+        
+        # Skip config files that would break the preview
+        filename_lower = file_path.split("/")[-1].lower()
+        if any(cfg.lower() in filename_lower for cfg in config_files_to_skip):
+            logger.info(f"Skipping config file in preview: {file_path}")
+            continue
+        
+        # Skip JSON files entirely
+        if file_path.endswith('.json'):
+            logger.info(f"Skipping JSON file in preview: {file_path}")
+            continue
+        
         cleaned = clean_component_code(f["content"])
         
         # Extract component name from file path (e.g., Header.jsx -> Header)
