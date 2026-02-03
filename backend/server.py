@@ -3677,15 +3677,34 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
 # ==================== PREVIEW GENERATION ====================
 
 @api_router.get("/projects/{project_id}/preview")
+async def get_merged_files_for_project(project_id: str) -> List[dict]:
+    """
+    Get merged files from all versions of a project.
+    Later versions override earlier versions for the same file path.
+    """
+    all_versions = await database.get_all_versions(project_id)
+    
+    if not all_versions:
+        return []
+    
+    # Merge files - later versions override earlier ones
+    merged_files = {}
+    for version in reversed(all_versions):  # oldest first
+        for f in version.get("files", []):
+            merged_files[f.get("path")] = f
+    
+    return list(merged_files.values())
+
 async def get_preview_html(project_id: str):
     """Generate HTML for iframe preview (returns JSON with html field)"""
     
     # Get project for Supabase credentials
     project = await database.get_project(project_id)
     
-    version = await database.get_latest_version(project_id)
+    # Get merged files from all versions
+    merged_files = await get_merged_files_for_project(project_id)
     
-    if not version or not version.get("files"):
+    if not merged_files:
         # Return placeholder
         return {"html": get_placeholder_html()}
     
@@ -3697,8 +3716,8 @@ async def get_preview_html(project_id: str):
             "anon_key": project.get("supabase_anon_key", "")
         }
     
-    # Pass all files and supabase config to the preview generator
-    html = generate_preview_html_multifile(version["files"], supabase_config)
+    # Pass merged files and supabase config to the preview generator
+    html = generate_preview_html_multifile(merged_files, supabase_config)
     return {"html": html}
 
 @api_router.get("/projects/{project_id}/preview/live")
@@ -3709,9 +3728,10 @@ async def get_preview_live(project_id: str):
     # Get project for Supabase credentials
     project = await database.get_project(project_id)
     
-    version = await database.get_latest_version(project_id)
+    # Get merged files from all versions
+    merged_files = await get_merged_files_for_project(project_id)
     
-    if not version or not version.get("files"):
+    if not merged_files:
         return HTMLResponse(content=get_placeholder_html(), status_code=200)
     
     # Get Supabase config if connected
@@ -3723,7 +3743,7 @@ async def get_preview_live(project_id: str):
         }
     
     # Generate and return HTML directly
-    html = generate_preview_html_multifile(version["files"], supabase_config)
+    html = generate_preview_html_multifile(merged_files, supabase_config)
     return HTMLResponse(content=html, status_code=200)
 
 @api_router.get("/projects/{project_id}/export")
