@@ -29,12 +29,16 @@ database: DatabaseInterface = None
 # Multi-Agent System
 from agents import AgentOrchestrator, TestingAgent, ClarificationAgent
 
+# Async Job Manager
+from job_manager import JobManager, init_job_manager, get_job_manager, JobStatus
+
 # OpenRouter config
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Initialize orchestrator (will be set in lifespan)
 orchestrator: AgentOrchestrator = None
+job_manager_instance: JobManager = None
 
 # Supabase OAuth config
 SUPABASE_OAUTH_CLIENT_ID = os.environ.get('SUPABASE_OAUTH_CLIENT_ID')
