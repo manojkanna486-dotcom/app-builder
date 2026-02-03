@@ -4139,6 +4139,10 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
     
     all_code = "\n\n".join(all_code_parts)
     
+    # CRITICAL: Transform import.meta.env to window.importMeta.env
+    # Babel standalone can't handle import.meta syntax, so we preprocess it
+    all_code = all_code.replace("import.meta.env", "window.importMeta.env")
+    
     # Add Supabase library and config if needed
     supabase_script = ""
     supabase_init = ""
