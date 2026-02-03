@@ -17,7 +17,7 @@ Build a full-stack "App Builder" that generates FastAPI backends and React front
 4. **Testing Agent:** Runs automated tests to validate requirements
 5. **Dev Agent:** Fixes code if tests fail (max 3 retries)
 
-### Async Job System (NEW - Feb 2026)
+### Async Job System
 Jobs run independently of browser sessions:
 1. Run independently of any browser/UI session
 2. Continue execution until completed or canceled
@@ -37,7 +37,7 @@ Jobs run independently of browser sessions:
 │   │   ├── dev_agent.py
 │   │   ├── orchestrator.py
 │   │   └── testing_agent.py
-│   ├── job_manager.py         # NEW: Async job system
+│   ├── job_manager.py         # Async job system
 │   ├── database.py
 │   ├── server.py
 │   └── requirements.txt
@@ -51,34 +51,19 @@ Jobs run independently of browser sessions:
 ## What's Been Implemented
 
 ### Session: Feb 3, 2026
-- **Fixed Blank Preview (P1):** Resolved duplicate icon declarations and missing `auth` helper in preview HTML
-- **Fixed Config File Processing:** Preview now skips tailwind.config.js, vite.config.js, etc.
-- **Implemented Async Job System:**
-  - `/api/projects/{id}/jobs/start` - Start a background build job
-  - `/api/projects/{id}/jobs/{job_id}` - Get job status
-  - `/api/projects/{id}/jobs/active` - Check for active jobs
-  - `/api/projects/{id}/jobs/{job_id}/cancel` - Cancel a job
-  - `/api/projects/{id}/jobs/{job_id}/resume` - Resume a failed job
-- **Job persistence:** Jobs stored in MongoDB, resumable on server restart
-- **Frontend polling:** UI polls for job status updates
 
-### Previous Sessions
-- Multi-agent orchestrator architecture
-- Supabase OAuth connection flow
-- Clarification UI for user questions
-- SSE streaming for real-time updates
+**Major Fixes:**
+1. ✅ **Fixed Blank Preview** - Resolved duplicate icon declarations, added `auth` helper for Supabase
+2. ✅ **Fixed Config File Processing** - Preview skips tailwind.config.js, vite.config.js, etc.
+3. ✅ **Implemented Async Job System** - Jobs run independently, persist in MongoDB, resumable
+4. ✅ **Fixed Version Merging** - Preview now merges files from ALL versions (not just latest)
+5. ✅ **Fixed Version Status Filter** - Now includes both "success" and "partial" status versions
 
-## Known Issues
-
-### P0 - Critical
-- OAuth redirect URL not configured for mobile devices (user config issue)
-
-### P1 - High  
-- FIXED: Preview was blank (duplicate icons + missing auth helper)
-
-### P2 - Medium
-- "Skip & Use Defaults" button needs debugging
-- Incremental updates may miss component dependencies (e.g., AuthForm)
+**End-to-End Test Completed:**
+- Created "Social Feed App" with Supabase credentials
+- Generated 21 files including Auth, Feed, Post, Profile components
+- Added dark mode feature (version 2 with 7 additional files)
+- Preview correctly shows merged files from both versions
 
 ## API Endpoints
 
@@ -90,11 +75,13 @@ Jobs run independently of browser sessions:
 - `POST /api/projects/{id}/jobs/{job_id}/cancel` - Cancel job
 - `POST /api/projects/{id}/jobs/{job_id}/resume` - Resume job
 
-### Existing
+### Project Management
 - `POST /api/projects` - Create project
-- `GET /api/projects/{id}/preview` - Get preview HTML
+- `POST /api/projects/{id}/connect-supabase` - Connect Supabase credentials
+- `GET /api/projects/{id}/preview` - Get preview HTML (merged files)
+- `GET /api/projects/{id}/preview/live` - Get live preview page
 - `POST /api/projects/{id}/clarify` - Start clarification
-- `POST /api/projects/{id}/build` - Legacy build (SSE streaming)
+- `GET /api/projects/{id}/versions` - Get all versions
 
 ## Database Schema
 
@@ -102,9 +89,8 @@ Jobs run independently of browser sessions:
 - id, name, description
 - supabase_url, supabase_anon_key, supabase_service_key
 - supabase_connected, current_version
-- requirements (from clarification agent)
 
-### async_jobs (NEW)
+### async_jobs
 - id, project_id, prompt
 - status, current_step, progress
 - requirements, supabase_config
@@ -112,19 +98,61 @@ Jobs run independently of browser sessions:
 - error, fix_attempts, max_fix_attempts
 - created_at, started_at, completed_at
 
+### versions
+- id, project_id, version_number
+- files, prompt, status (success/partial)
+- delta_plan, created_at
+
+## Supabase Setup
+
+Add these redirect URLs to your Supabase project:
+```
+https://promptcraft-269.preview.emergentagent.com/api/auth/supabase/callback
+https://promptcraft-269.preview.emergentagent.com
+```
+
+Location: Supabase Dashboard → Authentication → URL Configuration → Redirect URLs
+
+## Test Results
+
+### Social Feed App (E2E Test)
+- **Version 1:** 21 files generated
+  - Auth components (SignIn, SignUp)
+  - Feed, Post, CreatePost components
+  - Profile, Navbar, LoadingSpinner
+  - 4 database migrations
+  - Config files (package.json, vite, tailwind)
+
+- **Version 2:** 7 files added/updated
+  - ThemeToggle component
+  - useTheme hook
+  - Updated Navbar, App.jsx, index.css
+  - User preferences migration
+
+## Known Issues
+
+### Resolved
+- ✅ Blank preview (duplicate icons, missing auth helper)
+- ✅ Config files breaking preview (now filtered)
+- ✅ Incremental updates missing dependencies (now merged)
+- ✅ Only "success" versions shown (now includes "partial")
+
+### Outstanding
+- ⚠️ OAuth redirect URL needs manual configuration for mobile
+- ⚠️ "Skip & Use Defaults" button needs debugging
+
 ## Next Tasks
 
 ### P0 - Immediate
-1. Ensure incremental updates include all dependencies
-2. Test complete E2E flow: prompt → clarification → generation → preview
+1. Debug "Skip & Use Defaults" button
+2. Add real-time job progress in UI (WebSocket or frequent polling)
 
 ### P1 - Soon
 1. Refine Deployment Agent for SQL migrations
-2. Debug "Skip & Use Defaults" button
-3. Verify Dev Agent fix loop
+2. Add cancel job button in UI
+3. Show job history panel
 
 ### P2 - Backlog
-- Cancel generation button
 - Syntax highlighting in code viewer
 - Migration history/rollback
 - Refactor monolithic BuilderPage.jsx
