@@ -178,27 +178,73 @@ class CodeGenerationAgent:
         # Handle case where requirements might be stored differently
         if isinstance(requirements, str):
             logger.error(f"Requirements is a string: {requirements[:200]}")
-            requirements = {"requirements": [], "app_name": "App", "app_description": "", "pages": ["Home"]}
+            requirements = {"features": [], "app_name": "App", "app_description": "", "pages": []}
         
+        # Build features/requirements list (support both old and new formats)
+        features_text = ""
+        
+        # New format: features array
+        features = requirements.get("features", [])
+        if features and isinstance(features, list):
+            for f in features:
+                if isinstance(f, dict):
+                    features_text += f"- [{f.get('id', 'N/A')}] {f.get('name', '')}: {f.get('description', '')} [Priority: {f.get('priority', 'medium')}]\n"
+        
+        # Old format: requirements array (backwards compatibility)
         reqs_list = requirements.get("requirements", [])
-        if isinstance(reqs_list, str):
-            logger.error(f"Requirements list is a string")
-            reqs_list = []
+        if reqs_list and isinstance(reqs_list, list):
+            for r in reqs_list:
+                if isinstance(r, dict):
+                    features_text += f"- [{r.get('id', 'N/A')}] ({r.get('category', 'feature')}) {r.get('description', '')} [Priority: {r.get('priority', 'medium')}]\n"
         
-        req_list = "\n".join([
-            f"- [{r.get('id', 'N/A')}] ({r.get('category', 'feature')}) {r.get('description', '')} [Priority: {r.get('priority', 'medium')}]"
-            for r in reqs_list if isinstance(r, dict)
-        ])
-        
+        # Build schema info (support both old and new formats)
         schema_info = ""
-        if requirements.get("database_schema", {}).get("tables"):
+        
+        # New format: data_models array
+        data_models = requirements.get("data_models", [])
+        if data_models and isinstance(data_models, list):
+            schema_info = "DATABASE SCHEMA TO CREATE:\n"
+            for model in data_models:
+                if isinstance(model, dict):
+                    model_name = model.get("name", "Unknown")
+                    table_name = model.get("table_name", model_name.lower() + "s")
+                    fields = model.get("fields", [])
+                    cols = ", ".join([f"{c.get('name', 'col')} {c.get('type', 'text')}" for c in fields if isinstance(c, dict)])
+                    schema_info += f"- {table_name} ({model_name}): {cols}\n"
+                    
+                    # Add RLS info if present
+                    if model.get("rls_enabled", True):
+                        schema_info += f"  (RLS enabled)\n"
+        
+        # Old format: database_schema.tables (backwards compatibility)
+        if not schema_info and requirements.get("database_schema", {}).get("tables"):
             tables = requirements["database_schema"]["tables"]
             schema_info = "DATABASE SCHEMA TO CREATE:\n"
             for table in tables:
-                cols = ", ".join([f"{c['name']} {c['type']}" for c in table.get("columns", [])])
-                schema_info += f"- {table['name']}: {cols}\n"
+                if isinstance(table, dict):
+                    cols = ", ".join([f"{c['name']} {c['type']}" for c in table.get("columns", []) if isinstance(c, dict)])
+                    schema_info += f"- {table.get('name', 'table')}: {cols}\n"
         
-        pages_info = ", ".join(requirements.get("pages", ["Home"]))
+        # Build pages info (support both old and new formats)
+        pages = requirements.get("pages", [])
+        if isinstance(pages, list):
+            if pages and isinstance(pages[0], dict):
+                # New format: pages as dicts with name, route, etc.
+                pages_info = ", ".join([f"{p.get('name', 'Page')} ({p.get('route', '/')})" for p in pages if isinstance(p, dict)])
+            else:
+                # Old format: pages as strings
+                pages_info = ", ".join([str(p) for p in pages])
+        else:
+            pages_info = "Home"
+        
+        # Build permissions/RLS info
+        permissions_info = ""
+        permissions = requirements.get("permissions", [])
+        if permissions and isinstance(permissions, list):
+            permissions_info = "\nROW LEVEL SECURITY POLICIES:\n"
+            for perm in permissions:
+                if isinstance(perm, dict):
+                    permissions_info += f"- {perm.get('model', 'model')}: {perm.get('role', 'user')} can {', '.join(perm.get('actions', []))} where {perm.get('condition', 'true')}\n"
         
         supabase_url = supabase_config.get("url", "YOUR_SUPABASE_URL")
         
@@ -207,10 +253,11 @@ class CodeGenerationAgent:
 APP NAME: {requirements.get('app_name', 'My App')}
 DESCRIPTION: {requirements.get('app_description', '')}
 
-REQUIREMENTS:
-{req_list}
+FEATURES/REQUIREMENTS:
+{features_text}
 
 {schema_info}
+{permissions_info}
 
 PAGES TO CREATE: {pages_info}
 
@@ -219,14 +266,16 @@ SUPABASE PROJECT URL: {supabase_url}
 Generate ALL necessary files including:
 1. React components with Supabase data fetching
 2. SQL migrations for the database schema (with RLS policies)
-3. Edge Functions if complex backend logic is needed
-4. Supabase client configuration
+3. Supabase client configuration with auth helpers
+4. All UI components with Tailwind CSS styling
 
 Remember:
 - NO mock data - connect directly to Supabase
-- Include proper loading and error states
+- Include proper loading and error states  
 - Make responsive with Tailwind CSS
 - Use Lucide React for icons
+- Include proper error handling
+- Implement RLS policies for security
 """
 
         if is_update and existing_files:
