@@ -3046,6 +3046,150 @@ async def get_generation_task(project_id: str, task_id: str):
     
     return task
 
+# ==================== ASYNC JOB SYSTEM ====================
+# Jobs run independently of browser sessions, persist progress, and are resumable
+
+class AsyncBuildRequest(BaseModel):
+    """Request to start an async build job"""
+    prompt: str
+    confirmed_requirements: Optional[Dict] = None
+
+@api_router.post("/projects/{project_id}/jobs/start")
+async def start_async_build(project_id: str, request: AsyncBuildRequest):
+    """
+    Start an async build job that runs independently of browser session.
+    
+    Features:
+    - Runs independently of any browser/UI session
+    - Continues execution until completed or canceled
+    - Persists progress after every step
+    - Resumable after failure or restart
+    """
+    if not job_manager_instance:
+        raise HTTPException(status_code=500, detail="Job manager not initialized")
+    
+    # Get project
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check Supabase connection - REQUIRED
+    if not project.get("supabase_connected"):
+        raise HTTPException(
+            status_code=400,
+            detail="Supabase connection required. Please connect your Supabase project first."
+        )
+    
+    # Prepare Supabase config
+    supabase_config = {
+        "url": project.get("supabase_url"),
+        "anon_key": project.get("supabase_anon_key"),
+        "service_key": project.get("supabase_service_key"),
+        "project_ref": project.get("supabase_project_ref") or extract_project_ref(project.get("supabase_url", "")),
+    }
+    
+    # Create the job
+    job_id = await job_manager_instance.create_job(
+        project_id=project_id,
+        prompt=request.prompt,
+        requirements=request.confirmed_requirements,
+        supabase_config=supabase_config,
+    )
+    
+    # Start the job in the background
+    await job_manager_instance.start_job(job_id)
+    
+    # Save user message
+    await database.create_message({
+        "id": str(uuid.uuid4()),
+        "project_id": project_id,
+        "role": "user",
+        "content": request.prompt,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    
+    return {
+        "job_id": job_id,
+        "status": "started",
+        "message": "Build job started. It will continue running even if you close the browser."
+    }
+
+@api_router.get("/projects/{project_id}/jobs")
+async def list_project_jobs(project_id: str):
+    """List all jobs for a project"""
+    if not job_manager_instance:
+        raise HTTPException(status_code=500, detail="Job manager not initialized")
+    
+    jobs = await job_manager_instance.get_project_jobs(project_id)
+    return {"jobs": jobs}
+
+@api_router.get("/projects/{project_id}/jobs/{job_id}")
+async def get_job_status(project_id: str, job_id: str):
+    """Get status of a specific job"""
+    if not job_manager_instance:
+        raise HTTPException(status_code=500, detail="Job manager not initialized")
+    
+    job = await job_manager_instance.get_job_status(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job["project_id"] != project_id:
+        raise HTTPException(status_code=403, detail="Job does not belong to this project")
+    
+    return job
+
+@api_router.post("/projects/{project_id}/jobs/{job_id}/cancel")
+async def cancel_job(project_id: str, job_id: str):
+    """Cancel a running job"""
+    if not job_manager_instance:
+        raise HTTPException(status_code=500, detail="Job manager not initialized")
+    
+    job = await job_manager_instance.get_job_status(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job["project_id"] != project_id:
+        raise HTTPException(status_code=403, detail="Job does not belong to this project")
+    
+    await job_manager_instance.cancel_job(job_id)
+    return {"status": "canceled", "message": "Job has been canceled"}
+
+@api_router.post("/projects/{project_id}/jobs/{job_id}/resume")
+async def resume_job(project_id: str, job_id: str):
+    """Resume a failed or interrupted job"""
+    if not job_manager_instance:
+        raise HTTPException(status_code=500, detail="Job manager not initialized")
+    
+    job = await job_manager_instance.get_job_status(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job["project_id"] != project_id:
+        raise HTTPException(status_code=403, detail="Job does not belong to this project")
+    
+    if job["status"] == JobStatus.COMPLETED:
+        raise HTTPException(status_code=400, detail="Job is already completed")
+    
+    if job["status"] == JobStatus.RUNNING:
+        raise HTTPException(status_code=400, detail="Job is already running")
+    
+    await job_manager_instance.start_job(job_id)
+    return {"status": "resumed", "message": "Job has been resumed"}
+
+@api_router.get("/projects/{project_id}/jobs/active")
+async def get_active_job(project_id: str):
+    """Get the currently active (running) job for a project, if any"""
+    if not job_manager_instance:
+        return {"active_job": None}
+    
+    jobs = await job_manager_instance.get_project_jobs(project_id)
+    
+    # Find any running job
+    active_statuses = ["pending", "running", "generating", "deploying", "testing", "fixing", "clarifying"]
+    active_job = next((j for j in jobs if j.get("status") in active_statuses), None)
+    
+    return {"active_job": active_job}
+
 # ==================== STREAMING GENERATION ====================
 
 @api_router.post("/projects/{project_id}/generate/stream")
