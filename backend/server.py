@@ -4428,6 +4428,7 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/react-router-dom@6/dist/umd/react-router-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     """ + supabase_script + """
     <script src="https://cdn.tailwindcss.com"></script>
@@ -4449,6 +4450,11 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback, useMemo, useContext, createContext, useReducer } = React;
+        
+        // React Router DOM - destructure from global
+        const { BrowserRouter, HashRouter, Routes, Route, Link, NavLink, useNavigate, useParams, useLocation, useSearchParams, Navigate, Outlet } = ReactRouterDOM;
+        // Alias Router to HashRouter for preview (works without server-side routing)
+        const Router = HashRouter;
         
         // Mock Lucide Icons (common icons used in generated code)
         const createIcon = (path) => ({ className = "", size = 24, ...props }) => (
