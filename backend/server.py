@@ -27,7 +27,18 @@ from database import get_database, DatabaseInterface
 database: DatabaseInterface = None
 
 # Multi-Agent System
-from agents import AgentOrchestrator, TestingAgent, ClarificationAgent
+# Multi-Agent System - New Architecture
+from agents import (
+    Orchestrator,
+    RequirementsAgent, 
+    ConversationalTesterAgent, 
+    FixAgent,
+    BuildState,
+    # Legacy imports for backwards compatibility
+    AgentOrchestrator, 
+    TestingAgent, 
+    ClarificationAgent
+)
 
 # Async Job Manager
 from job_manager import JobManager, init_job_manager, get_job_manager, JobStatus
