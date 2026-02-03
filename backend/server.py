@@ -4338,6 +4338,33 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         // CRITICAL: Also expose as 'supabase' - this is what App.jsx imports
         const supabase = supabaseClient;
         
+        // CRITICAL: Auth helper object - many generated apps use this pattern
+        const auth = {{
+            signUp: async (email, password) => {{
+                const {{ data, error }} = await supabase.auth.signUp({{ email, password }});
+                return {{ data, error }};
+            }},
+            signIn: async (email, password) => {{
+                const {{ data, error }} = await supabase.auth.signInWithPassword({{ email, password }});
+                return {{ data, error }};
+            }},
+            signOut: async () => {{
+                const {{ error }} = await supabase.auth.signOut();
+                return {{ error }};
+            }},
+            getUser: async () => {{
+                const {{ data: {{ user }}, error }} = await supabase.auth.getUser();
+                return {{ user, error }};
+            }},
+            getSession: async () => {{
+                const {{ data: {{ session }}, error }} = await supabase.auth.getSession();
+                return {{ session, error }};
+            }},
+            onAuthStateChange: (callback) => {{
+                return supabase.auth.onAuthStateChange(callback);
+            }}
+        }};
+        
         // Mock process.env for preview
         if (typeof process === 'undefined') {{
             window.process = {{ env: {{
