@@ -48,7 +48,8 @@ OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Initialize orchestrator (will be set in lifespan)
-orchestrator: AgentOrchestrator = None
+orchestrator: Orchestrator = None
+legacy_orchestrator: AgentOrchestrator = None
 job_manager_instance: JobManager = None
 
 # Supabase OAuth config
