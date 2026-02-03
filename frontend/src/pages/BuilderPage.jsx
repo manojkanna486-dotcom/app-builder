@@ -614,12 +614,25 @@ export default function BuilderPage() {
     }
   };
 
-  // Check for active generation on page load
+  // Check for active async jobs on page load
   useEffect(() => {
-    const checkActiveGeneration = async () => {
+    const checkActiveJob = async () => {
       if (!projectId) return;
       
       try {
+        // Check for active async jobs (new system)
+        const activeJobRes = await axios.get(`${API}/projects/${projectId}/jobs/active`);
+        const activeJob = activeJobRes.data.active_job;
+        
+        if (activeJob) {
+          setGenerating(true);
+          setGenerationTaskId(activeJob.id);
+          toast.info("🔄 Resuming build progress...");
+          await pollJobStatus(activeJob.id);
+          return;
+        }
+        
+        // Fallback: check legacy generation status
         const statusRes = await axios.get(`${API}/projects/${projectId}/generate/status`);
         if (statusRes.data.is_running) {
           setGenerating(true);
@@ -634,7 +647,7 @@ export default function BuilderPage() {
           const now = new Date();
           const diffMs = now - completedAt;
           if (diffMs < 60000) { // Within last minute
-            toast.success(`✅ Generation completed while you were away!`);
+            toast.success(`✅ Build completed while you were away!`);
             await loadGenerationResults();
           }
         }
@@ -643,7 +656,7 @@ export default function BuilderPage() {
       }
     };
 
-    checkActiveGeneration();
+    checkActiveJob();
   }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refreshPreview = () => {
