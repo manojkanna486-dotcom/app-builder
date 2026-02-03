@@ -4173,11 +4173,25 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         }}
         
         // Mock import.meta.env for Vite-style env variables
+        // CRITICAL: Must define import.meta.env properly for Vite-based code
         if (typeof window !== 'undefined') {{
-            window.importMetaEnv = {{
-                VITE_SUPABASE_URL: SUPABASE_URL,
-                VITE_SUPABASE_ANON_KEY: SUPABASE_ANON_KEY
-            }};
+            // Create a proper import.meta mock that code can access via import.meta.env
+            Object.defineProperty(window, 'importMeta', {{
+                value: {{
+                    env: {{
+                        VITE_SUPABASE_URL: SUPABASE_URL,
+                        VITE_SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
+                        MODE: 'production',
+                        DEV: false,
+                        PROD: true,
+                        BASE_URL: '/'
+                    }}
+                }},
+                writable: true,
+                configurable: true
+            }});
+            // Also set as window property for direct access
+            window.importMetaEnv = window.importMeta.env;
         }}
         
         // Override any variables that might be used for Supabase config
