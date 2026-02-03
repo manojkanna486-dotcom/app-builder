@@ -1,9 +1,10 @@
 """
 Async Job Manager - Runs generation jobs independently of browser sessions
+Uses the new Orchestrator (v2) with proper agent separation.
 
 Key Features:
 1. Jobs run independently of any browser or UI session
-2. Jobs continue execution until completed or explicitly canceled
+2. Jobs continue execution until completed or canceled
 3. Progress is persisted after every step
 4. Jobs are resumable after failure or restart
 """
@@ -22,7 +23,8 @@ logger = logging.getLogger(__name__)
 class JobStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
-    CLARIFYING = "clarifying"
+    PARSING_REQUIREMENTS = "parsing_requirements"
+    AWAITING_CLARIFICATION = "awaiting_clarification"
     GENERATING = "generating"
     DEPLOYING = "deploying"
     TESTING = "testing"
@@ -34,7 +36,7 @@ class JobStatus(str, Enum):
 
 class JobStep(str, Enum):
     INIT = "init"
-    CLARIFY = "clarify"
+    REQUIREMENTS = "requirements"
     GENERATE = "generate"
     DEPLOY = "deploy"
     TEST = "test"
@@ -46,6 +48,7 @@ class JobStep(str, Enum):
 class JobManager:
     """
     Manages async generation jobs that persist independently of browser sessions.
+    Uses the new Orchestrator v2 architecture.
     """
     
     def __init__(self, database, orchestrator):
@@ -53,6 +56,7 @@ class JobManager:
         self.orchestrator = orchestrator
         self._running_jobs: Dict[str, asyncio.Task] = {}
         self._job_locks: Dict[str, asyncio.Lock] = {}
+        self._cancelled_jobs: set = set()
         
     async def create_job(
         self,
@@ -76,6 +80,7 @@ class JobManager:
             "supabase_config": supabase_config,
             "files": [],
             "step_results": {},
+            "test_results": None,
             "error": None,
             "fix_attempts": 0,
             "max_fix_attempts": 3,
@@ -123,6 +128,8 @@ class JobManager:
     async def cancel_job(self, job_id: str) -> bool:
         """Cancel a running job"""
         
+        self._cancelled_jobs.add(job_id)
+        
         if job_id in self._running_jobs:
             self._running_jobs[job_id].cancel()
             
@@ -130,6 +137,9 @@ class JobManager:
             "status": JobStatus.CANCELED,
             "completed_at": datetime.now(timezone.utc).isoformat(),
         })
+        
+        # Also notify orchestrator
+        self.orchestrator.cancel_build(job_id)
         
         logger.info(f"Canceled job {job_id}")
         return True
@@ -162,31 +172,33 @@ class JobManager:
                 await self._fail_job(job_id, "Project not found")
                 return
             
-            # Resume from last step if recovering from failure
-            current_step = job.get("current_step", JobStep.INIT)
-            
-            # Execute the pipeline
-            await self._execute_pipeline(job_id, job, project, current_step)
+            # Execute the pipeline using new orchestrator
+            await self._execute_pipeline_v2(job_id, job, project)
             
         except asyncio.CancelledError:
             logger.info(f"Job {job_id} was canceled")
             await self._update_job(job_id, {"status": JobStatus.CANCELED})
         except Exception as e:
             logger.error(f"Job {job_id} failed with error: {e}")
+            import traceback
+            traceback.print_exc()
             await self._fail_job(job_id, str(e))
     
-    async def _execute_pipeline(
-        self,
-        job_id: str,
-        job: Dict,
-        project: Dict,
-        start_step: str = JobStep.INIT
-    ):
-        """Execute the full generation pipeline with persistence at each step"""
+    async def _execute_pipeline_v2(self, job_id: str, job: Dict, project: Dict):
+        """
+        Execute the build pipeline using new Orchestrator v2.
+        
+        Workflow:
+        1. Requirements Agent: Parse prompt → requirements.json
+        2. Dev Agent: Generate code from requirements
+        3. Deployment Agent: Deploy to Supabase
+        4. Tester Agent: Conversational testing
+        5. Fix Agent: Fix issues (max 3 retries)
+        """
         
         project_id = job["project_id"]
         prompt = job["prompt"]
-        requirements = job.get("requirements")
+        
         supabase_config = job.get("supabase_config") or {
             "url": project.get("supabase_url"),
             "anon_key": project.get("supabase_anon_key"),
@@ -194,91 +206,117 @@ class JobManager:
             "project_ref": project.get("supabase_project_ref"),
         }
         
-        # Get access token for Supabase operations
-        access_token = supabase_config.get("service_key")
+        # Get existing files for updates
+        existing_files = None
+        is_update = project.get("current_version", 0) > 0
+        if is_update:
+            all_versions = await self.database.get_all_versions(project_id)
+            if all_versions:
+                # Merge files from all versions
+                merged = {}
+                for v in reversed(all_versions):
+                    for f in v.get("files", []):
+                        merged[f.get("path")] = f
+                existing_files = list(merged.values())
         
+        step_results = job.get("step_results", {})
+        requirements = job.get("requirements")
         files = job.get("files", [])
         fix_attempts = job.get("fix_attempts", 0)
         max_fix_attempts = job.get("max_fix_attempts", 3)
-        step_results = job.get("step_results", {})
         
-        # Step 1: Clarify (if needed)
-        if start_step in [JobStep.INIT, JobStep.CLARIFY]:
+        # ==================== STEP 1: REQUIREMENTS ====================
+        if not requirements or not requirements.get("is_complete"):
             await self._update_job(job_id, {
-                "current_step": JobStep.CLARIFY,
-                "status": JobStatus.CLARIFYING,
+                "current_step": JobStep.REQUIREMENTS,
+                "status": JobStatus.PARSING_REQUIREMENTS,
                 "progress": 10,
             })
             
             try:
-                if not requirements:
-                    requirements = await self.orchestrator.analyze_prompt(
-                        prompt,
-                        {
-                            "supabase_connected": True,
-                            "supabase_url": supabase_config.get("url", ""),
-                            "project_name": project.get("name", ""),
-                        }
-                    )
-                    requirements["is_clear"] = True  # Auto-confirm for async jobs
+                logger.info(f"Job {job_id}: Parsing requirements")
+                requirements = await self.orchestrator.parse_requirements(prompt, requirements)
                 
-                step_results["clarify"] = {"success": True, "requirements": requirements}
-                await self._update_job(job_id, {
-                    "requirements": requirements,
-                    "step_results": step_results,
-                })
+                # For async jobs, auto-confirm requirements (skip clarification)
+                if requirements.get("ambiguities"):
+                    # Auto-resolve ambiguities with defaults
+                    for amb in requirements.get("ambiguities", []):
+                        amb["resolved"] = True
+                        amb["answer"] = amb.get("default") or amb.get("options", [""])[0]
+                    requirements["ambiguities"] = []
                 
-            except Exception as e:
-                await self._fail_job(job_id, f"Clarification failed: {str(e)}")
-                return
-        
-        # Step 2: Generate Code
-        if start_step in [JobStep.INIT, JobStep.CLARIFY, JobStep.GENERATE]:
-            await self._update_job(job_id, {
-                "current_step": JobStep.GENERATE,
-                "status": JobStatus.GENERATING,
-                "progress": 20,
-            })
-            
-            try:
-                # Check for existing files (for updates)
-                existing_files = None
-                is_update = project.get("current_version", 0) > 0
-                if is_update:
-                    latest_version = await self.database.get_latest_version(project_id)
-                    if latest_version:
-                        existing_files = latest_version.get("files", [])
+                requirements["is_complete"] = True
                 
-                # Generate code
-                generation_result = await self.orchestrator.code_generation_agent.generate_code(
-                    requirements=requirements,
-                    supabase_config=supabase_config,
-                    existing_files=existing_files,
-                    is_update=is_update,
-                )
-                
-                files = generation_result.get("files", [])
-                
-                step_results["generate"] = {
+                step_results["requirements"] = {
                     "success": True,
-                    "files_count": len(files),
-                    "summary": generation_result.get("summary", ""),
+                    "features_count": len(requirements.get("features", [])),
+                    "pages_count": len(requirements.get("pages", [])),
+                    "models_count": len(requirements.get("data_models", []))
                 }
                 
                 await self._update_job(job_id, {
-                    "files": files,
+                    "requirements": requirements,
                     "step_results": step_results,
-                    "progress": 40,
+                    "progress": 15,
                 })
                 
+                logger.info(f"Job {job_id}: Requirements parsed - {len(requirements.get('features', []))} features")
+                
             except Exception as e:
-                await self._fail_job(job_id, f"Code generation failed: {str(e)}")
+                logger.error(f"Job {job_id}: Requirements parsing failed: {e}")
+                await self._fail_job(job_id, f"Requirements parsing failed: {str(e)}")
                 return
         
-        # Pipeline loop: Deploy → Test → Fix
+        # Check cancellation
+        if job_id in self._cancelled_jobs:
+            return
+        
+        # ==================== STEP 2: CODE GENERATION ====================
+        await self._update_job(job_id, {
+            "current_step": JobStep.GENERATE,
+            "status": JobStatus.GENERATING,
+            "progress": 20,
+        })
+        
+        try:
+            logger.info(f"Job {job_id}: Generating code")
+            
+            generation_result = await self.orchestrator.code_generation_agent.generate_code(
+                requirements=requirements,
+                supabase_config=supabase_config,
+                existing_files=existing_files,
+                is_update=is_update,
+            )
+            
+            files = generation_result.get("files", [])
+            
+            step_results["generate"] = {
+                "success": True,
+                "files_count": len(files),
+                "summary": generation_result.get("summary", ""),
+            }
+            
+            await self._update_job(job_id, {
+                "files": files,
+                "step_results": step_results,
+                "progress": 40,
+            })
+            
+            logger.info(f"Job {job_id}: Generated {len(files)} files")
+            
+        except Exception as e:
+            logger.error(f"Job {job_id}: Code generation failed: {e}")
+            await self._fail_job(job_id, f"Code generation failed: {str(e)}")
+            return
+        
+        # ==================== STEP 3-5: DEPLOY → TEST → FIX LOOP ====================
         while fix_attempts <= max_fix_attempts:
             
-            # Step 3: Deploy
+            # Check cancellation
+            if job_id in self._cancelled_jobs:
+                return
+            
+            # --- STEP 3: DEPLOY ---
             await self._update_job(job_id, {
                 "current_step": JobStep.DEPLOY,
                 "status": JobStatus.DEPLOYING,
@@ -286,20 +324,27 @@ class JobManager:
             })
             
             try:
+                logger.info(f"Job {job_id}: Deploying to Supabase")
+                
                 deploy_result = await self.orchestrator.deployment_agent.deploy(
                     files=files,
                     supabase_config=supabase_config,
-                    access_token=access_token,
+                    access_token=supabase_config.get("service_key"),
                 )
                 
-                step_results["deploy"] = deploy_result
+                step_results[f"deploy_{fix_attempts}"] = deploy_result
                 await self._update_job(job_id, {"step_results": step_results})
                 
+                if deploy_result.get("status") == "error":
+                    logger.warning(f"Job {job_id}: Deployment had errors: {deploy_result.get('errors')}")
+                else:
+                    logger.info(f"Job {job_id}: Deployment successful")
+                    
             except Exception as e:
-                logger.warning(f"Deployment failed: {e}, continuing to testing...")
-                step_results["deploy"] = {"status": "error", "error": str(e)}
+                logger.warning(f"Job {job_id}: Deployment error: {e}")
+                step_results[f"deploy_{fix_attempts}"] = {"status": "error", "error": str(e)}
             
-            # Step 4: Test
+            # --- STEP 4: TEST ---
             await self._update_job(job_id, {
                 "current_step": JobStep.TEST,
                 "status": JobStatus.TESTING,
@@ -307,27 +352,38 @@ class JobManager:
             })
             
             try:
-                test_results = await self.orchestrator.testing_agent.run_tests(
+                logger.info(f"Job {job_id}: Running conversational tests")
+                
+                test_results = await self.orchestrator.tester_agent.run_tests(
                     files=files,
                     requirements=requirements,
                     supabase_config=supabase_config,
                 )
                 
-                step_results["test"] = test_results
-                await self._update_job(job_id, {"step_results": step_results})
+                step_results[f"test_{fix_attempts}"] = {
+                    "passed": test_results.get("passed", 0),
+                    "failed": test_results.get("failed", 0),
+                    "total": test_results.get("total", 0),
+                }
                 
-                # Check if all tests passed
+                await self._update_job(job_id, {
+                    "test_results": test_results,
+                    "step_results": step_results,
+                })
+                
+                logger.info(f"Job {job_id}: Tests - {test_results.get('passed')}/{test_results.get('total')} passed")
+                
+                # All tests passed!
                 if test_results.get("failed", 0) == 0:
-                    # Success! Save and complete
                     await self._complete_job(job_id, files, requirements, prompt)
                     return
-                
+                    
             except Exception as e:
-                logger.error(f"Testing failed: {e}")
-                test_results = {"failed": 1, "issues": [{"error": str(e)}]}
-                step_results["test"] = test_results
+                logger.error(f"Job {job_id}: Testing error: {e}")
+                test_results = {"failed": 1, "passed": 0, "total": 1, "issues": [{"error": str(e)}]}
+                step_results[f"test_{fix_attempts}"] = {"error": str(e)}
             
-            # Step 5: Fix (if tests failed and we have retries left)
+            # --- STEP 5: FIX (if tests failed and retries remain) ---
             if fix_attempts < max_fix_attempts:
                 fix_attempts += 1
                 
@@ -339,7 +395,9 @@ class JobManager:
                 })
                 
                 try:
-                    fix_result = await self.orchestrator.dev_agent.fix_issues(
+                    logger.info(f"Job {job_id}: Fix attempt {fix_attempts}/{max_fix_attempts}")
+                    
+                    fix_result = await self.orchestrator.fix_agent.fix_issues(
                         files=files,
                         test_results=test_results,
                         requirements=requirements,
@@ -348,19 +406,25 @@ class JobManager:
                     
                     if fix_result.get("fixes_applied"):
                         files = fix_result.get("files", files)
-                        step_results[f"fix_{fix_attempts}"] = fix_result
+                        step_results[f"fix_{fix_attempts}"] = {
+                            "fixes_count": len(fix_result.get("fixes_applied", [])),
+                            "files_modified": fix_result.get("files_modified", []),
+                        }
                         await self._update_job(job_id, {
                             "files": files,
                             "step_results": step_results,
                         })
+                        logger.info(f"Job {job_id}: Applied {len(fix_result.get('fixes_applied', []))} fixes")
                     else:
                         step_results[f"fix_{fix_attempts}"] = {"status": "no_changes"}
+                        logger.warning(f"Job {job_id}: No fixes could be applied")
                         
                 except Exception as e:
-                    logger.error(f"Fix attempt {fix_attempts} failed: {e}")
+                    logger.error(f"Job {job_id}: Fix error: {e}")
                     step_results[f"fix_{fix_attempts}"] = {"status": "error", "error": str(e)}
             else:
                 # Max retries reached - complete with partial success
+                logger.warning(f"Job {job_id}: Max fix attempts reached")
                 await self._complete_job(
                     job_id, files, requirements, prompt,
                     partial=True,
@@ -396,10 +460,8 @@ class JobManager:
             "prompt": prompt,
             "files": files,
             "status": "partial" if partial else "success",
-            "delta_plan": {
-                "requirements": requirements,
-                "remaining_issues": remaining_issues or [],
-            },
+            "requirements": requirements,
+            "remaining_issues": remaining_issues or [],
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         
@@ -410,13 +472,14 @@ class JobManager:
         })
         
         # Save assistant message
+        status_text = "partial success" if partial else "success"
+        issues_text = f" ({len(remaining_issues or [])} issues remain)" if partial else ""
+        
         await self.database.create_message({
             "id": str(uuid.uuid4()),
             "project_id": project_id,
             "role": "assistant",
-            "content": f"Built version {version_number} with {len(files)} files." + (
-                f" ({len(remaining_issues or [])} issues remain)" if partial else ""
-            ),
+            "content": f"Built version {version_number} with {len(files)} files.{issues_text}",
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         
@@ -430,7 +493,7 @@ class JobManager:
             "version_number": version_number,
         })
         
-        logger.info(f"Job {job_id} completed. Version {version_number} saved with {len(files)} files")
+        logger.info(f"Job {job_id} completed ({status_text}). Version {version_number} saved with {len(files)} files")
     
     async def _fail_job(self, job_id: str, error: str):
         """Mark job as failed"""
