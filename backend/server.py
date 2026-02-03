@@ -4360,8 +4360,12 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         
         // CRITICAL: Auth helper object - many generated apps use this pattern
         const auth = {{
-            signUp: async (email, password) => {{
-                const {{ data, error }} = await supabase.auth.signUp({{ email, password }});
+            signUp: async (email, password, username) => {{
+                const {{ data, error }} = await supabase.auth.signUp({{ 
+                    email, 
+                    password,
+                    options: username ? {{ data: {{ username }} }} : undefined
+                }});
                 return {{ data, error }};
             }},
             signIn: async (email, password) => {{
@@ -4375,6 +4379,9 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
             getUser: async () => {{
                 const {{ data: {{ user }}, error }} = await supabase.auth.getUser();
                 return {{ user, error }};
+            }},
+            getCurrentUser: async () => {{
+                return await supabase.auth.getUser();
             }},
             getSession: async () => {{
                 const {{ data: {{ session }}, error }} = await supabase.auth.getSession();
