@@ -116,7 +116,7 @@ class MongoDatabase(DatabaseInterface):
     
     async def get_latest_version(self, project_id: str) -> Optional[dict]:
         return await self.db.versions.find_one(
-            {"project_id": project_id, "status": "success"},
+            {"project_id": project_id, "status": {"$in": ["success", "partial"]}},
             {"_id": 0},
             sort=[("version_number", -1)]
         )
