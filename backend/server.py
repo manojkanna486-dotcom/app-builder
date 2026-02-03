@@ -4481,6 +4481,14 @@ async def startup_db_client():
     if OPENROUTER_API_KEY:
         orchestrator = AgentOrchestrator(OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
         logger.info("Agent Orchestrator initialized with all agents")
+        
+        # Initialize async job manager
+        global job_manager_instance
+        job_manager_instance = init_job_manager(database, orchestrator)
+        logger.info("Job Manager initialized")
+        
+        # Resume any interrupted jobs from previous server run
+        await job_manager_instance.resume_incomplete_jobs()
     else:
         logger.warning("OPENROUTER_API_KEY not set - agents will not be available")
 
