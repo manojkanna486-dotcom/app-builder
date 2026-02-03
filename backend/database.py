@@ -193,6 +193,36 @@ class MongoDatabase(DatabaseInterface):
         updates["updated_at"] = datetime.now(timezone.utc).isoformat()
         result = await self.db.generation_tasks.update_one({"id": task_id}, {"$set": updates})
         return result.modified_count > 0
+    
+    # Async Job Storage (for background job management)
+    async def create_job(self, job: dict) -> dict:
+        """Create a new async job"""
+        await self.db.async_jobs.insert_one(job)
+        return job
+    
+    async def get_job(self, job_id: str) -> Optional[dict]:
+        """Get a job by ID"""
+        return await self.db.async_jobs.find_one({"id": job_id}, {"_id": 0})
+    
+    async def update_job(self, job_id: str, updates: dict) -> bool:
+        """Update a job"""
+        updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+        result = await self.db.async_jobs.update_one({"id": job_id}, {"$set": updates})
+        return result.modified_count > 0
+    
+    async def get_project_jobs(self, project_id: str) -> List[dict]:
+        """Get all jobs for a project, sorted by creation time (newest first)"""
+        return await self.db.async_jobs.find(
+            {"project_id": project_id},
+            {"_id": 0}
+        ).sort("created_at", -1).to_list(50)
+    
+    async def get_incomplete_jobs(self) -> List[dict]:
+        """Get all jobs that were running but not completed (for recovery)"""
+        return await self.db.async_jobs.find(
+            {"status": {"$in": ["running", "pending", "generating", "deploying", "testing", "fixing"]}},
+            {"_id": 0}
+        ).to_list(100)
 
 
 class SupabaseDatabase(DatabaseInterface):
