@@ -3123,6 +3123,20 @@ async def list_project_jobs(project_id: str):
     jobs = await job_manager_instance.get_project_jobs(project_id)
     return {"jobs": jobs}
 
+@api_router.get("/projects/{project_id}/jobs/active")
+async def get_active_job(project_id: str):
+    """Get the currently active (running) job for a project, if any"""
+    if not job_manager_instance:
+        return {"active_job": None}
+    
+    jobs = await job_manager_instance.get_project_jobs(project_id)
+    
+    # Find any running job
+    active_statuses = ["pending", "running", "generating", "deploying", "testing", "fixing", "clarifying"]
+    active_job = next((j for j in jobs if j.get("status") in active_statuses), None)
+    
+    return {"active_job": active_job}
+
 @api_router.get("/projects/{project_id}/jobs/{job_id}")
 async def get_job_status(project_id: str, job_id: str):
     """Get status of a specific job"""
