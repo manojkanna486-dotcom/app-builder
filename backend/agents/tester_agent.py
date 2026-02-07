@@ -187,6 +187,10 @@ Respond in JSON:
 }}
 """
         
+        # Use Llama 3.1 8B (free) for testing
+        model = get_model("tester")
+        settings = get_model_settings(model)
+        
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
@@ -196,7 +200,7 @@ Respond in JSON:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4",
+                        "model": model,
                         "messages": [{"role": "user", "content": prompt}],
                         "max_tokens": 500,
                         "temperature": 0.1
