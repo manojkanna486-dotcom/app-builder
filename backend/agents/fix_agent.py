@@ -10,6 +10,8 @@ import logging
 from typing import Dict, List, Optional, Any
 import httpx
 
+from .model_config import get_model, get_model_settings
+
 logger = logging.getLogger(__name__)
 
 
