@@ -6,8 +6,11 @@ Creates frontend components, backend Edge Functions, and SQL migrations
 import json
 import re
 import logging
+import sys
 from typing import Dict, List, Optional, Any, AsyncGenerator
 import httpx
+
+from .model_config import get_model, get_model_settings
 
 logger = logging.getLogger(__name__)
 
