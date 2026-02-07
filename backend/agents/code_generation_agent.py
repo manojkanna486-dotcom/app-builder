@@ -103,7 +103,7 @@ class CodeGenerationAgent:
                         }
                     )
                     
-                    logger.info(f"Code generation: Got response with status {response.status_code} (attempt {attempt + 1}/{max_retries})")
+                    logger.info(f"Code generation: Got response object, status={response.status_code}, attempt={attempt + 1}/{max_retries}")
                     
                     if response.status_code == 500:
                         # Server error, retry
@@ -117,15 +117,16 @@ class CodeGenerationAgent:
                         logger.error(f"Code generation API error: {response.text}")
                         raise Exception(f"Code generation failed: {response.status_code}")
                     
+                    logger.info(f"Code generation: Calling response.json()...")
                     data = response.json()
-                    logger.info(f"Code generation: Response parsed, extracting content...")
+                    logger.info(f"Code generation: JSON parsed, keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
                     
                     content = data["choices"][0]["message"]["content"]
-                    logger.info(f"Code generation: Got content of length {len(content)}, parsing...")
+                    logger.info(f"Code generation: Got content of length {len(content)}, calling parser...")
                     
                     # Parse the response
                     result = self._parse_generation_response(content)
-                    logger.info(f"Code generation: Parsed {len(result.get('files', []))} files")
+                    logger.info(f"Code generation: Parsed {len(result.get('files', []))} files, summary: {result.get('summary', '')[:100]}")
                     
                     return result
                         
