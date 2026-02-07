@@ -69,7 +69,8 @@ class CodeGenerationAgent:
         requirements: Dict,
         supabase_config: Dict,
         existing_files: Optional[List[Dict]] = None,
-        is_update: bool = False
+        is_update: bool = False,
+        max_retries: int = 3
     ) -> Dict:
         """
         Generate complete application code based on requirements.
@@ -81,48 +82,67 @@ class CodeGenerationAgent:
         
         logger.info(f"Code generation: Sending request to OpenRouter...")
         
-        try:
-            async with httpx.AsyncClient(timeout=180.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": "anthropic/claude-sonnet-4",
-                        "messages": [
-                            {"role": "system", "content": SYSTEM_PROMPT},
-                            {"role": "user", "content": prompt}
-                        ],
-                        "max_tokens": 16000,
-                        "temperature": 0.7
-                    }
-                )
-                
-                logger.info(f"Code generation: Got response with status {response.status_code}")
-                
-                if response.status_code != 200:
-                    logger.error(f"Code generation API error: {response.text}")
-                    raise Exception(f"Code generation failed: {response.status_code}")
-                
-                data = response.json()
-                logger.info(f"Code generation: Response parsed, extracting content...")
-                
-                content = data["choices"][0]["message"]["content"]
-                logger.info(f"Code generation: Got content of length {len(content)}, parsing...")
-                
-                # Parse the response
-                result = self._parse_generation_response(content)
-                logger.info(f"Code generation: Parsed {len(result.get('files', []))} files")
-                
-                return result
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json"
+                        },
+                        json={
+                            "model": "anthropic/claude-sonnet-4",
+                            "messages": [
+                                {"role": "system", "content": SYSTEM_PROMPT},
+                                {"role": "user", "content": prompt}
+                            ],
+                            "max_tokens": 16000,
+                            "temperature": 0.7
+                        }
+                    )
                     
-        except Exception as e:
-            logger.error(f"Code generation error: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
+                    logger.info(f"Code generation: Got response with status {response.status_code} (attempt {attempt + 1}/{max_retries})")
+                    
+                    if response.status_code == 500:
+                        # Server error, retry
+                        last_error = f"OpenRouter server error (500)"
+                        logger.warning(f"Code generation: OpenRouter 500 error, retrying in 3 seconds...")
+                        import asyncio
+                        await asyncio.sleep(3)
+                        continue
+                    
+                    if response.status_code != 200:
+                        logger.error(f"Code generation API error: {response.text}")
+                        raise Exception(f"Code generation failed: {response.status_code}")
+                    
+                    data = response.json()
+                    logger.info(f"Code generation: Response parsed, extracting content...")
+                    
+                    content = data["choices"][0]["message"]["content"]
+                    logger.info(f"Code generation: Got content of length {len(content)}, parsing...")
+                    
+                    # Parse the response
+                    result = self._parse_generation_response(content)
+                    logger.info(f"Code generation: Parsed {len(result.get('files', []))} files")
+                    
+                    return result
+                        
+            except httpx.TimeoutException:
+                logger.warning(f"Code generation: Timeout on attempt {attempt + 1}, retrying...")
+                last_error = "Request timed out"
+                import asyncio
+                await asyncio.sleep(2)
+                continue
+            except Exception as e:
+                logger.error(f"Code generation error: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
+        
+        # All retries failed
+        raise Exception(f"Code generation failed after {max_retries} attempts: {last_error}")
     
     async def generate_code_stream(
         self, 
