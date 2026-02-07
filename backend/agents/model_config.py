@@ -2,21 +2,21 @@
 Model Configuration for Multi-Agent System
 Cost-optimized model selection per agent role
 
-Pricing Reference:
-- Orchestrator: Mistral 7B ($0.20/M tokens)
+Pricing Reference (OpenRouter):
+- Orchestrator: Mistral Small (free/cheap)
 - Dev/UI (Frontend): GPT-4o mini ($0.15/M tokens)
 - Backend: DeepSeek Coder ($0.14/M tokens)
-- Tester/Fix: Llama 3.1 8B (free)
-- Deploy: Mistral 7B ($0.20/M tokens)
+- Tester/Fix: Llama 3.1 8B (free tier)
+- Requirements: Google Gemini Flash (free tier)
 """
 
-# OpenRouter model identifiers
+# OpenRouter model identifiers - using verified working models
 MODELS = {
     # Orchestrator Agent - workflow management, decision making
-    "orchestrator": "mistralai/mistral-7b-instruct:free",
+    "orchestrator": "google/gemini-2.0-flash-exp:free",
     
-    # Requirements Agent - prompt parsing (uses orchestrator model)
-    "requirements": "mistralai/mistral-7b-instruct:free",
+    # Requirements Agent - prompt parsing (needs good reasoning)
+    "requirements": "google/gemini-2.0-flash-exp:free",
     
     # Code Generation Agent - Frontend/UI code
     "code_generation_frontend": "openai/gpt-4o-mini",
@@ -25,19 +25,19 @@ MODELS = {
     "code_generation_backend": "deepseek/deepseek-coder",
     
     # Tester Agent - conversational testing (free)
-    "tester": "meta-llama/llama-3.1-8b-instruct:free",
+    "tester": "google/gemini-2.0-flash-exp:free",
     
     # Fix Agent - bug fixes (free)
-    "fix": "meta-llama/llama-3.1-8b-instruct:free",
+    "fix": "google/gemini-2.0-flash-exp:free",
     
     # Deployment Agent - deployment tasks
-    "deployment": "mistralai/mistral-7b-instruct:free",
+    "deployment": "google/gemini-2.0-flash-exp:free",
 }
 
 # Model-specific settings
 MODEL_SETTINGS = {
-    "mistralai/mistral-7b-instruct:free": {
-        "max_tokens": 4096,
+    "google/gemini-2.0-flash-exp:free": {
+        "max_tokens": 8192,
         "temperature": 0.7,
     },
     "openai/gpt-4o-mini": {
@@ -56,7 +56,7 @@ MODEL_SETTINGS = {
 
 def get_model(agent_type: str) -> str:
     """Get the model ID for a given agent type"""
-    return MODELS.get(agent_type, "mistralai/mistral-7b-instruct:free")
+    return MODELS.get(agent_type, "google/gemini-2.0-flash-exp:free")
 
 def get_model_settings(model_id: str) -> dict:
     """Get model-specific settings"""
