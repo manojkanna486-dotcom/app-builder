@@ -1,7 +1,10 @@
 # Multi-Agent App Builder - Product Requirements Document
 
 ## Original Problem Statement
-Build a full-stack "App Builder" that generates FastAPI backends and React frontends based on user prompts. The application uses a multi-agent system to orchestrate the entire software creation process.
+Build a full-stack "App Builder" that generates FastAPI backends and React frontends based on user prompts. The application uses a multi-agent system to orchestrate the entire software creation process using Supabase for database and authentication.
+
+## Current Status (Feb 7, 2026)
+**✅ E2E Pipeline Working** - Successfully generating and previewing applications without authentication.
 
 ## Agent Architecture (Refactored Feb 3, 2026)
 
@@ -14,205 +17,123 @@ Build a full-stack "App Builder" that generates FastAPI backends and React front
 - Passes context between agents
 - Enforces system rules and limits
 
-**MUST DO:**
-- Start build on user prompt
-- Track build state (pending → generating → deploying → testing → fixing → completed)
-- Stop build on cancel request
-- Ensure max retry limits are respected (3 fix attempts max)
-
-**MUST NOT:**
-- Write application code
-- Modify requirements directly
-
 ### 2. Requirements Agent
 **File:** `/app/backend/agents/requirements_agent.py`
 
 **Responsibilities:**
-- Convert user prompt into structured `requirements.json`
+- Convert user prompt into structured requirements JSON
+- Parse prompt into: Features, Pages, User roles, Data models
 
-**MUST DO:**
-- Parse prompt into: Features, Pages, User roles, Data models, Permissions
-- Generate and update requirements.json
-- Validate completeness of requirements
-- Flag ambiguities (never assume unclear requirements)
-
-**MUST NOT:**
-- Write frontend or backend code
-- Assume unclear requirements
-
-**Output Schema:**
-```json
-{
-  "app_name": "string",
-  "features": [{"id": "F001", "name": "...", "description": "...", "priority": "high|medium|low"}],
-  "pages": [{"id": "P001", "name": "...", "route": "/...", "auth_required": true|false}],
-  "user_roles": [{"id": "R001", "name": "...", "permissions": [...]}],
-  "data_models": [{"id": "D001", "name": "...", "table_name": "...", "fields": [...], "rls_enabled": true}],
-  "permissions": [{"model": "...", "role": "...", "actions": [...], "condition": "..."}],
-  "ambiguities": [{"id": "A001", "question": "?", "options": [...]}],
-  "is_complete": true|false
-}
-```
-
-### 3. Dev Agent (Frontend + Supabase)
+### 3. Code Generation Agent
 **File:** `/app/backend/agents/code_generation_agent.py`
 
 **Responsibilities:**
-- Generate and update application code
+- Generate complete application code based on requirements
+- Creates: App.jsx, Components, SQL migrations, Hooks
 
-**MUST DO:**
-- Generate frontend UI (React + Tailwind)
-- Integrate Supabase client
-- Generate database schema & migrations
-- Generate RLS policies
-- Create Edge Functions (only if required)
-- Follow requirements exactly
-
-**MUST NOT:**
-- Change requirements
-- Rewrite entire app unless instructed
-- Disable security (RLS, auth)
-
-### 4. Deployment Agent
-**File:** `/app/backend/agents/deployment_agent.py`
-
-**Responsibilities:**
-- Deploy preview builds safely
-
-**MUST DO:**
-- Run database migrations via Supabase
-- Deploy preview
-- Ensure deployed version matches tested code
-
-**MUST NOT:**
-- Deploy untested builds
-- Deploy failed builds (previous must be working)
-
-### 5. Conversational Tester Agent
+### 4. Tester Agent (Stub)
 **File:** `/app/backend/agents/tester_agent.py`
 
-**Responsibilities:**
-- Test the app like a real human user
-
-**MUST DO:**
-- Read requirements.json
-- Test flows conversationally ("What happens if I...")
-- Test categories:
-  - Auth (login, logout, signup, session persistence)
-  - CRUD (create, read, update, delete)
-  - Navigation (page transitions, back button)
-  - Refresh behavior (state persistence)
-  - Invalid inputs (empty, special chars, long text)
-  - UX (error messages, loading states, feedback)
-- Validate error message clarity
-- Detect UX confusion
-
-**MUST NOT:**
-- Assume happy paths only
-- Skip edge cases
-- Write or fix code
-
-### 6. Fix Agent
+### 5. Fix Agent (Stub)
 **File:** `/app/backend/agents/fix_agent.py`
 
-**Responsibilities:**
-- Fix issues reported by Tester Agent
+## Job System
+**File:** `/app/backend/job_manager.py`
 
-**MUST DO:**
-- Fix ONLY reported issues
-- Modify minimal required code
-- Preserve existing working features
-- Re-run tests after fix
+- Async job processing runs in background
+- Jobs persist to MongoDB `jobs` collection
+- States: pending → parsing → generating → deploying → testing → completed/failed
+- Frontend polls for status updates
 
-**MUST NOT:**
-- Add new features
-- Change requirements
-- Over-refactor
+## Key Technical Details
 
-## Workflow
+### Preview Renderer
+**File:** `/app/backend/server.py` - `get_preview_html()` function
 
-```
-User Prompt
-    ↓
-[Requirements Agent] → requirements.json
-    ↓
-(Ambiguities?) → Ask User → Update requirements
-    ↓
-[Dev Agent] → Generated Files
-    ↓
-[Deployment Agent] → Deploy to Supabase
-    ↓
-[Tester Agent] → Test Results
-    ↓
-(Tests Failed?) → [Fix Agent] → Loop back to Deploy (max 3 times)
-    ↓
-✅ Complete
-```
+- Dynamically constructs sandboxed HTML to render React apps
+- Mocks 100+ Lucide icons for generated code
+- Injects Supabase client configuration
+- Handles React Router for SPA navigation
+
+### Database Schema
+- `projects`: Project metadata, Supabase config
+- `project_versions`: Generated code for each version
+- `jobs`: Async job state and progress
+
+## What's Implemented
+
+### ✅ Completed (Feb 7, 2026)
+1. **Async Job System** - Background builds with progress tracking
+2. **Requirements Parsing** - LLM-powered prompt analysis
+3. **Code Generation** - Full React app with Supabase integration
+4. **Live Preview** - Working preview with 100+ mocked Lucide icons
+5. **SQL Migrations** - Auto-generated database schema
+6. **Simple Apps (No Auth)** - E2E pipeline verified working
+
+### 🔧 Partially Working
+1. **Tester Agent** - Stub implemented, needs full logic
+2. **Fix Agent** - Stub implemented, needs full logic
+3. **Real-time UI Updates** - Polling works but not dynamic
+
+### ❌ Not Yet Implemented
+1. **Supabase Edge Functions** - Not being generated
+2. **Authentication in Generated Apps** - Temporarily disabled
+3. **Cancel Generation** - Button exists but not functional
+4. **Code Syntax Highlighting** - Not implemented
 
 ## API Endpoints
 
-### Job Management (Async)
-- `POST /api/projects/{id}/jobs/start` - Start async build
+### Projects
+- `GET /api/projects` - List all projects
+- `POST /api/projects` - Create new project
+- `GET /api/projects/{id}` - Get project details
+- `DELETE /api/projects/{id}` - Delete project
+
+### Jobs
+- `POST /api/projects/{id}/jobs/start` - Start build job
 - `GET /api/projects/{id}/jobs/{job_id}` - Get job status
-- `POST /api/projects/{id}/jobs/{job_id}/cancel` - Cancel job
-- `POST /api/projects/{id}/jobs/{job_id}/resume` - Resume failed job
+- `GET /api/projects/{id}/jobs/active` - Get active job
 
-### Requirements
-- `POST /api/projects/{id}/requirements/parse` - Parse prompt to requirements
-- `POST /api/projects/{id}/requirements/resolve` - Resolve ambiguities
+### Preview
+- `GET /api/projects/{id}/preview/live` - Live HTML preview
 
-## Database Collections
+## Environment Configuration
 
-### async_jobs
-```json
-{
-  "id": "uuid",
-  "project_id": "uuid",
-  "prompt": "string",
-  "status": "pending|generating|deploying|testing|fixing|completed|failed|cancelled",
-  "current_step": "init|clarify|generate|deploy|test|fix|done",
-  "progress": 0-100,
-  "requirements": {...},
-  "files": [...],
-  "test_results": {...},
-  "fix_attempts": 0,
-  "max_fix_attempts": 3,
-  "error": "string|null",
-  "created_at": "ISO timestamp",
-  "completed_at": "ISO timestamp"
-}
-```
+### Backend (.env)
+- `OPENROUTER_API_KEY` - For LLM API calls
+- `SUPABASE_URL` - Default Supabase project URL
+- `SUPABASE_ANON_KEY` - Public API key
+- `SUPABASE_SERVICE_KEY` - Service role key
+- `MONGO_URL` - MongoDB connection string
 
-## Testing Status
+### Frontend (.env)
+- `REACT_APP_BACKEND_URL` - API base URL
 
-### Verified Working (Feb 3, 2026):
-- ✅ User signup creates accounts in Supabase
-- ✅ User login authenticates successfully  
-- ✅ Session persistence across page loads
-- ✅ Sign out functionality
-- ✅ Preview rendering with auth forms
-- ✅ Async job creation and status polling
+## Recent Fixes (Feb 7, 2026)
+1. Added retry logic to code generation (3 retries for 500 errors)
+2. Added 12+ new Lucide icons (BookOpen, Book, Notebook, etc.)
+3. Removed duplicate icon definitions causing Babel errors
+4. Increased code generation timeout to 300 seconds
+5. Added detailed logging for debugging
 
-### Known Issues:
-- ⚠️ OAuth redirect URL needs manual config for mobile
-- ⚠️ Code generation sometimes creates incompatible file structures between versions
+## Known Issues
+1. **Navigation in Preview** - React Router navigation may not work in iframe
+2. **Database Tables** - Must be created manually in Supabase
+3. **Multiple Concurrent Jobs** - Can cause race conditions
 
-## File Structure
-```
-/app/backend/
-├── agents/
-│   ├── __init__.py
-│   ├── orchestrator_v2.py      # Brain - workflow control
-│   ├── requirements_agent.py   # Parse prompts to requirements
-│   ├── code_generation_agent.py # Generate React + Supabase code
-│   ├── deployment_agent.py     # Deploy to Supabase
-│   ├── tester_agent.py         # Conversational testing
-│   └── fix_agent.py            # Fix only reported issues
-├── job_manager.py              # Async job management
-├── database.py
-└── server.py
-```
+## Backlog
 
-## 3rd Party Integrations
-- **OpenRouter:** LLM-based code generation (Claude Sonnet 4)
-- **Supabase:** Database, auth, and backend for generated apps
+### P1 - High Priority
+- Fix real-time UI updates (add proper polling)
+- Implement Supabase function generation
+- Add database table auto-creation
+
+### P2 - Medium Priority
+- Implement full Tester Agent
+- Implement full Fix Agent
+- Add authentication support to generated apps
+
+### P3 - Low Priority
+- Add code syntax highlighting
+- Implement cancel generation
+- Add project export/download
