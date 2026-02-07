@@ -93,6 +93,10 @@ IMPORTANT:
 - If you can't fix an issue, don't include fake fixes
 """
         
+        # Use Llama 3.1 8B (free) for fix agent
+        model = get_model("fix")
+        settings = get_model_settings(model)
+        
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
                 response = await client.post(
@@ -102,12 +106,12 @@ IMPORTANT:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4",
+                        "model": model,
                         "messages": [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": prompt}
                         ],
-                        "max_tokens": 16000,
+                        "max_tokens": settings["max_tokens"],
                         "temperature": 0.2
                     }
                 )
