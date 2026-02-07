@@ -99,6 +99,10 @@ class CodeGenerationAgent:
                     logger.info(f"Code generation: Sending POST to OpenRouter...")
                     sys.stderr.flush()
                     
+                    # Use GPT-4o mini for frontend/UI code generation
+                    model = get_model("code_generation_frontend")
+                    settings = get_model_settings(model)
+                    
                     response = await client.post(
                         f"{self.base_url}/chat/completions",
                         headers={
@@ -106,13 +110,13 @@ class CodeGenerationAgent:
                             "Content-Type": "application/json"
                         },
                         json={
-                            "model": "anthropic/claude-sonnet-4",
+                            "model": model,
                             "messages": [
                                 {"role": "system", "content": SYSTEM_PROMPT},
                                 {"role": "user", "content": prompt}
                             ],
-                            "max_tokens": 16000,
-                            "temperature": 0.7
+                            "max_tokens": settings["max_tokens"],
+                            "temperature": settings["temperature"]
                         }
                     )
                     
