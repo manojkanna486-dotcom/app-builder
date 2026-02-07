@@ -173,16 +173,18 @@ Parse thoroughly. Flag any ambiguities."""
                         }
                     )
                     
-                    # Retry on 503 Service Unavailable
-                    if response.status_code == 503:
-                        last_error = f"Service unavailable (503)"
-                        logger.warning(f"Requirements API 503 error, retrying in 2 seconds (attempt {attempt + 1}/{max_retries})")
-                        await asyncio.sleep(2)
+                    # Retry on 503 Service Unavailable or 429 Rate Limited
+                    if response.status_code in [503, 429]:
+                        last_error = f"Service unavailable/rate limited ({response.status_code})"
+                        logger.warning(f"Requirements API {response.status_code} error, retrying in 5 seconds (attempt {attempt + 1}/{max_retries})")
+                        await asyncio.sleep(5)
                         continue
                     
                     if response.status_code != 200:
                         logger.error(f"Requirements API error: {response.text}")
-                        return self._create_minimal_requirements(prompt)
+                        # Try fallback to creating minimal requirements
+                        last_error = f"API error: {response.status_code}"
+                        continue
                     
                     data = response.json()
                     content = data["choices"][0]["message"]["content"]
