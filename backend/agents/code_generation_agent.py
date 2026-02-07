@@ -76,18 +76,26 @@ class CodeGenerationAgent:
         Generate complete application code based on requirements.
         Returns files, summary, and metadata.
         """
+        import sys
         
         # Build the generation prompt
         prompt = self._build_generation_prompt(requirements, supabase_config, existing_files, is_update)
         
-        logger.info(f"Code generation: Sending request to OpenRouter...")
+        logger.info(f"Code generation: Starting, prompt length: {len(prompt)} chars")
+        sys.stderr.flush()
         
         last_error = None
         for attempt in range(max_retries):
             try:
-                logger.info(f"Code generation: Creating httpx client (attempt {attempt + 1}/{max_retries})...")
-                async with httpx.AsyncClient(timeout=300.0) as client:  # 5 minute timeout
-                    logger.info(f"Code generation: Sending POST request to OpenRouter...")
+                logger.info(f"Code generation: Attempt {attempt + 1}/{max_retries}")
+                sys.stderr.flush()
+                
+                # Use a fresh client with explicit timeouts
+                timeout = httpx.Timeout(10.0, connect=10.0, read=300.0, write=30.0)
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    logger.info(f"Code generation: Sending POST to OpenRouter...")
+                    sys.stderr.flush()
+                    
                     response = await client.post(
                         f"{self.base_url}/chat/completions",
                         headers={
@@ -105,10 +113,11 @@ class CodeGenerationAgent:
                         }
                     )
                     
-                    logger.info(f"Code generation: Got response object, status={response.status_code}, attempt={attempt + 1}/{max_retries}")
+                    # Immediately log after response
+                    print(f"Code generation: Response received, status={response.status_code}", file=sys.stderr)
+                    sys.stderr.flush()
                     
                     if response.status_code == 500:
-                        # Server error, retry
                         last_error = f"OpenRouter server error (500)"
                         logger.warning(f"Code generation: OpenRouter 500 error, retrying in 3 seconds...")
                         import asyncio
@@ -119,22 +128,30 @@ class CodeGenerationAgent:
                         logger.error(f"Code generation API error: {response.text}")
                         raise Exception(f"Code generation failed: {response.status_code}")
                     
-                    logger.info(f"Code generation: Calling response.json()...")
+                    # Parse JSON response
+                    print(f"Code generation: Parsing JSON response...", file=sys.stderr)
+                    sys.stderr.flush()
+                    
                     data = response.json()
-                    logger.info(f"Code generation: JSON parsed, keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
+                    
+                    print(f"Code generation: JSON parsed, extracting content...", file=sys.stderr)
+                    sys.stderr.flush()
                     
                     content = data["choices"][0]["message"]["content"]
-                    logger.info(f"Code generation: Got content of length {len(content)}, calling parser...")
+                    print(f"Code generation: Got content ({len(content)} chars), parsing files...", file=sys.stderr)
+                    sys.stderr.flush()
                     
                     # Parse the response
                     result = self._parse_generation_response(content)
-                    logger.info(f"Code generation: Parsed {len(result.get('files', []))} files, summary: {result.get('summary', '')[:100]}")
+                    
+                    print(f"Code generation: SUCCESS - {len(result.get('files', []))} files parsed", file=sys.stderr)
+                    sys.stderr.flush()
                     
                     return result
                         
-            except httpx.TimeoutException:
-                logger.warning(f"Code generation: Timeout on attempt {attempt + 1}, retrying...")
-                last_error = "Request timed out"
+            except httpx.TimeoutException as e:
+                logger.warning(f"Code generation: Timeout on attempt {attempt + 1}: {e}")
+                last_error = f"Request timed out: {e}"
                 import asyncio
                 await asyncio.sleep(2)
                 continue
