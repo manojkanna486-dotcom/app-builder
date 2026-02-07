@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 class AppBuilderAPITester:
-    def __init__(self, base_url="https://promptcraft-269.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://stackgen-2.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.tests_run = 0
         self.tests_passed = 0
