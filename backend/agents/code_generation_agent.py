@@ -79,6 +79,8 @@ class CodeGenerationAgent:
         # Build the generation prompt
         prompt = self._build_generation_prompt(requirements, supabase_config, existing_files, is_update)
         
+        logger.info(f"Code generation: Sending request to OpenRouter...")
+        
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
                 response = await client.post(
@@ -98,18 +100,28 @@ class CodeGenerationAgent:
                     }
                 )
                 
+                logger.info(f"Code generation: Got response with status {response.status_code}")
+                
                 if response.status_code != 200:
                     logger.error(f"Code generation API error: {response.text}")
                     raise Exception(f"Code generation failed: {response.status_code}")
                 
                 data = response.json()
+                logger.info(f"Code generation: Response parsed, extracting content...")
+                
                 content = data["choices"][0]["message"]["content"]
+                logger.info(f"Code generation: Got content of length {len(content)}, parsing...")
                 
                 # Parse the response
-                return self._parse_generation_response(content)
+                result = self._parse_generation_response(content)
+                logger.info(f"Code generation: Parsed {len(result.get('files', []))} files")
+                
+                return result
                     
         except Exception as e:
             logger.error(f"Code generation error: {e}")
+            import traceback
+            traceback.print_exc()
             raise
     
     async def generate_code_stream(
