@@ -4,7 +4,18 @@
 Build a full-stack "App Builder" that generates FastAPI backends and React frontends based on user prompts. The application uses a multi-agent system to orchestrate the entire software creation process using Supabase for database and authentication.
 
 ## Current Status (Feb 7, 2026)
-**✅ E2E Pipeline Working** - Successfully generating and previewing applications without authentication.
+**✅ E2E Pipeline Working** - Successfully generating and previewing applications
+**✅ Model Configuration Updated** - Cost-optimized model selection per agent
+
+## Model Configuration
+```
+Agents → Models (OpenRouter):
+├── Requirements: GPT-4o mini ($0.15/M) - reliable parsing
+├── Code Gen: GPT-4o mini ($0.15/M) - high quality code
+├── Tester: Llama 3.3 70B (free) - with fallback
+├── Fix: Llama 3.3 70B (free) - with fallback
+└── Backend: Qwen3 Coder (free) - with fallback to GPT-4o mini
+```
 
 ## Agent Architecture (Refactored Feb 3, 2026)
 
