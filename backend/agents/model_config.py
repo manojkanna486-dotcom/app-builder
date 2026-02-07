@@ -2,21 +2,20 @@
 Model Configuration for Multi-Agent System
 Cost-optimized model selection per agent role
 
-Using verified OpenRouter free models + GPT-4o mini for code generation
+Strategy:
+- Critical paths (requirements, code gen): Use reliable paid models (GPT-4o mini is cheap)
+- Non-critical paths (testing, fix): Use free models with fallback
 """
 
-# OpenRouter model identifiers - verified working models
+# OpenRouter model identifiers
 MODELS = {
-    # Orchestrator Agent - workflow management (free)
-    "orchestrator": "mistralai/mistral-small-3.1-24b-instruct:free",
+    # Requirements Agent - needs reliable parsing (cheap paid model)
+    "requirements": "openai/gpt-4o-mini",
     
-    # Requirements Agent - prompt parsing (free, good reasoning)
-    "requirements": "mistralai/mistral-small-3.1-24b-instruct:free",
-    
-    # Code Generation Agent - Frontend/UI code (paid, high quality)
+    # Code Generation Agent - Frontend/UI code (cheap paid model)
     "code_generation_frontend": "openai/gpt-4o-mini",
     
-    # Code Generation Agent - Backend/SQL code  
+    # Code Generation Agent - Backend/SQL code (free when available)
     "code_generation_backend": "qwen/qwen3-coder:free",
     
     # Tester Agent - conversational testing (free)
@@ -25,33 +24,47 @@ MODELS = {
     # Fix Agent - bug fixes (free)
     "fix": "meta-llama/llama-3.3-70b-instruct:free",
     
-    # Deployment Agent - deployment tasks (free)
-    "deployment": "mistralai/mistral-small-3.1-24b-instruct:free",
+    # Orchestrator Agent (not used for LLM calls)
+    "orchestrator": "openai/gpt-4o-mini",
+    
+    # Deployment Agent (not used for LLM calls)
+    "deployment": "openai/gpt-4o-mini",
+}
+
+# Fallback models when primary is unavailable
+FALLBACK_MODELS = {
+    "qwen/qwen3-coder:free": "openai/gpt-4o-mini",
+    "meta-llama/llama-3.3-70b-instruct:free": "openai/gpt-4o-mini",
+    "mistralai/mistral-small-3.1-24b-instruct:free": "openai/gpt-4o-mini",
 }
 
 # Model-specific settings
 MODEL_SETTINGS = {
-    "mistralai/mistral-small-3.1-24b-instruct:free": {
-        "max_tokens": 8192,
-        "temperature": 0.7,
-    },
     "openai/gpt-4o-mini": {
         "max_tokens": 16000,
         "temperature": 0.7,
     },
     "qwen/qwen3-coder:free": {
         "max_tokens": 16000,
-        "temperature": 0.3,  # Lower temp for more precise code
+        "temperature": 0.3,
     },
     "meta-llama/llama-3.3-70b-instruct:free": {
         "max_tokens": 8192,
         "temperature": 0.5,
     },
+    "mistralai/mistral-small-3.1-24b-instruct:free": {
+        "max_tokens": 8192,
+        "temperature": 0.7,
+    },
 }
 
 def get_model(agent_type: str) -> str:
     """Get the model ID for a given agent type"""
-    return MODELS.get(agent_type, "mistralai/mistral-small-3.1-24b-instruct:free")
+    return MODELS.get(agent_type, "openai/gpt-4o-mini")
+
+def get_fallback_model(model_id: str) -> str:
+    """Get fallback model when primary fails"""
+    return FALLBACK_MODELS.get(model_id, "openai/gpt-4o-mini")
 
 def get_model_settings(model_id: str) -> dict:
     """Get model-specific settings"""
