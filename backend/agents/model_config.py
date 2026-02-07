@@ -13,10 +13,10 @@ Pricing Reference:
 # OpenRouter model identifiers
 MODELS = {
     # Orchestrator Agent - workflow management, decision making
-    "orchestrator": "mistralai/mistral-7b-instruct",
+    "orchestrator": "mistralai/mistral-7b-instruct:free",
     
     # Requirements Agent - prompt parsing (uses orchestrator model)
-    "requirements": "mistralai/mistral-7b-instruct",
+    "requirements": "mistralai/mistral-7b-instruct:free",
     
     # Code Generation Agent - Frontend/UI code
     "code_generation_frontend": "openai/gpt-4o-mini",
@@ -31,12 +31,12 @@ MODELS = {
     "fix": "meta-llama/llama-3.1-8b-instruct:free",
     
     # Deployment Agent - deployment tasks
-    "deployment": "mistralai/mistral-7b-instruct",
+    "deployment": "mistralai/mistral-7b-instruct:free",
 }
 
 # Model-specific settings
 MODEL_SETTINGS = {
-    "mistralai/mistral-7b-instruct": {
+    "mistralai/mistral-7b-instruct:free": {
         "max_tokens": 4096,
         "temperature": 0.7,
     },
@@ -56,7 +56,7 @@ MODEL_SETTINGS = {
 
 def get_model(agent_type: str) -> str:
     """Get the model ID for a given agent type"""
-    return MODELS.get(agent_type, "mistralai/mistral-7b-instruct")
+    return MODELS.get(agent_type, "mistralai/mistral-7b-instruct:free")
 
 def get_model_settings(model_id: str) -> dict:
     """Get model-specific settings"""
