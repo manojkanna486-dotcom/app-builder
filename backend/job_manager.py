@@ -288,7 +288,11 @@ class JobManager:
                 is_update=is_update,
             )
             
+            logger.info(f"Job {job_id}: Code generation returned, parsing result...")
+            
             files = generation_result.get("files", [])
+            
+            logger.info(f"Job {job_id}: Got {len(files)} files from generation")
             
             step_results["generate"] = {
                 "success": True,
@@ -296,16 +300,20 @@ class JobManager:
                 "summary": generation_result.get("summary", ""),
             }
             
+            logger.info(f"Job {job_id}: Updating job with files...")
+            
             await self._update_job(job_id, {
                 "files": files,
                 "step_results": step_results,
                 "progress": 40,
             })
             
-            logger.info(f"Job {job_id}: Generated {len(files)} files")
+            logger.info(f"Job {job_id}: Generated {len(files)} files - proceeding to deploy")
             
         except Exception as e:
             logger.error(f"Job {job_id}: Code generation failed: {e}")
+            import traceback
+            traceback.print_exc()
             await self._fail_job(job_id, f"Code generation failed: {str(e)}")
             return
         
