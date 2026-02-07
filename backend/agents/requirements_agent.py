@@ -148,45 +148,60 @@ Parse thoroughly. Flag any ambiguities."""
         # Get model config
         model = get_model("requirements")
         settings = get_model_settings(model)
-
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_message}
-                        ],
-                        "max_tokens": settings["max_tokens"],
-                        "temperature": 0.2
-                    }
-                )
-                
-                if response.status_code != 200:
-                    logger.error(f"Requirements API error: {response.text}")
-                    return self._create_minimal_requirements(prompt)
-                
-                data = response.json()
-                content = data["choices"][0]["message"]["content"]
-                
-                # Extract JSON from response
-                json_match = re.search(r'\{[\s\S]*\}', content)
-                if json_match:
-                    requirements = json.loads(json_match.group(), strict=False)
-                    requirements["created_at"] = datetime.now(timezone.utc).isoformat()
-                    return self._validate_requirements(requirements)
-                else:
-                    return self._create_minimal_requirements(prompt)
+        
+        max_retries = 3
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                import asyncio
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json"
+                        },
+                        json={
+                            "model": model,
+                            "messages": [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_message}
+                            ],
+                            "max_tokens": settings["max_tokens"],
+                            "temperature": 0.2
+                        }
+                    )
                     
-        except Exception as e:
-            logger.error(f"Requirements agent error: {e}")
-            return self._create_minimal_requirements(prompt)
+                    # Retry on 503 Service Unavailable
+                    if response.status_code == 503:
+                        last_error = f"Service unavailable (503)"
+                        logger.warning(f"Requirements API 503 error, retrying in 2 seconds (attempt {attempt + 1}/{max_retries})")
+                        await asyncio.sleep(2)
+                        continue
+                    
+                    if response.status_code != 200:
+                        logger.error(f"Requirements API error: {response.text}")
+                        return self._create_minimal_requirements(prompt)
+                    
+                    data = response.json()
+                    content = data["choices"][0]["message"]["content"]
+                    
+                    # Extract JSON from response
+                    json_match = re.search(r'\{[\s\S]*\}', content)
+                    if json_match:
+                        requirements = json.loads(json_match.group(), strict=False)
+                        requirements["created_at"] = datetime.now(timezone.utc).isoformat()
+                        return self._validate_requirements(requirements)
+                    else:
+                        return self._create_minimal_requirements(prompt)
+                        
+            except Exception as e:
+                logger.error(f"Requirements agent error: {e}")
+                last_error = str(e)
+        
+        logger.error(f"Requirements parsing failed after {max_retries} attempts: {last_error}")
+        return self._create_minimal_requirements(prompt)
     
     async def resolve_ambiguities(self, requirements: Dict, answers: Dict[str, str]) -> Dict:
         """
