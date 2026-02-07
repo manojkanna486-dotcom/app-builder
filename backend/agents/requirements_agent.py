@@ -145,6 +145,10 @@ PROMPT: {prompt}
 
 Parse thoroughly. Flag any ambiguities."""
 
+        # Get model config
+        model = get_model("requirements")
+        settings = get_model_settings(model)
+
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
@@ -154,12 +158,12 @@ Parse thoroughly. Flag any ambiguities."""
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4",
+                        "model": model,
                         "messages": [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_message}
                         ],
-                        "max_tokens": 8000,
+                        "max_tokens": settings["max_tokens"],
                         "temperature": 0.2
                     }
                 )
