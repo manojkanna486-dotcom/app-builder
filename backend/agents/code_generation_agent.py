@@ -85,7 +85,9 @@ class CodeGenerationAgent:
         last_error = None
         for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(timeout=180.0) as client:
+                logger.info(f"Code generation: Creating httpx client (attempt {attempt + 1}/{max_retries})...")
+                async with httpx.AsyncClient(timeout=300.0) as client:  # 5 minute timeout
+                    logger.info(f"Code generation: Sending POST request to OpenRouter...")
                     response = await client.post(
                         f"{self.base_url}/chat/completions",
                         headers={
