@@ -1941,6 +1941,100 @@ export default function BuilderPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Error Fix Modal */}
+      <Dialog open={showErrorFixModal} onOpenChange={setShowErrorFixModal}>
+        <DialogContent className="sm:max-w-[600px] bg-background border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bug className="w-5 h-5 text-orange-500" />
+              Report & Fix Error
+            </DialogTitle>
+            <DialogDescription>
+              Describe the error you're seeing and I'll try to fix it automatically.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="error-message">Error Message / Description *</Label>
+              <Textarea
+                id="error-message"
+                data-testid="error-message-input"
+                placeholder="Paste the error message or describe what's wrong..."
+                value={errorMessage}
+                onChange={(e) => setErrorMessage(e.target.value)}
+                className="bg-card border-border min-h-[100px] font-mono text-xs"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="error-context">What were you trying to do? (Optional)</Label>
+              <Input
+                id="error-context"
+                data-testid="error-context-input"
+                placeholder="E.g., I clicked the submit button and..."
+                value={errorContext}
+                onChange={(e) => setErrorContext(e.target.value)}
+                className="bg-card border-border"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="console-logs">Console Logs (Optional)</Label>
+              <Textarea
+                id="console-logs"
+                data-testid="console-logs-input"
+                placeholder="Paste any browser console errors here..."
+                value={consoleLogs}
+                onChange={(e) => setConsoleLogs(e.target.value)}
+                className="bg-card border-border min-h-[80px] font-mono text-xs"
+              />
+            </div>
+
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <Wrench className="w-4 h-4 text-blue-400 mt-0.5" />
+                <div className="text-xs text-blue-200">
+                  <p className="font-medium mb-1">Tips for better fixes:</p>
+                  <ul className="list-disc list-inside space-y-0.5 text-blue-300/80">
+                    <li>Include the exact error message if available</li>
+                    <li>Describe what you expected to happen</li>
+                    <li>Open browser DevTools (F12) → Console tab for error logs</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowErrorFixModal(false)}
+              disabled={fixingError}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleFixError}
+              disabled={fixingError || !errorMessage.trim()}
+              className="bg-orange-600 hover:bg-orange-500"
+            >
+              {fixingError ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Fixing...
+                </>
+              ) : (
+                <>
+                  <Wrench className="w-4 h-4 mr-2" />
+                  Fix Error
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }
