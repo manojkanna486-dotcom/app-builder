@@ -7,6 +7,7 @@ Build a full-stack "App Builder" that generates FastAPI backends and React front
 **✅ E2E Pipeline Working** - Successfully generating and previewing applications
 **✅ Model Configuration Updated** - Cost-optimized model selection per agent
 **✅ Intelligent Fix Agent** - Can analyze and fix user-reported errors
+**✅ Auto-Table Creation** - Database tables automatically created during deployment
 
 ## Model Configuration (Updated Feb 10, 2026)
 ```
