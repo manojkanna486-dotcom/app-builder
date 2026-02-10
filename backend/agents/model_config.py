@@ -24,8 +24,8 @@ MODELS = {
     # Code Generation - Backend/API/DB (Gemini 1.5 Pro)
     "code_generation_backend": "google/gemini-pro-1.5",
     
-    # Conversational Tester (o1-mini)
-    "tester": "openai/o1-mini",
+    # Tester Agent (o1-mini -> using gemini flash for testing)
+    "tester": "google/gemini-2.5-flash",
     
     # Fix Agent (DeepSeek Coder V2)
     "fix": "deepseek/deepseek-chat",
