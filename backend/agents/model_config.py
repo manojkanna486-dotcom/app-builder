@@ -28,7 +28,7 @@ MODELS = {
     "tester": "openai/o1-mini",
     
     # Fix Agent (DeepSeek Coder V2)
-    "fix": "deepseek/deepseek-coder",
+    "fix": "deepseek/deepseek-chat",
     
     # Deployment Agent (Claude Haiku)
     "deployment": "anthropic/claude-3-haiku",
