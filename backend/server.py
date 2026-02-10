@@ -2042,6 +2042,104 @@ async def fix_project_code(project_id: str):
     
     return {"fixed": False, "message": "Could not auto-fix the errors"}
 
+
+class FixErrorRequest(BaseModel):
+    """Request model for fixing user-reported errors"""
+    error_message: str = Field(..., description="The error message or description")
+    console_logs: Optional[str] = Field(None, description="Browser console logs if available")
+    user_context: Optional[str] = Field(None, description="Additional context from the user")
+
+
+@api_router.post("/projects/{project_id}/fix-error")
+async def fix_user_reported_error(project_id: str, request: FixErrorRequest):
+    """
+    Fix a user-reported error in the project.
+    This is the intelligent fix endpoint that understands errors and applies targeted fixes.
+    """
+    
+    project = await database.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    version = await database.get_latest_version(project_id)
+    if not version or not version.get("files"):
+        raise HTTPException(status_code=400, detail="No code to fix - generate an app first")
+    
+    files = version.get("files", [])
+    requirements = version.get("requirements") or project.get("requirements")
+    
+    # Use the improved Fix Agent
+    fix_agent = FixAgent(OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
+    
+    logger.info(f"Fixing user-reported error for project {project_id}: {request.error_message[:100]}")
+    
+    try:
+        result = await fix_agent.fix_user_error(
+            files=files,
+            error_message=request.error_message,
+            user_context=request.user_context,
+            console_logs=request.console_logs,
+            requirements=requirements
+        )
+        
+        if result.get("success"):
+            # Create new version with fixed code
+            new_version_number = version["version_number"] + 1
+            
+            new_version = Version(
+                project_id=project_id,
+                version_number=new_version_number,
+                prompt=f"Fix: {request.error_message[:100]}",
+                files=[VersionFile(**f) for f in result["files"]],
+                status="success",
+                delta_plan={
+                    "summary": result.get("explanation", "Applied fixes"),
+                    "changes_made": result.get("changes_made", []),
+                    "files_modified": result.get("files_modified", []),
+                    "error_fixed": request.error_message[:200],
+                    "auto_fixed": True
+                }
+            )
+            await database.create_version(new_version.model_dump())
+            
+            # Update project
+            await database.update_project(project_id, {
+                "current_version": new_version_number,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            })
+            
+            # Add chat message
+            fix_msg = ChatMessage(
+                project_id=project_id,
+                role="assistant",
+                content=f"🔧 Fixed: {result.get('explanation', 'Applied fixes')}\n\nFiles modified: {', '.join(result.get('files_modified', []))}"
+            )
+            await database.create_message(fix_msg.model_dump())
+            
+            logger.info(f"Successfully fixed error for project {project_id}, new version {new_version_number}")
+            
+            return {
+                "success": True,
+                "message": result.get("explanation", "Applied fixes"),
+                "new_version": new_version_number,
+                "files_modified": result.get("files_modified", []),
+                "changes_made": result.get("changes_made", []),
+                "analysis": result.get("analysis", {})
+            }
+        else:
+            logger.warning(f"Could not fix error for project {project_id}: {result.get('error')}")
+            return {
+                "success": False,
+                "message": result.get("error", "Could not apply fixes"),
+                "analysis": result.get("analysis", {}),
+                "suggestion": "Try providing more details about the error or steps to reproduce it"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error in fix_user_reported_error: {e}")
+        raise HTTPException(status_code=500, detail=f"Fix operation failed: {str(e)}")
+
+
 @api_router.get("/projects/{project_id}/versions", response_model=List[Version])
 async def get_versions(project_id: str):
     versions = await database.get_versions(project_id)
