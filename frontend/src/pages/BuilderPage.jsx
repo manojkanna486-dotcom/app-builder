@@ -1456,6 +1456,20 @@ export default function BuilderPage() {
                     </TooltipTrigger>
                     <TooltipContent>Refresh preview</TooltipContent>
                   </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        data-testid="report-error-btn"
+                        onClick={() => setShowErrorFixModal(true)}
+                        className="text-orange-500 hover:text-orange-400"
+                      >
+                        <Bug className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Report & Fix Error</TooltipContent>
+                  </Tooltip>
                 </>
               )}
             </div>
