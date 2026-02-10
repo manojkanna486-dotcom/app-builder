@@ -1,13 +1,14 @@
 """
 Deployment Agent - Handles Supabase migrations and Edge Function deployments
-Runs SQL migrations and deploys functions to Supabase
+Runs SQL migrations directly via PostgreSQL connection
 """
 
 import json
 import logging
+import os
+import re
 from typing import Dict, List, Optional, Any
 import httpx
-import re
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class DeploymentAgent:
         self, 
         files: List[Dict],
         supabase_config: Dict,
-        access_token: str
+        access_token: str = None
     ) -> Dict:
         """
         Deploy all backend components to Supabase.
@@ -32,7 +33,8 @@ class DeploymentAgent:
             "status": "success",
             "migrations": [],
             "edge_functions": [],
-            "errors": []
+            "errors": [],
+            "tables_created": []
         }
         
         supabase_url = supabase_config.get("url")
@@ -48,28 +50,14 @@ class DeploymentAgent:
         migration_files = [f for f in files if f.get("file_type") == "sql"]
         edge_function_files = [f for f in files if f.get("file_type") == "edge_function"]
         
-        # Run migrations using service role key (direct SQL execution)
+        # Run migrations using direct PostgreSQL connection
         if migration_files:
-            if service_key:
-                migration_result = await self._run_migrations_direct(
-                    supabase_url, 
-                    service_key, 
-                    migration_files
-                )
-            elif access_token and project_ref:
-                # Fallback to Management API if OAuth available
-                migration_result = await self._run_migrations_management_api(
-                    project_ref, 
-                    access_token, 
-                    migration_files
-                )
-            else:
-                migration_result = {
-                    "executed": [],
-                    "errors": [{"path": "all", "error": "No service key or OAuth token available for migrations"}]
-                }
-            
+            migration_result = await self._run_migrations_postgres(
+                project_ref or self._extract_project_ref(supabase_url),
+                migration_files
+            )
             result["migrations"] = migration_result.get("executed", [])
+            result["tables_created"] = migration_result.get("tables_created", [])
             if migration_result.get("errors"):
                 result["errors"].extend(migration_result["errors"])
         
@@ -84,164 +72,62 @@ class DeploymentAgent:
             if deploy_result.get("errors"):
                 result["errors"].extend(deploy_result["errors"])
         elif edge_function_files:
-            result["errors"].append({
-                "path": "edge_functions",
-                "error": "Edge Function deployment requires OAuth connection"
-            })
+            logger.info("Edge Function deployment skipped - requires OAuth connection")
         
         if result["errors"]:
             result["status"] = "partial" if result["migrations"] or result["edge_functions"] else "error"
         
+        logger.info(f"Deployment complete: {len(result['tables_created'])} tables created, {len(result['migrations'])} migrations run")
+        
         return result
     
-    async def _run_migrations_direct(
-        self, 
-        supabase_url: str, 
-        service_key: str, 
+    def _extract_project_ref(self, supabase_url: str) -> Optional[str]:
+        """Extract project reference from Supabase URL"""
+        if not supabase_url:
+            return None
+        match = re.search(r'https://([a-z]+)\.supabase\.co', supabase_url)
+        if match:
+            return match.group(1)
+        return None
+    
+    async def _run_migrations_postgres(
+        self,
+        project_ref: str,
         migration_files: List[Dict]
     ) -> Dict:
-        """Execute SQL migrations directly via Supabase REST API using service role key"""
+        """Execute SQL migrations directly via PostgreSQL connection"""
         
         result = {
             "executed": [],
-            "errors": []
+            "errors": [],
+            "tables_created": []
         }
         
-        # Sort migrations by filename
+        try:
+            import asyncpg
+        except ImportError:
+            logger.error("asyncpg not installed")
+            result["errors"].append({"path": "all", "error": "asyncpg library not installed"})
+            return result
+        
+        # Get database password from environment
+        db_password = os.environ.get("SUPABASE_DB_PASSWORD", "")
+        
+        if not db_password:
+            # Try to get from the project's stored config (for user's projects)
+            logger.warning("No SUPABASE_DB_PASSWORD in environment, migrations may fail")
+        
+        # Build connection string for pooler (transaction mode)
+        # Format: postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+        conn_str = f"postgresql://postgres.{project_ref}:{db_password}@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
+        
+        # Sort migrations by filename to ensure correct order
         sorted_migrations = sorted(migration_files, key=lambda f: f.get("path", ""))
         
-        headers = {
-            "apikey": service_key,
-            "Authorization": f"Bearer {service_key}",
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal"
-        }
-        
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            for migration in sorted_migrations:
-                sql = migration.get("content", "")
-                path = migration.get("path", "unknown")
-                
-                if not sql.strip():
-                    continue
-                
-                try:
-                    # Execute SQL via Supabase's RPC endpoint
-                    # First, try to use the pg_query function if available
-                    # Otherwise, we'll need to execute statements one by one
-                    
-                    # Split SQL into individual statements
-                    statements = self._split_sql_statements(sql)
-                    
-                    executed_count = 0
-                    for stmt in statements:
-                        stmt = stmt.strip()
-                        if not stmt:
-                            continue
-                        
-                        # Try to execute via rpc call
-                        response = await client.post(
-                            f"{supabase_url}/rest/v1/rpc/exec_sql",
-                            headers=headers,
-                            json={"query": stmt}
-                        )
-                        
-                        if response.status_code == 404:
-                            # exec_sql function doesn't exist, try direct approach
-                            # For CREATE TABLE, we can't use REST API directly
-                            # Log and continue - the table creation will be handled differently
-                            logger.warning(f"exec_sql not available, migration may need manual execution: {path}")
-                            result["errors"].append({
-                                "path": path,
-                                "error": "Direct SQL execution not available. Please run migration manually in Supabase Dashboard."
-                            })
-                            break
-                        elif response.status_code in [200, 201, 204]:
-                            executed_count += 1
-                        else:
-                            error_text = response.text
-                            try:
-                                error_data = response.json()
-                                error_text = error_data.get("message", error_text)
-                            except:
-                                pass
-                            
-                            # Check if it's a "already exists" error - that's OK
-                            if "already exists" in error_text.lower():
-                                logger.info(f"Migration {path}: Object already exists (OK)")
-                                executed_count += 1
-                            else:
-                                result["errors"].append({
-                                    "path": path,
-                                    "error": error_text
-                                })
-                    
-                    if executed_count > 0:
-                        result["executed"].append({
-                            "path": path,
-                            "status": "success",
-                            "statements": executed_count
-                        })
-                        logger.info(f"Migration executed: {path} ({executed_count} statements)")
-                        
-                except Exception as e:
-                    result["errors"].append({
-                        "path": path,
-                        "error": str(e)
-                    })
-                    logger.error(f"Migration exception: {path} - {e}")
-        
-        return result
-    
-    def _split_sql_statements(self, sql: str) -> List[str]:
-        """Split SQL into individual statements"""
-        # Simple split by semicolon, but handle edge cases
-        statements = []
-        current = ""
-        in_string = False
-        string_char = None
-        
-        for char in sql:
-            if char in ("'", '"') and not in_string:
-                in_string = True
-                string_char = char
-            elif char == string_char and in_string:
-                in_string = False
-                string_char = None
+        try:
+            conn = await asyncpg.connect(conn_str, timeout=30)
+            logger.info(f"Connected to Supabase database for migrations")
             
-            if char == ';' and not in_string:
-                if current.strip():
-                    statements.append(current.strip())
-                current = ""
-            else:
-                current += char
-        
-        if current.strip():
-            statements.append(current.strip())
-        
-        return statements
-    
-    async def _run_migrations_management_api(
-        self, 
-        project_ref: str, 
-        access_token: str, 
-        migration_files: List[Dict]
-    ) -> Dict:
-        """Execute SQL migrations via Supabase Management API (OAuth required)"""
-        
-        result = {
-            "executed": [],
-            "errors": []
-        }
-        
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
-        
-        sorted_migrations = sorted(migration_files, key=lambda f: f.get("path", ""))
-        
-        async with httpx.AsyncClient(timeout=60.0) as client:
             for migration in sorted_migrations:
                 sql = migration.get("content", "")
                 path = migration.get("path", "unknown")
@@ -249,49 +135,85 @@ class DeploymentAgent:
                 if not sql.strip():
                     continue
                 
+                logger.info(f"Executing migration: {path}")
+                
                 try:
-                    response = await client.post(
-                        f"{self.management_api}/projects/{project_ref}/database/query",
-                        headers=headers,
-                        json={"query": sql}
-                    )
+                    # Execute the full SQL content
+                    await conn.execute(sql)
                     
-                    if response.status_code in [200, 201]:
+                    result["executed"].append({
+                        "path": path,
+                        "status": "success"
+                    })
+                    
+                    # Extract table names from CREATE TABLE statements
+                    table_matches = re.findall(
+                        r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?(\w+)',
+                        sql,
+                        re.IGNORECASE
+                    )
+                    for table in table_matches:
+                        if table not in result["tables_created"]:
+                            result["tables_created"].append(table)
+                    
+                    logger.info(f"Migration {path} executed successfully")
+                    
+                except asyncpg.exceptions.DuplicateTableError as e:
+                    logger.info(f"Table already exists for {path} (OK)")
+                    result["executed"].append({
+                        "path": path,
+                        "status": "already_exists"
+                    })
+                except asyncpg.exceptions.DuplicateObjectError as e:
+                    logger.info(f"Object already exists for {path} (OK)")
+                    result["executed"].append({
+                        "path": path,
+                        "status": "already_exists"
+                    })
+                except Exception as e:
+                    error_msg = str(e)
+                    # "already exists" errors are OK
+                    if "already exists" in error_msg.lower():
+                        logger.info(f"Object already exists for {path} (OK)")
                         result["executed"].append({
                             "path": path,
-                            "status": "success"
+                            "status": "already_exists"
                         })
-                        logger.info(f"Migration executed: {path}")
                     else:
-                        error_msg = response.text
-                        try:
-                            error_data = response.json()
-                            error_msg = error_data.get("message", error_msg)
-                        except:
-                            pass
-                        
+                        logger.error(f"Migration {path} failed: {e}")
                         result["errors"].append({
                             "path": path,
                             "error": error_msg
                         })
-                        logger.error(f"Migration failed: {path} - {error_msg}")
-                        
-                except Exception as e:
-                    result["errors"].append({
-                        "path": path,
-                        "error": str(e)
-                    })
-                    logger.error(f"Migration exception: {path} - {e}")
+            
+            await conn.close()
+            
+        except asyncpg.exceptions.InvalidPasswordError:
+            result["errors"].append({
+                "path": "connection",
+                "error": "Invalid database password. Please check SUPABASE_DB_PASSWORD."
+            })
+        except asyncpg.exceptions.ConnectionDoesNotExistError:
+            result["errors"].append({
+                "path": "connection", 
+                "error": "Could not connect to database. Check project_ref and network."
+            })
+        except Exception as e:
+            logger.error(f"Database connection failed: {e}")
+            result["errors"].append({
+                "path": "connection",
+                "error": f"Database connection failed: {str(e)}"
+            })
         
         return result
     
     async def _deploy_edge_functions(
-        self, 
+        self,
         project_ref: str,
         access_token: str,
         function_files: List[Dict]
     ) -> Dict:
-        """Deploy Edge Functions to Supabase"""
+        """Deploy Edge Functions via Supabase Management API"""
         
         result = {
             "deployed": [],
@@ -303,135 +225,98 @@ class DeploymentAgent:
             "Content-Type": "application/json"
         }
         
-        # Group files by function name
-        functions = {}
-        for f in function_files:
-            path = f.get("path", "")
-            # Extract function name from path like "supabase/functions/my-function/index.ts"
-            match = re.search(r'functions/([^/]+)/', path)
-            if match:
-                func_name = match.group(1)
-                if func_name not in functions:
-                    functions[func_name] = []
-                functions[func_name].append(f)
-        
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            for func_name, files in functions.items():
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            for func_file in function_files:
+                path = func_file.get("path", "")
+                content = func_file.get("content", "")
+                
+                # Extract function name from path (e.g., "supabase/functions/my-func/index.ts" -> "my-func")
+                func_name_match = re.search(r'functions/([^/]+)/', path)
+                if not func_name_match:
+                    continue
+                    
+                func_name = func_name_match.group(1)
+                
                 try:
-                    # Find the main entry file (index.ts)
-                    entry_file = next(
-                        (f for f in files if f["path"].endswith("index.ts")),
-                        files[0] if files else None
+                    # Check if function exists
+                    check_response = await client.get(
+                        f"{self.management_api}/projects/{project_ref}/functions/{func_name}",
+                        headers=headers
                     )
                     
-                    if not entry_file:
-                        continue
-                    
-                    # Deploy the function
-                    response = await client.post(
-                        f"{self.management_api}/projects/{project_ref}/functions",
-                        headers=headers,
-                        json={
-                            "name": func_name,
-                            "body": entry_file.get("content", ""),
-                            "verify_jwt": True
-                        }
-                    )
+                    if check_response.status_code == 200:
+                        # Update existing function
+                        response = await client.patch(
+                            f"{self.management_api}/projects/{project_ref}/functions/{func_name}",
+                            headers=headers,
+                            json={"body": content}
+                        )
+                    else:
+                        # Create new function
+                        response = await client.post(
+                            f"{self.management_api}/projects/{project_ref}/functions",
+                            headers=headers,
+                            json={
+                                "slug": func_name,
+                                "name": func_name,
+                                "body": content,
+                                "verify_jwt": True
+                            }
+                        )
                     
                     if response.status_code in [200, 201]:
                         result["deployed"].append({
                             "name": func_name,
+                            "path": path,
                             "status": "deployed"
                         })
-                        logger.info(f"Edge Function deployed: {func_name}")
-                    elif response.status_code == 409:
-                        # Function exists, try to update
-                        update_response = await client.patch(
-                            f"{self.management_api}/projects/{project_ref}/functions/{func_name}",
-                            headers=headers,
-                            json={"body": entry_file.get("content", "")}
-                        )
-                        
-                        if update_response.status_code in [200, 201]:
-                            result["deployed"].append({
-                                "name": func_name,
-                                "status": "updated"
-                            })
-                            logger.info(f"Edge Function updated: {func_name}")
-                        else:
-                            result["errors"].append({
-                                "name": func_name,
-                                "error": update_response.text
-                            })
+                        logger.info(f"Deployed Edge Function: {func_name}")
                     else:
+                        error_text = response.text
+                        try:
+                            error_data = response.json()
+                            error_text = error_data.get("message", error_text)
+                        except:
+                            pass
                         result["errors"].append({
-                            "name": func_name,
-                            "error": response.text
+                            "path": path,
+                            "function": func_name,
+                            "error": error_text
                         })
                         
                 except Exception as e:
                     result["errors"].append({
-                        "name": func_name,
+                        "path": path,
+                        "function": func_name,
                         "error": str(e)
                     })
-                    logger.error(f"Edge Function deployment error: {func_name} - {e}")
         
         return result
     
-    async def verify_deployment(
-        self,
-        project_ref: str,
-        access_token: str,
-        expected_tables: List[str],
-        expected_functions: List[str]
-    ) -> Dict:
-        """Verify that deployment was successful"""
+    def _split_sql_statements(self, sql: str) -> List[str]:
+        """Split SQL into individual statements"""
+        # Simple split on semicolons, but keep DO blocks together
+        statements = []
+        current = []
+        in_do_block = False
         
-        result = {
-            "tables_verified": [],
-            "tables_missing": [],
-            "functions_verified": [],
-            "functions_missing": []
-        }
-        
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # Check tables
-            try:
-                response = await client.get(
-                    f"{self.management_api}/projects/{project_ref}/database/tables",
-                    headers=headers
-                )
-                
-                if response.status_code == 200:
-                    existing_tables = [t["name"] for t in response.json()]
-                    for table in expected_tables:
-                        if table in existing_tables:
-                            result["tables_verified"].append(table)
-                        else:
-                            result["tables_missing"].append(table)
-            except Exception as e:
-                logger.error(f"Table verification error: {e}")
+        for line in sql.split('\n'):
+            stripped = line.strip().upper()
             
-            # Check functions
-            try:
-                response = await client.get(
-                    f"{self.management_api}/projects/{project_ref}/functions",
-                    headers=headers
-                )
-                
-                if response.status_code == 200:
-                    existing_funcs = [f["name"] for f in response.json()]
-                    for func in expected_functions:
-                        if func in existing_funcs:
-                            result["functions_verified"].append(func)
-                        else:
-                            result["functions_missing"].append(func)
-            except Exception as e:
-                logger.error(f"Function verification error: {e}")
+            if stripped.startswith('DO $$') or stripped.startswith('DO $'):
+                in_do_block = True
+            
+            current.append(line)
+            
+            if in_do_block and ('$$;' in line or '$$ ;' in line):
+                in_do_block = False
+                statements.append('\n'.join(current))
+                current = []
+            elif not in_do_block and line.rstrip().endswith(';'):
+                statements.append('\n'.join(current))
+                current = []
         
-        return result
+        if current:
+            statements.append('\n'.join(current))
+        
+        return [s.strip() for s in statements if s.strip()]
