@@ -110,23 +110,30 @@ class DeploymentAgent:
             result["errors"].append({"path": "all", "error": "asyncpg library not installed"})
             return result
         
-        # Get database password from environment
-        db_password = os.environ.get("SUPABASE_DB_PASSWORD", "")
+        # Get database URL from environment
+        db_url = os.environ.get("SUPABASE_DB_URL", "")
         
-        if not db_password:
-            # Try to get from the project's stored config (for user's projects)
-            logger.warning("No SUPABASE_DB_PASSWORD in environment, migrations may fail")
-        
-        # Build connection string for pooler (transaction mode)
-        # Format: postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
-        conn_str = f"postgresql://postgres.{project_ref}:{db_password}@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
+        if not db_url:
+            logger.warning("No SUPABASE_DB_URL in environment, trying to construct from project_ref")
+            # Try to construct URL from project ref
+            db_password = os.environ.get("SUPABASE_DB_PASSWORD", "")
+            if db_password and project_ref:
+                db_url = f"postgresql://postgres.{project_ref}:{db_password}@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
+            else:
+                result["errors"].append({
+                    "path": "connection",
+                    "error": "No database credentials configured. Set SUPABASE_DB_URL or SUPABASE_DB_PASSWORD."
+                })
+                return result
         
         # Sort migrations by filename to ensure correct order
         sorted_migrations = sorted(migration_files, key=lambda f: f.get("path", ""))
         
+        conn = None
         try:
-            conn = await asyncpg.connect(conn_str, timeout=30)
-            logger.info(f"Connected to Supabase database for migrations")
+            logger.info(f"Connecting to Supabase database for migrations...")
+            conn = await asyncpg.connect(db_url, timeout=30)
+            logger.info(f"Connected to Supabase database successfully")
             
             for migration in sorted_migrations:
                 sql = migration.get("content", "")
@@ -186,17 +193,10 @@ class DeploymentAgent:
                             "error": error_msg
                         })
             
-            await conn.close()
-            
         except asyncpg.exceptions.InvalidPasswordError:
             result["errors"].append({
                 "path": "connection",
-                "error": "Invalid database password. Please check SUPABASE_DB_PASSWORD."
-            })
-        except asyncpg.exceptions.ConnectionDoesNotExistError:
-            result["errors"].append({
-                "path": "connection", 
-                "error": "Could not connect to database. Check project_ref and network."
+                "error": "Invalid database password. Please check SUPABASE_DB_URL."
             })
         except Exception as e:
             logger.error(f"Database connection failed: {e}")
@@ -204,6 +204,9 @@ class DeploymentAgent:
                 "path": "connection",
                 "error": f"Database connection failed: {str(e)}"
             })
+        finally:
+            if conn:
+                await conn.close()
         
         return result
     
