@@ -1,7 +1,6 @@
 """
-Fix Agent - Fixes only issues reported by Tester Agent
-MUST DO: Fix only reported issues, modify minimal code, preserve working features
-MUST NOT: Add new features, change requirements, over-refactor
+Fix Agent - Intelligent error fixing for generated applications
+Uses context-aware prompts and multi-step reasoning to fix issues
 """
 
 import json
@@ -17,86 +16,177 @@ logger = logging.getLogger(__name__)
 
 class FixAgent:
     """
-    Fixes code issues identified by the Tester Agent.
-    
-    RULES:
-    1. Fix ONLY reported issues - nothing else
-    2. Modify minimal required code
-    3. Preserve ALL existing working features
-    4. Maintain existing code style
-    5. Never add new features
-    6. Never change requirements
+    Intelligent Fix Agent that can:
+    1. Understand error messages and stack traces
+    2. Analyze code to find root cause
+    3. Apply targeted fixes without breaking existing functionality
+    4. Handle user-reported errors with context
     """
     
     def __init__(self, openrouter_api_key: str, openrouter_base_url: str):
         self.api_key = openrouter_api_key
         self.base_url = openrouter_base_url
         
-    async def fix_issues(
+    async def fix_user_error(
         self,
         files: List[Dict],
-        test_results: Dict,
-        requirements: Dict,
-        attempt: int = 1
+        error_message: str,
+        user_context: Optional[str] = None,
+        console_logs: Optional[str] = None,
+        requirements: Optional[Dict] = None
     ) -> Dict:
         """
-        Fix issues from test results.
-        Returns ONLY modified files.
+        Fix an error reported by the user.
+        This is the main entry point for user-reported issues.
         """
         
-        issues = test_results.get("issues", [])
-        if not issues:
-            return {
-                "files": files,
-                "fixes_applied": [],
-                "files_modified": [],
-                "summary": "No issues to fix"
-            }
+        # Step 1: Analyze the error to understand what's wrong
+        analysis = await self._analyze_error(error_message, console_logs, files)
         
-        # Build minimal fix prompt
-        prompt = self._build_fix_prompt(files, issues, requirements, attempt)
+        # Step 2: Generate targeted fixes
+        fixes = await self._generate_fixes(files, analysis, user_context, requirements)
         
-        system_prompt = """You are the Fix Agent. Your ONLY job is to fix reported issues.
-
-STRICT RULES:
-1. Fix ONLY the issues listed - NOTHING ELSE
-2. Make MINIMAL changes - only what's needed to fix the issue
-3. PRESERVE all existing working functionality
-4. Do NOT add new features
-5. Do NOT refactor working code
-6. Do NOT change code style
-7. Do NOT modify files that don't need changes
-
-OUTPUT FORMAT - Return ONLY files that were MODIFIED:
-{
-    "files": [
-        {
-            "path": "path/to/file.jsx",
-            "content": "complete fixed content",
-            "file_type": "frontend|sql|edge_function"
-        }
-    ],
-    "fixes_applied": [
-        {
-            "issue_id": "TEST-001",
-            "description": "What was fixed",
-            "file": "path/to/file.jsx",
-            "change_type": "bug_fix|missing_feature|error_handling"
-        }
-    ],
-    "files_modified": ["path/to/file.jsx"]
-}
-
-IMPORTANT:
-- Return COMPLETE file content, not diffs
-- Only include files that were ACTUALLY modified
-- If you can't fix an issue, don't include fake fixes
-"""
+        return fixes
+    
+    async def _analyze_error(
+        self,
+        error_message: str,
+        console_logs: Optional[str],
+        files: List[Dict]
+    ) -> Dict:
+        """Analyze error to understand root cause"""
         
-        # Use Llama 3.1 8B (free) for fix agent
         model = get_model("fix")
         settings = get_model_settings(model)
         
+        # Build analysis prompt
+        files_summary = "\n".join([
+            f"- {f.get('path')}: {f.get('file_type', 'unknown')} ({len(f.get('content', ''))} chars)"
+            for f in files
+        ])
+        
+        prompt = f"""Analyze this error and identify the root cause.
+
+ERROR MESSAGE:
+{error_message}
+
+{f"CONSOLE LOGS:{chr(10)}{console_logs}" if console_logs else ""}
+
+FILES IN PROJECT:
+{files_summary}
+
+Respond in JSON format:
+{{
+    "error_type": "syntax|runtime|logic|database|api|ui|other",
+    "root_cause": "Brief explanation of what's causing the error",
+    "likely_files": ["list", "of", "files", "to", "check"],
+    "fix_strategy": "How to fix this issue",
+    "severity": "critical|high|medium|low"
+}}"""
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": "You are an expert code debugger. Analyze errors precisely."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "max_tokens": 1000,
+                        "temperature": 0.2
+                    }
+                )
+                
+                if response.status_code == 200:
+                    content = response.json()["choices"][0]["message"]["content"]
+                    json_match = re.search(r'\{[\s\S]*\}', content)
+                    if json_match:
+                        return json.loads(json_match.group())
+                        
+        except Exception as e:
+            logger.error(f"Error analysis failed: {e}")
+        
+        # Default analysis if LLM fails
+        return {
+            "error_type": "unknown",
+            "root_cause": error_message,
+            "likely_files": [f.get("path") for f in files if f.get("file_type") == "frontend"][:3],
+            "fix_strategy": "Review and fix the error",
+            "severity": "high"
+        }
+    
+    async def _generate_fixes(
+        self,
+        files: List[Dict],
+        analysis: Dict,
+        user_context: Optional[str],
+        requirements: Optional[Dict]
+    ) -> Dict:
+        """Generate code fixes based on analysis"""
+        
+        model = get_model("fix")
+        settings = get_model_settings(model)
+        
+        # Get only relevant files for fixing
+        likely_files = analysis.get("likely_files", [])
+        relevant_files = [f for f in files if f.get("path") in likely_files]
+        
+        # If no specific files identified, include all frontend files
+        if not relevant_files:
+            relevant_files = [f for f in files if f.get("file_type") == "frontend"][:5]
+        
+        # Build the fix prompt with full context
+        files_content = "\n\n".join([
+            f"=== FILE: {f.get('path')} ===\n```\n{f.get('content', '')}\n```"
+            for f in relevant_files
+        ])
+        
+        system_prompt = """You are an expert React/JavaScript developer and debugger.
+Your job is to fix bugs in generated code.
+
+RULES:
+1. Fix the SPECIFIC error mentioned - don't rewrite everything
+2. Return COMPLETE file contents (not diffs or patches)
+3. Preserve all existing functionality that works
+4. Use the same coding style as the original
+5. Add error handling where needed
+6. Make sure imports are correct
+
+OUTPUT FORMAT (JSON only, no markdown):
+{
+    "files": [
+        {
+            "path": "exact/file/path.jsx",
+            "content": "COMPLETE fixed file content here",
+            "file_type": "frontend"
+        }
+    ],
+    "explanation": "What was fixed and why",
+    "changes_made": ["List of specific changes"]
+}"""
+
+        user_prompt = f"""FIX THIS ERROR:
+
+ERROR ANALYSIS:
+- Type: {analysis.get('error_type', 'unknown')}
+- Root Cause: {analysis.get('root_cause', 'Unknown')}
+- Fix Strategy: {analysis.get('fix_strategy', 'Fix the error')}
+
+{f"USER CONTEXT: {user_context}" if user_context else ""}
+
+FILES TO FIX:
+{files_content}
+
+{f"APP REQUIREMENTS:{chr(10)}{json.dumps(requirements, indent=2)[:1000]}" if requirements else ""}
+
+Generate the fixed code. Return complete file contents."""
+
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
                 response = await client.post(
@@ -109,7 +199,7 @@ IMPORTANT:
                         "model": model,
                         "messages": [
                             {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": prompt}
+                            {"role": "user", "content": user_prompt}
                         ],
                         "max_tokens": settings["max_tokens"],
                         "temperature": 0.2
@@ -117,104 +207,145 @@ IMPORTANT:
                 )
                 
                 if response.status_code != 200:
-                    logger.error(f"Fix Agent API error: {response.text}")
+                    logger.error(f"Fix generation API error: {response.text}")
                     return {
+                        "success": False,
                         "files": files,
-                        "fixes_applied": [],
-                        "files_modified": [],
-                        "summary": f"Fix attempt {attempt} failed: API error"
+                        "error": f"API error: {response.status_code}",
+                        "analysis": analysis
                     }
                 
                 content = response.json()["choices"][0]["message"]["content"]
-                return self._parse_and_merge_fixes(content, files)
+                return self._parse_and_merge_fixes(content, files, analysis)
                 
         except Exception as e:
-            logger.error(f"Fix Agent error: {e}")
+            logger.error(f"Fix generation error: {e}")
             return {
+                "success": False,
                 "files": files,
-                "fixes_applied": [],
-                "files_modified": [],
-                "summary": f"Fix attempt {attempt} failed: {str(e)}"
+                "error": str(e),
+                "analysis": analysis
             }
     
-    def _build_fix_prompt(
-        self,
-        files: List[Dict],
-        issues: List[Dict],
-        requirements: Dict,
-        attempt: int
-    ) -> str:
-        """Build minimal fix prompt"""
+    def _parse_and_merge_fixes(
+        self, 
+        content: str, 
+        original_files: List[Dict],
+        analysis: Dict
+    ) -> Dict:
+        """Parse LLM response and merge fixed files"""
         
-        # Format issues clearly
-        issues_text = "\n".join([
-            f"""
-ISSUE {i+1}: {issue.get('test_id', 'UNKNOWN')}
-Category: {issue.get('category', 'unknown')}
-Description: {issue.get('description', '')}
-Error: {issue.get('error', 'Unknown')}
-Steps to Reproduce: {', '.join(issue.get('steps_to_reproduce', []))}
-"""
-            for i, issue in enumerate(issues)
-        ])
-        
-        # Format files
-        files_text = "\n\n".join([
-            f"=== {f.get('path', 'unknown')} ===\n{f.get('content', '')}"
-            for f in files
-        ])
-        
-        return f"""FIX ATTEMPT {attempt}/3
-
-ISSUES TO FIX (Fix these ONLY):
-{issues_text}
-
-CURRENT FILES:
-{files_text}
-
-Fix ONLY the issues listed above. Do NOT change anything else."""
-    
-    def _parse_and_merge_fixes(self, content: str, original_files: List[Dict]) -> Dict:
-        """Parse fix response and merge with original files"""
-        
-        # Try to extract JSON
+        # Try to extract JSON from response
         json_match = re.search(r'\{[\s\S]*"files"[\s\S]*\}', content)
+        
         if json_match:
             try:
                 result = json.loads(json_match.group(), strict=False)
-                
                 fixed_files = result.get("files", [])
-                fixed_paths = {f["path"] for f in fixed_files}
                 
-                # Merge: fixed files + unchanged original files
-                merged_files = list(fixed_files)
+                if not fixed_files:
+                    return {
+                        "success": False,
+                        "files": original_files,
+                        "error": "No fixed files in response",
+                        "analysis": analysis
+                    }
+                
+                # Validate fixed files have content
+                valid_fixes = []
+                for f in fixed_files:
+                    if f.get("path") and f.get("content"):
+                        valid_fixes.append(f)
+                
+                if not valid_fixes:
+                    return {
+                        "success": False,
+                        "files": original_files,
+                        "error": "Fixed files have no content",
+                        "analysis": analysis
+                    }
+                
+                # Merge: fixed files replace originals, keep unchanged files
+                fixed_paths = {f["path"] for f in valid_fixes}
+                merged_files = list(valid_fixes)
+                
                 for f in original_files:
                     if f["path"] not in fixed_paths:
                         merged_files.append(f)
                 
                 return {
+                    "success": True,
                     "files": merged_files,
-                    "fixes_applied": result.get("fixes_applied", []),
                     "files_modified": list(fixed_paths),
-                    "summary": f"Applied {len(result.get('fixes_applied', []))} fixes to {len(fixed_paths)} files"
+                    "explanation": result.get("explanation", ""),
+                    "changes_made": result.get("changes_made", []),
+                    "analysis": analysis
                 }
                 
             except json.JSONDecodeError as e:
-                logger.error(f"JSON parse error: {e}")
+                logger.error(f"JSON parse error in fix response: {e}")
+                logger.error(f"Content: {content[:500]}")
         
         return {
+            "success": False,
             "files": original_files,
-            "fixes_applied": [],
-            "files_modified": [],
-            "summary": "Could not parse fix response"
+            "error": "Could not parse fix response",
+            "raw_response": content[:1000],
+            "analysis": analysis
         }
+    
+    async def fix_issues(
+        self,
+        files: List[Dict],
+        test_results: Dict,
+        requirements: Dict,
+        attempt: int = 1
+    ) -> Dict:
+        """
+        Fix issues from automated test results.
+        (Legacy method for compatibility with job manager)
+        """
+        
+        issues = test_results.get("issues", [])
+        if not issues:
+            return {
+                "files": files,
+                "fixes_applied": [],
+                "files_modified": [],
+                "summary": "No issues to fix"
+            }
+        
+        # Convert test issues to error format
+        error_message = "\n".join([
+            f"- {issue.get('description', '')}: {issue.get('error', '')}"
+            for issue in issues
+        ])
+        
+        result = await self.fix_user_error(
+            files=files,
+            error_message=error_message,
+            requirements=requirements
+        )
+        
+        if result.get("success"):
+            return {
+                "files": result["files"],
+                "fixes_applied": [{"description": c} for c in result.get("changes_made", [])],
+                "files_modified": result.get("files_modified", []),
+                "summary": result.get("explanation", f"Applied fixes on attempt {attempt}")
+            }
+        else:
+            return {
+                "files": files,
+                "fixes_applied": [],
+                "files_modified": [],
+                "summary": f"Fix attempt {attempt} failed: {result.get('error', 'Unknown error')}"
+            }
     
     def validate_fixes(self, original_files: List[Dict], fixed_files: List[Dict]) -> Dict:
         """Validate that fixes don't break existing functionality"""
         
         issues = []
-        
-        # Create lookup for original files
         original_by_path = {f["path"]: f for f in original_files}
         fixed_by_path = {f["path"]: f for f in fixed_files}
         
@@ -224,24 +355,17 @@ Fix ONLY the issues listed above. Do NOT change anything else."""
                 issues.append({
                     "type": "deleted_file",
                     "file": path,
-                    "message": f"File {path} was deleted - this may break the app"
+                    "message": f"File {path} was deleted"
                 })
         
-        # Check for significantly changed files
-        for path, fixed in fixed_by_path.items():
-            if path in original_by_path:
-                original = original_by_path[path]
-                original_lines = len(original.get("content", "").split("\n"))
-                fixed_lines = len(fixed.get("content", "").split("\n"))
-                
-                # Warn if file changed by more than 50%
-                change_ratio = abs(fixed_lines - original_lines) / max(original_lines, 1)
-                if change_ratio > 0.5:
-                    issues.append({
-                        "type": "major_change",
-                        "file": path,
-                        "message": f"File {path} changed significantly ({int(change_ratio*100)}%) - verify functionality"
-                    })
+        # Check for empty files
+        for path, f in fixed_by_path.items():
+            if not f.get("content", "").strip():
+                issues.append({
+                    "type": "empty_file",
+                    "file": path,
+                    "message": f"File {path} is empty"
+                })
         
         return {
             "valid": len(issues) == 0,
