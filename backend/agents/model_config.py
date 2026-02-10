@@ -55,7 +55,7 @@ MODEL_SETTINGS = {
         "max_tokens": 8192,
         "temperature": 1.0,  # o1 models work best with temp=1
     },
-    "deepseek/deepseek-coder": {
+    "deepseek/deepseek-chat": {
         "max_tokens": 16000,
         "temperature": 0.2,  # Low temp for precise code fixes
     },
