@@ -70,7 +70,7 @@ FALLBACK_MODELS = {
     "anthropic/claude-3.5-sonnet": "openai/gpt-4o-mini",
     "google/gemini-pro-1.5": "openai/gpt-4o-mini",
     "openai/o1-mini": "openai/gpt-4o-mini",
-    "deepseek/deepseek-coder": "openai/gpt-4o-mini",
+    "deepseek/deepseek-chat": "openai/gpt-4o-mini",
     "anthropic/claude-3-haiku": "openai/gpt-4o-mini",
 }
 
