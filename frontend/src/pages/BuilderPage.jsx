@@ -214,6 +214,52 @@ export default function BuilderPage() {
   const [generationTaskId, setGenerationTaskId] = useState(null);
   const [generationProgress, setGenerationProgress] = useState(0);
 
+  // Error fixing state
+  const [showErrorFixModal, setShowErrorFixModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [errorContext, setErrorContext] = useState("");
+  const [consoleLogs, setConsoleLogs] = useState("");
+  const [fixingError, setFixingError] = useState(false);
+
+  // Fix error function
+  const handleFixError = async () => {
+    if (!errorMessage.trim()) {
+      toast.error("Please describe the error");
+      return;
+    }
+
+    setFixingError(true);
+    try {
+      const response = await axios.post(`${API}/projects/${projectId}/fix-error`, {
+        error_message: errorMessage,
+        user_context: errorContext || null,
+        console_logs: consoleLogs || null
+      });
+
+      if (response.data.success) {
+        toast.success(`✅ Fixed: ${response.data.message}`);
+        setShowErrorFixModal(false);
+        setErrorMessage("");
+        setErrorContext("");
+        setConsoleLogs("");
+        // Refresh project data
+        await fetchProjectData();
+        // Refresh preview
+        refreshPreview();
+      } else {
+        toast.error(`Could not fix: ${response.data.message}`);
+        if (response.data.suggestion) {
+          toast.info(response.data.suggestion);
+        }
+      }
+    } catch (err) {
+      console.error("Fix error failed:", err);
+      toast.error(err.response?.data?.detail || "Failed to fix error");
+    } finally {
+      setFixingError(false);
+    }
+  };
+
   // Check for OAuth callback
   useEffect(() => {
     const authState = searchParams.get('supabase_auth');
