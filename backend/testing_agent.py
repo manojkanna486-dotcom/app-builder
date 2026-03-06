@@ -72,7 +72,7 @@ Return ONLY valid JSON array, no markdown:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4",
+                        "model": "anthropic/claude-sonnet-4-5",
                         "messages": [{"role": "user", "content": extraction_prompt}],
                         "max_tokens": 1000
                     }

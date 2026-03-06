@@ -84,7 +84,7 @@ Extract requirements, suggest database schema, and only ask questions if somethi
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4",
+                        "model": "anthropic/claude-sonnet-4-5",
                         "messages": [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_message}

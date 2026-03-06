@@ -283,23 +283,30 @@ class AgentOrchestrator:
         fix_attempt = 0
         
         while fix_attempt <= max_fix_retries:
-            # Deploy
-            yield {"type": "status", "stage": STAGE_DEPLOY, "message": "📦 Deploying to Supabase..."}
+            # Deploy (skip if no Supabase)
+            supabase_connected = supabase_config.get("url") and supabase_config.get("url") != "YOUR_SUPABASE_URL"
             
-            try:
-                deploy_result = await self.deployment_agent.deploy(
-                    files=current_files,
-                    supabase_config=supabase_config,
-                    access_token=access_token
-                )
+            if supabase_connected:
+                yield {"type": "status", "stage": STAGE_DEPLOY, "message": "📦 Deploying to Supabase..."}
                 
-                if deploy_result.get("status") == "error":
-                    yield {"type": "deploy_result", "status": "error", "errors": deploy_result.get("errors", [])}
-                else:
-                    yield {"type": "deploy_result", "status": "success", "result": deploy_result}
+                try:
+                    deploy_result = await self.deployment_agent.deploy(
+                        files=current_files,
+                        supabase_config=supabase_config,
+                        access_token=access_token
+                    )
                     
-            except Exception as e:
-                yield {"type": "deploy_result", "status": "error", "message": str(e)}
+                    if deploy_result.get("status") == "error":
+                        yield {"type": "deploy_result", "status": "error", "errors": deploy_result.get("errors", [])}
+                    else:
+                        yield {"type": "deploy_result", "status": "success", "result": deploy_result}
+                        
+                except Exception as e:
+                    yield {"type": "deploy_result", "status": "error", "message": str(e)}
+            else:
+                # Mock data mode - skip deployment
+                yield {"type": "status", "stage": STAGE_DEPLOY, "message": "⏭️ Skipping deployment (using mock data)"}
+                yield {"type": "deploy_result", "status": "skipped", "message": "Using mock data - no deployment needed"}
             
             # Test
             yield {"type": "status", "stage": STAGE_TEST, "message": "🧪 Running tests..."}

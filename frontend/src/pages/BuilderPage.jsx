@@ -27,6 +27,7 @@ import {
   Play,
   Bug,
   Wrench,
+  Plus,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
@@ -54,6 +55,7 @@ import {
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { Checkbox } from "../components/ui/checkbox";
 import { toast } from "sonner";
 import axios from "axios";
 
@@ -168,6 +170,7 @@ export default function BuilderPage() {
   const [generationStatus, setGenerationStatus] = useState("");
   const [streamingCode, setStreamingCode] = useState("");
   const [previewHtml, setPreviewHtml] = useState("");
+  const [previewKey, setPreviewKey] = useState(0); // increments to force iframe remount
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState("App.jsx");
   const [viewMode, setViewMode] = useState("preview");
@@ -178,6 +181,10 @@ export default function BuilderPage() {
   const [clarificationAnswers, setClarificationAnswers] = useState({});
   const [originalPrompt, setOriginalPrompt] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
+
+  // Editable requirements state (populated when clarification panel opens)
+  const [editableRequirements, setEditableRequirements] = useState([]);
+  const [newRequirementText, setNewRequirementText] = useState("");
   
   // Supabase OAuth state
   const [showSupabaseModal, setShowSupabaseModal] = useState(false);
@@ -297,7 +304,16 @@ export default function BuilderPage() {
 
       setProject(projectRes.data);
       setMessages(messagesRes.data);
-      setPreviewHtml(previewRes.data.html);
+      
+      const html = previewRes.data.html;
+      console.log("Initial preview load - HTML length:", html ? html.length : 0);
+      console.log("Initial preview load - HTML preview:", html ? html.substring(0, 300) : "empty");
+      
+      if (html && html.length > 100) {
+        setPreviewHtml(html);
+        setPreviewKey(k => k + 1); // Force iframe remount
+      }
+      
       setVersions(versionsRes.data);
 
       // Extract files from latest version
@@ -324,6 +340,65 @@ export default function BuilderPage() {
     return file?.content || "// No file selected";
   };
 
+  // Requirement list management
+  const handleToggleRequirement = (id) => {
+    setEditableRequirements((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r))
+    );
+  };
+
+  const handleDeleteRequirement = (id) => {
+    setEditableRequirements((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  const handleAddRequirement = () => {
+    const text = newRequirementText.trim();
+    if (!text) return;
+    setEditableRequirements((prev) => [
+      ...prev,
+      {
+        id: `custom-${Date.now()}`,
+        description: text,
+        priority: "should-have",
+        enabled: true,
+      },
+    ]);
+    setNewRequirementText("");
+  };
+
+  // Build using the current editable requirements (unified entry point)
+  const handleBuildWithRequirements = async () => {
+    const activeRequirements = editableRequirements.filter((r) => r.enabled);
+    const analysis = {
+      ...clarificationQuestions?.analysis,
+      requirements: activeRequirements,
+    };
+    const promptToUse = originalPrompt;
+    const answers = { ...clarificationAnswers };
+
+    setClarificationQuestions(null);
+    setClarificationAnswers({});
+    setOriginalPrompt("");
+    setEditableRequirements([]);
+    setNewRequirementText("");
+
+    if (clarificationQuestions?.needs_questions && Object.keys(answers).length > 0) {
+      try {
+        const confirmRes = await axios.post(
+          `${API}/projects/${projectId}/confirm-requirements`,
+          { analysis, user_answers: answers }
+        );
+        await doBuild(promptToUse, confirmRes.data.refined_requirements);
+      } catch (err) {
+        console.error("Confirm requirements error:", err);
+        toast.error("Failed to confirm requirements");
+        await doBuild(promptToUse, analysis);
+      }
+    } else {
+      await doBuild(promptToUse, analysis);
+    }
+  };
+
   // Handle clarification answer selection
   const handleClarificationAnswer = (questionId, answer) => {
     setClarificationAnswers((prev) => ({
@@ -339,17 +414,14 @@ export default function BuilderPage() {
     
     console.log("handleGenerate called, project:", project);
     
-    // ENFORCE SUPABASE CONNECTION - Use OAuth flow
-    if (!project?.supabase_connected) {
-      console.log("Supabase not connected, triggering OAuth");
-      toast.error("Please connect your Supabase project first before building an app");
-      // Trigger OAuth flow instead of manual modal
-      handleSupabaseOAuth();
-      return;
-    }
-    
-    console.log("Supabase connected, proceeding with generation");
+    // Proceed with generation (using mock data if Supabase not connected)
+    console.log("Proceeding with generation", project?.supabase_connected ? "(with Supabase)" : "(with mock data)");
     setPrompt("");
+    
+    // Set initial status immediately
+    setGenerating(true);
+    setGenerationStatus("📋 Analyzing your request...");
+    setGenerationProgress(0);
     
     // Add user message immediately
     const tempUserMsg = {
@@ -363,41 +435,37 @@ export default function BuilderPage() {
     // First, clarify requirements
     try {
       setAnalyzing(true);
-      setGenerationStatus("Analyzing requirements...");
+      setGenerationStatus("📋 Analyzing requirements...");
       
       const clarifyRes = await axios.post(`${API}/projects/${projectId}/clarify`, {
         prompt: userPrompt,
       });
       
-      if (clarifyRes.data.status === "supabase_required") {
-        toast.error("Please connect your Supabase project first");
-        handleSupabaseOAuth();
-        setAnalyzing(false);
-        return;
-      }
-      
       const analysis = clarifyRes.data.analysis;
       const isClear = clarifyRes.data.is_clear || analysis.is_clear;
       const questions = clarifyRes.data.questions || analysis.clarifying_questions || [];
-      
-      // Check if clarification questions are needed
-      if (!isClear && questions.length > 0) {
-        setClarificationQuestions({
-          needs_clarification: true,  // Flag for UI to show questions
-          analysis: analysis,
-          questions: questions,
-          requirements: analysis.requirements || clarifyRes.data.requirements || [],
-          project_summary: analysis.app_description,
-        });
-        setOriginalPrompt(userPrompt);
-        setClarificationAnswers({});
-        setAnalyzing(false);
-        return;
-      }
-      
-      // No clarification needed - proceed with build
+      const requirements = analysis?.requirements || clarifyRes.data.requirements || [];
+
+      // Always show the requirements review panel so user can edit before building
+      setClarificationQuestions({
+        needs_clarification: true,
+        needs_questions: !isClear && questions.length > 0,
+        analysis: analysis,
+        questions: isClear ? [] : questions,
+        requirements: requirements,
+        project_summary: analysis?.app_description,
+      });
+      setEditableRequirements(
+        requirements.map((req, idx) => ({
+          ...req,
+          id: req.id || `req-${idx}`,
+          enabled: true,
+        }))
+      );
+      setOriginalPrompt(userPrompt);
+      setClarificationAnswers({});
       setAnalyzing(false);
-      await doBuild(userPrompt, analysis);
+      return;
       
     } catch (err) {
       console.error("Clarification error:", err);
@@ -407,39 +475,26 @@ export default function BuilderPage() {
     }
   };
 
-  // Submit clarification answers and build
+  // Submit clarification answers and build (delegates to unified handler)
   const handleSubmitClarification = async () => {
-    const analysis = clarificationQuestions?.analysis;
-    
-    try {
-      // Confirm requirements with user answers
-      const confirmRes = await axios.post(`${API}/projects/${projectId}/confirm-requirements`, {
-        analysis: analysis,
-        user_answers: clarificationAnswers,
-      });
-      
-      setClarificationQuestions(null);
-      setClarificationAnswers({});
-      
-      // Proceed with build using refined requirements
-      await doBuild(originalPrompt, confirmRes.data.refined_requirements);
-      setOriginalPrompt("");
-      
-    } catch (err) {
-      console.error("Confirm requirements error:", err);
-      toast.error("Failed to confirm requirements");
-    }
+    await handleBuildWithRequirements();
   };
 
-  // Skip clarification and build with original analysis
+  // Skip clarification questions but still use edited requirements
   const handleSkipClarification = async () => {
-    const analysis = clarificationQuestions?.analysis;
+    const activeRequirements = editableRequirements.filter((r) => r.enabled);
+    const analysis = {
+      ...clarificationQuestions?.analysis,
+      requirements: activeRequirements,
+    };
     const promptToUse = originalPrompt;
-    
+
     setClarificationQuestions(null);
     setClarificationAnswers({});
     setOriginalPrompt("");
-    
+    setEditableRequirements([]);
+    setNewRequirementText("");
+
     await doBuild(promptToUse, analysis);
   };
 
@@ -447,7 +502,7 @@ export default function BuilderPage() {
   // Jobs run independently of browser sessions, persist progress, and are resumable
   const doBuild = async (userPrompt, requirements = null) => {
     setGenerating(true);
-    setGenerationStatus("🚀 Starting async build job...");
+    setGenerationStatus("🚀 Starting build...");
     setStreamingCode("");
     setViewMode("code");
 
@@ -461,6 +516,7 @@ export default function BuilderPage() {
       const jobId = startRes.data.job_id;
       setGenerationTaskId(jobId);
       
+      setGenerationStatus("⏳ Job started, waiting for status...");
       toast.success("Build job started! It will continue even if you close the browser.");
       
       // Poll for job status
@@ -507,8 +563,12 @@ export default function BuilderPage() {
           canceled: "🚫 Canceled",
         };
 
-        setGenerationStatus(statusMap[job.status] || job.current_step || job.status);
+        const statusText = statusMap[job.status] || job.current_step || job.status || "Processing...";
+        setGenerationStatus(statusText);
         setGenerationProgress(job.progress || 0);
+        
+        // Log status for debugging
+        console.log("Job status update:", job.status, statusText, job.progress);
 
         // Show step results in streaming code area
         if (job.step_results) {
@@ -557,6 +617,34 @@ export default function BuilderPage() {
     };
 
     await poll();
+  };
+
+  // Cancel a running job and reset state so the user can send a new message
+  const handleCancelJob = async () => {
+    if (!generationTaskId) {
+      // No tracked job id yet — just reset local state
+      setGenerating(false);
+      setAnalyzing(false);
+      setGenerationStatus("");
+      setGenerationProgress(0);
+      setStreamingCode("");
+      toast.info("Generation stopped.");
+      return;
+    }
+    try {
+      await axios.post(`${API}/projects/${projectId}/jobs/${generationTaskId}/cancel`);
+      toast.info("🚫 Generation canceled. You can now send a new message.");
+    } catch (err) {
+      console.error("Cancel job error:", err);
+      toast.error("Failed to cancel job — resetting state anyway.");
+    } finally {
+      setGenerating(false);
+      setAnalyzing(false);
+      setGenerationStatus("");
+      setGenerationProgress(0);
+      setStreamingCode("");
+      setGenerationTaskId(null);
+    }
   };
 
   // Legacy doGenerate for backwards compatibility (redirect to doBuild)
@@ -642,8 +730,9 @@ export default function BuilderPage() {
 
       setVersions(versionsRes.data);
       setMessages(messagesRes.data);
-      setPreviewHtml(previewRes.data.html);
-
+      
+      const html = previewRes.data.html;
+      
       // Load files from latest version
       if (versionsRes.data.length > 0) {
         const latestVersion = versionsRes.data[0];
@@ -656,11 +745,22 @@ export default function BuilderPage() {
         setProject((prev) => ({ ...prev, current_version: latestVersion.version_number }));
       }
 
-      setViewMode("preview");
+      if (html && html.length > 100) {
+        setPreviewHtml(html);
+        setPreviewKey(k => k + 1); // Force iframe remount with new content
+        setViewMode("preview");
+      }
     } catch (err) {
       console.error("Error loading results:", err);
     }
   };
+
+  // Update iframe when previewHtml changes (fallback)
+  useEffect(() => {
+    if (previewHtml && previewHtml.length > 100 && iframeRef.current) {
+      iframeRef.current.srcdoc = previewHtml;
+    }
+  }, [previewHtml]);
 
   // Check for active async jobs on page load
   useEffect(() => {
@@ -707,14 +807,20 @@ export default function BuilderPage() {
     checkActiveJob();
   }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const refreshPreview = () => {
-    if (iframeRef.current) {
-      iframeRef.current.src = "about:blank";
-      setTimeout(() => {
-        if (iframeRef.current) {
-          iframeRef.current.srcdoc = previewHtml;
-        }
-      }, 100);
+  const refreshPreview = async () => {
+    try {
+      const res = await axios.get(`${API}/projects/${projectId}/preview`);
+      const html = res.data.html;
+      if (html && html.length > 100) {
+        setPreviewHtml(html);
+        setPreviewKey(k => k + 1); // Force full iframe remount
+        setViewMode("preview");
+      } else {
+        toast.error("No preview available yet");
+      }
+    } catch (err) {
+      console.error("Error reloading preview:", err);
+      toast.error("Failed to load preview");
     }
   };
 
@@ -736,7 +842,12 @@ export default function BuilderPage() {
         setSelectedFile(version.files[0].path);
         // Regenerate preview HTML
         const previewRes = await axios.get(`${API}/projects/${projectId}/preview`);
-        setPreviewHtml(previewRes.data.html);
+        const html = previewRes.data.html;
+        if (html && html.length > 100) {
+          setPreviewHtml(html);
+          setPreviewKey(k => k + 1);
+          setViewMode("preview");
+        }
         toast.success(`Loaded version ${version.version_number}`);
       }
     } catch (err) {
@@ -1112,7 +1223,7 @@ export default function BuilderPage() {
                   </div>
                 ))
               )}
-              {generating && (
+              {(generating || generationStatus) && (
                 <div className="flex gap-3 animate-slide-up">
                   <div className="w-8 h-8 rounded-lg bg-card border border-border flex items-center justify-center">
                     <Bot className="w-4 h-4 text-muted-foreground" />
@@ -1121,9 +1232,18 @@ export default function BuilderPage() {
                     <div className="flex items-center gap-2 mb-2">
                       <Loader2 className="w-4 h-4 animate-spin text-primary" />
                       <span className="text-sm font-medium text-foreground">
-                        {generationStatus || "Generating..."}
+                        {generationStatus || "Processing..."}
                       </span>
                     </div>
+                    {/* Show progress if available */}
+                    {generationProgress > 0 && (
+                      <div className="mt-2 w-full bg-muted rounded-full h-2">
+                        <div 
+                          className="bg-primary h-2 rounded-full transition-all duration-300" 
+                          style={{ width: `${generationProgress}%` }}
+                        />
+                      </div>
+                    )}
                     {/* Show streaming code */}
                     {streamingCode && (
                       <div className="mt-2 p-2 bg-background/50 rounded text-xs font-mono text-muted-foreground max-h-32 overflow-y-auto">
@@ -1132,11 +1252,25 @@ export default function BuilderPage() {
                         </code>
                       </div>
                     )}
-                    {!streamingCode && (
+                    {!streamingCode && generationStatus && (
                       <p className="text-xs text-muted-foreground mt-2">
-                        Code will appear here as it's generated...
+                        {generationStatus.includes("Starting") ? "Initializing build..." : 
+                         generationStatus.includes("Analyzing") ? "Understanding your requirements..." :
+                         generationStatus.includes("Generating") ? "Creating your app..." :
+                         "Processing your request..."}
                       </p>
                     )}
+                    <div className="mt-3 pt-3 border-t border-border/50">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleCancelJob}
+                        className="h-7 text-xs text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive gap-1.5"
+                      >
+                        <X className="w-3 h-3" />
+                        Stop & send new message
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1178,31 +1312,99 @@ export default function BuilderPage() {
                         </div>
                       )}
                       
-                      {/* Requirements Preview */}
-                      {clarificationQuestions.requirements && clarificationQuestions.requirements.length > 0 && (
-                        <div className="pb-3 border-b border-border">
-                          <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
-                            Extracted Requirements ({clarificationQuestions.requirements.length})
+                      {/* Interactive Requirements Checklist */}
+                      <div className="pb-3 border-b border-border">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Requirements&nbsp;
+                            <span className="normal-case font-normal">
+                              ({editableRequirements.filter((r) => r.enabled).length} of {editableRequirements.length} selected)
+                            </span>
                           </p>
-                          <div className="space-y-1 max-h-32 overflow-y-auto">
-                            {clarificationQuestions.requirements.slice(0, 5).map((req, idx) => (
-                              <div key={req.id || idx} className="flex items-start gap-2 text-xs">
-                                <span className={`shrink-0 ${
-                                  req.priority === 'must-have' ? 'text-red-500' : 
-                                  req.priority === 'should-have' ? 'text-yellow-500' : 'text-green-500'
-                                }`}>●</span>
-                                <span className="text-muted-foreground">{req.description}</span>
-                              </div>
-                            ))}
-                            {clarificationQuestions.requirements.length > 5 && (
-                              <p className="text-xs text-muted-foreground italic">
-                                +{clarificationQuestions.requirements.length - 5} more requirements...
-                              </p>
-                            )}
-                          </div>
                         </div>
-                      )}
 
+                        {editableRequirements.length === 0 && (
+                          <p className="text-xs text-muted-foreground italic">No requirements extracted yet.</p>
+                        )}
+
+                        <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                          {editableRequirements.map((req) => {
+                            const priorityStyle =
+                              req.priority === "must-have"
+                                ? "bg-red-500/10 text-red-500 border-red-500/20"
+                                : req.priority === "should-have"
+                                ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
+                                : "bg-green-500/10 text-green-600 border-green-500/20";
+                            return (
+                              <div
+                                key={req.id}
+                                className={`flex items-start gap-2 p-2 rounded-lg border transition-colors ${
+                                  req.enabled
+                                    ? "bg-background border-border"
+                                    : "bg-muted/30 border-border/40 opacity-50"
+                                }`}
+                              >
+                                <Checkbox
+                                  id={`req-${req.id}`}
+                                  checked={req.enabled}
+                                  onCheckedChange={() => handleToggleRequirement(req.id)}
+                                  className="mt-0.5 shrink-0"
+                                />
+                                <label
+                                  htmlFor={`req-${req.id}`}
+                                  className="flex-1 text-xs text-foreground cursor-pointer leading-relaxed"
+                                >
+                                  {req.description}
+                                </label>
+                                <span
+                                  className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded border font-medium ${priorityStyle}`}
+                                >
+                                  {req.priority === "must-have"
+                                    ? "must"
+                                    : req.priority === "should-have"
+                                    ? "should"
+                                    : "nice"}
+                                </span>
+                                <button
+                                  onClick={() => handleDeleteRequirement(req.id)}
+                                  className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                                  title="Remove requirement"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Add new requirement */}
+                        <div className="flex gap-2 mt-2">
+                          <input
+                            type="text"
+                            placeholder="Add a requirement..."
+                            value={newRequirementText}
+                            onChange={(e) => setNewRequirementText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleAddRequirement();
+                              }
+                            }}
+                            className="flex-1 px-3 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleAddRequirement}
+                            disabled={!newRequirementText.trim()}
+                            className="h-7 px-2 shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {clarificationQuestions.needs_questions && (
                       <div>
                         <p className="text-sm font-medium text-foreground mb-1">
                           🎨 A few questions to perfect your app:
@@ -1213,7 +1415,9 @@ export default function BuilderPage() {
                           </p>
                         )}
                       </div>
+                      )}
                       
+                      {clarificationQuestions.needs_questions && (
                       <div className="space-y-3">
                         {clarificationQuestions.questions.map((q, idx) => (
                           <div key={q.id || idx} className="space-y-2">
@@ -1256,9 +1460,10 @@ export default function BuilderPage() {
                           </div>
                         ))}
                       </div>
-                      
+                      )}
+
                       {/* Assumptions */}
-                      {clarificationQuestions.assumptions && clarificationQuestions.assumptions.length > 0 && (
+                      {clarificationQuestions.needs_questions && clarificationQuestions.assumptions && clarificationQuestions.assumptions.length > 0 && (
                         <div className="pt-2 border-t border-border">
                           <p className="text-xs font-medium text-muted-foreground mb-1">
                             I'll also assume:
@@ -1271,21 +1476,25 @@ export default function BuilderPage() {
                         </div>
                       )}
                       
-                      <div className="flex gap-2 pt-2">
+                      <div className="flex gap-2 pt-2 border-t border-border">
                         <Button
                           size="sm"
-                          onClick={handleSubmitClarification}
+                          onClick={handleBuildWithRequirements}
                           className="flex-1"
+                          disabled={editableRequirements.filter((r) => r.enabled).length === 0}
                         >
-                          ✨ Generate with these preferences
+                          <Rocket className="w-3.5 h-3.5 mr-1.5" />
+                          Build with {editableRequirements.filter((r) => r.enabled).length} requirement{editableRequirements.filter((r) => r.enabled).length !== 1 ? "s" : ""}
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={handleSkipClarification}
-                        >
-                          Skip & Use Defaults
-                        </Button>
+                        {clarificationQuestions.needs_questions && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleSkipClarification}
+                          >
+                            Skip questions
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1302,12 +1511,39 @@ export default function BuilderPage() {
               <div className="text-center py-2 text-xs text-muted-foreground">
                 Please answer the questions above or skip to generate
               </div>
+            ) : generating || analyzing ? (
+              /* While generating: show a cancel banner + disabled hint */
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                    Generation in progress…
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCancelJob}
+                    className="h-7 text-xs text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive gap-1.5"
+                  >
+                    <X className="w-3 h-3" />
+                    Cancel &amp; send new message
+                  </Button>
+                </div>
+                <Textarea
+                  data-testid="prompt-input"
+                  placeholder="Cancel the current generation to send a new message…"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  disabled
+                  className="min-h-[60px] resize-none bg-card border-border opacity-50 cursor-not-allowed"
+                />
+              </div>
             ) : (
               <>
                 <div className="relative">
                   <Textarea
                     data-testid="prompt-input"
-                    placeholder={analyzing ? "Analyzing..." : "Describe what you want to build..."}
+                    placeholder="Describe what you want to build..."
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     onKeyDown={(e) => {
@@ -1316,21 +1552,16 @@ export default function BuilderPage() {
                         handleGenerate();
                       }
                     }}
-                    disabled={generating || analyzing}
                     className="min-h-[80px] resize-none pr-12 bg-card border-border focus:ring-primary"
                   />
                   <Button
                     data-testid="send-btn"
                     size="icon"
                     onClick={handleGenerate}
-                    disabled={!prompt.trim() || generating || analyzing}
+                    disabled={!prompt.trim()}
                     className="absolute right-2 bottom-2 h-8 w-8 glow-blue-hover"
                   >
-                    {generating || analyzing ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
-                    )}
+                    <Send className="w-4 h-4" />
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
@@ -1476,39 +1707,69 @@ export default function BuilderPage() {
           </div>
 
           {/* Preview Content */}
-          <div className="flex-1 overflow-hidden p-4">
+          <div className="flex-1 overflow-hidden">
             {viewMode === "preview" ? (
-              <div className="h-full rounded-lg overflow-hidden border border-border shadow-xl bg-white">
-                {/* Browser Chrome */}
-                <div className="browser-chrome">
-                  <div className="browser-dots">
-                    <div className="browser-dot browser-dot-red" />
-                    <div className="browser-dot browser-dot-yellow" />
-                    <div className="browser-dot browser-dot-green" />
+              previewHtml && previewHtml.length > 100 ? (
+                <>
+                  <iframe
+                    key={previewKey}
+                    ref={iframeRef}
+                    data-testid="preview-iframe"
+                    title="App Preview"
+                    srcDoc={previewHtml}
+                    className="w-full h-full border-0"
+                    sandbox="allow-scripts allow-same-origin allow-modals allow-forms allow-popups allow-popups-to-escape-sandbox"
+                    style={{ 
+                      width: '100%', 
+                      height: '100%',
+                      display: 'block',
+                      border: 'none'
+                    }}
+                    onError={(e) => {
+                      console.error("Preview iframe error:", e);
+                      toast.error("Preview failed to load. Check console for details.");
+                    }}
+                    onLoad={() => {
+                      console.log("Preview iframe loaded successfully");
+                    }}
+                  />
+                  {/* Error overlay if iframe fails */}
+                  <div 
+                    className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10 hidden"
+                    id="preview-error-overlay"
+                  >
+                    <div className="text-center p-8 bg-card rounded-lg border shadow-lg max-w-md">
+                      <p className="text-destructive font-semibold mb-2">Preview Error</p>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        The preview failed to load. This might be due to JavaScript errors in the generated code.
+                      </p>
+                      <button
+                        onClick={refreshPreview}
+                        className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
+                      >
+                        Retry Preview
+                      </button>
+                    </div>
                   </div>
-                  <div className="browser-address flex items-center gap-2">
-                    <span>localhost:3000</span>
-                    <button 
-                      onClick={() => {
-                        navigator.clipboard.writeText(`${API}/projects/${projectId}/preview/live`);
-                        toast.success("Preview URL copied!");
-                      }}
-                      className="text-xs text-blue-400 hover:text-blue-300 underline"
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full bg-muted/50">
+                  <div className="text-center p-8">
+                    <p className="text-muted-foreground mb-2">
+                      {previewHtml ? `Preview HTML too short (${previewHtml.length} chars)` : "No preview available"}
+                    </p>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      {previewHtml ? "Preview may not have loaded correctly" : "Build an app to see the preview here"}
+                    </p>
+                    <button
+                      onClick={refreshPreview}
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm"
                     >
-                      Copy URL
+                      Refresh Preview
                     </button>
                   </div>
                 </div>
-                {/* Iframe */}
-                <iframe
-                  ref={iframeRef}
-                  data-testid="preview-iframe"
-                  title="App Preview"
-                  srcDoc={previewHtml}
-                  className="preview-iframe"
-                  sandbox="allow-scripts allow-same-origin allow-modals allow-forms allow-popups"
-                />
-              </div>
+              )
             ) : (
               <div className="h-full flex rounded-lg overflow-hidden border border-border">
                 {/* File Tree Sidebar */}

@@ -54,11 +54,19 @@ class DevAgent:
         files: List[Dict],
         test_results: Dict,
         requirements: Dict,
-        attempt: int = 1
+        attempt: int = 1,
+        agent_context: Optional[str] = None
     ) -> Dict:
         """
         Fix issues identified in test results.
         Returns updated files and fix summary.
+        
+        Args:
+            files: List of file dicts (full codebase)
+            test_results: Test results dict
+            requirements: Requirements dict
+            attempt: Fix attempt number
+            agent_context: Pre-built context (full codebase + schema + message history)
         """
         
         issues = test_results.get("issues", [])
@@ -70,7 +78,7 @@ class DevAgent:
             }
         
         # Build fix prompt
-        prompt = self._build_fix_prompt(files, issues, requirements, attempt)
+        prompt = self._build_fix_prompt(files, issues, requirements, attempt, agent_context)
         
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
@@ -81,7 +89,7 @@ class DevAgent:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4",
+                        "model": "anthropic/claude-sonnet-4-5",
                         "messages": [
                             {"role": "system", "content": FIX_SYSTEM_PROMPT},
                             {"role": "user", "content": prompt}
@@ -138,7 +146,7 @@ class DevAgent:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4",
+                        "model": "anthropic/claude-sonnet-4-5",
                         "messages": [
                             {"role": "system", "content": FIX_SYSTEM_PROMPT},
                             {"role": "user", "content": prompt}
@@ -171,7 +179,8 @@ class DevAgent:
         files: List[Dict],
         issues: List[Dict],
         requirements: Dict,
-        attempt: int
+        attempt: int,
+        agent_context: Optional[str] = None
     ) -> str:
         """Build the prompt for fixing issues"""
         
@@ -181,11 +190,15 @@ class DevAgent:
             for issue in issues
         ])
         
-        # Format current files
-        files_text = "\n\n".join([
-            f"=== FILE: {f.get('path', 'unknown')} ===\n{f.get('content', '')}"
-            for f in files
-        ])
+        # Use agent_context if provided (includes full codebase), otherwise build from files
+        if agent_context:
+            files_text = agent_context
+        else:
+            # Format current files
+            files_text = "\n\n".join([
+                f"=== FILE: {f.get('path', 'unknown')} ===\n{f.get('content', '')}"
+                for f in files
+            ])
         
         # Format requirements for context
         req_text = "\n".join([

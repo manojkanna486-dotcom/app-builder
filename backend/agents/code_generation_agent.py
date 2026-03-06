@@ -14,7 +14,7 @@ from .model_config import get_model, get_model_settings
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are an expert full-stack developer specializing in React + Supabase applications.
+SYSTEM_PROMPT_SUPABASE = """You are an expert full-stack developer specializing in React + Supabase applications.
 
 TECH STACK (FIXED):
 - Frontend: React with Tailwind CSS, Lucide React icons
@@ -60,6 +60,67 @@ IMPORTANT:
 - Make all UI components responsive with Tailwind breakpoints
 """
 
+SYSTEM_PROMPT_MOCK = """You are an elite frontend developer and UI/UX designer. Generate world-class React applications with stunning, modern interfaces.
+
+IMPORTANT - MOCK DATA APPROACH:
+Since no backend is connected, you MUST use realistic mock data:
+1. Create a data/mockData.js file with realistic sample data
+2. Use useState to manage the mock data
+3. Implement full CRUD operations on the mock data (add, edit, delete work locally)
+4. Design the data structure to easily connect to a real database later
+
+MOCK DATA EXAMPLE:
+```javascript
+// In data/mockData.js
+export const initialTweets = [
+  { id: 1, user: '@johndoe', content: 'Hello world!', likes: 42, createdAt: '2h' },
+  { id: 2, user: '@janedoe', content: 'Building amazing apps!', likes: 128, createdAt: '4h' },
+];
+```
+
+RESPONSIVE DESIGN (MANDATORY - ALL APPS MUST BE FULLY RESPONSIVE):
+1. Mobile-first approach: Design for 320px screens first, then scale up
+2. Breakpoints: sm:640px, md:768px, lg:1024px, xl:1280px
+3. Flexible layouts: Use flex/grid with responsive classes (flex-col sm:flex-row)
+4. Touch-friendly: Minimum 44px tap targets, adequate spacing between interactive elements
+5. Responsive typography: text-sm sm:text-base lg:text-lg
+6. Responsive spacing: p-4 sm:p-6 lg:p-8
+7. Hide/show elements: Use hidden sm:block or sm:hidden as needed
+8. Responsive images: Use w-full max-w-[size] object-cover
+9. Mobile navigation: Hamburger menu on mobile, full nav on desktop
+10. Test mentally: Ensure layout works on phone, tablet, and desktop
+
+DESIGN EXCELLENCE REQUIREMENTS:
+1. Use modern UI patterns (glass morphism, subtle gradients, micro-interactions)
+2. Create visually striking color schemes - avoid generic blue/gray
+3. Add thoughtful spacing, typography hierarchy, and visual rhythm
+4. Include hover states, transitions, and delightful animations
+5. Use professional-grade design like Dribbble/Behance showcase projects
+
+OUTPUT FORMAT (RAW JSON ONLY - NO MARKDOWN):
+{"files":[{"path":"App.jsx","content":"code"},{"path":"data/mockData.js","content":"code"},{"path":"components/X.jsx","content":"code"}],"summary":"description"}
+
+FILE STRUCTURE (ALWAYS MULTIPLE FILES):
+- App.jsx: Clean entry point composing components
+- data/mockData.js: Realistic sample data for the app
+- components/Header.jsx: Navigation with search, user menu (responsive hamburger)
+- components/Sidebar.jsx: Navigation sidebar (collapsible on mobile)
+- components/[Feature].jsx: Feature-specific components
+- components/Card.jsx: Reusable card component
+- components/MobileNav.jsx: Mobile navigation component (if complex nav)
+
+UI BEST PRACTICES:
+- Use Tailwind's design system consistently
+- Add shadows, rounded corners, proper padding
+- Include loading states and empty states
+- Use icons (Lucide React icons: import { Icon } from 'lucide-react')
+- Create visual hierarchy with font sizes and weights
+- Use whitespace generously
+- Add subtle background patterns or gradients
+- ALWAYS use responsive Tailwind classes (sm:, md:, lg:, xl:)
+
+CRITICAL: Return ONLY raw JSON. No markdown code blocks. ALL layouts MUST be responsive. ALL CRUD operations must work with mock data."""
+
 class CodeGenerationAgent:
     """Agent that generates React + Supabase application code"""
     
@@ -73,16 +134,25 @@ class CodeGenerationAgent:
         supabase_config: Dict,
         existing_files: Optional[List[Dict]] = None,
         is_update: bool = False,
-        max_retries: int = 3
+        max_retries: int = 3,
+        agent_context: Optional[str] = None
     ) -> Dict:
         """
         Generate complete application code based on requirements.
         Returns files, summary, and metadata.
+        
+        Args:
+            requirements: Requirements dict
+            supabase_config: Supabase configuration
+            existing_files: Existing files (full codebase)
+            is_update: Whether this is an update
+            max_retries: Max retry attempts
+            agent_context: Pre-built context (full codebase + schema + message history)
         """
         import sys
         
         # Build the generation prompt
-        prompt = self._build_generation_prompt(requirements, supabase_config, existing_files, is_update)
+        prompt = self._build_generation_prompt(requirements, supabase_config, existing_files, is_update, agent_context)
         
         logger.info(f"Code generation: Starting, prompt length: {len(prompt)} chars")
         sys.stderr.flush()
@@ -103,6 +173,10 @@ class CodeGenerationAgent:
                     model = get_model("code_generation_frontend")
                     settings = get_model_settings(model)
                     
+                    # Choose system prompt based on Supabase connection
+                    supabase_connected = supabase_config.get("url") and supabase_config.get("url") != "YOUR_SUPABASE_URL"
+                    system_prompt = SYSTEM_PROMPT_SUPABASE if supabase_connected else SYSTEM_PROMPT_MOCK
+                    
                     response = await client.post(
                         f"{self.base_url}/chat/completions",
                         headers={
@@ -112,7 +186,7 @@ class CodeGenerationAgent:
                         json={
                             "model": model,
                             "messages": [
-                                {"role": "system", "content": SYSTEM_PROMPT},
+                                {"role": "system", "content": system_prompt},
                                 {"role": "user", "content": prompt}
                             ],
                             "max_tokens": settings["max_tokens"],
@@ -176,14 +250,19 @@ class CodeGenerationAgent:
         requirements: Dict,
         supabase_config: Dict,
         existing_files: Optional[List[Dict]] = None,
-        is_update: bool = False
+        is_update: bool = False,
+        agent_context: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
         """
         Stream code generation for real-time UI updates.
         Yields chunks of generated code.
         """
         
-        prompt = self._build_generation_prompt(requirements, supabase_config, existing_files, is_update)
+        prompt = self._build_generation_prompt(requirements, supabase_config, existing_files, is_update, agent_context)
+        
+        # Choose system prompt based on Supabase connection
+        supabase_connected = supabase_config.get("url") and supabase_config.get("url") != "YOUR_SUPABASE_URL"
+        system_prompt = SYSTEM_PROMPT_SUPABASE if supabase_connected else SYSTEM_PROMPT_MOCK
         
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
@@ -195,9 +274,9 @@ class CodeGenerationAgent:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4",
+                        "model": "anthropic/claude-sonnet-4-5",
                         "messages": [
-                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "system", "content": system_prompt},
                             {"role": "user", "content": prompt}
                         ],
                         "max_tokens": 16000,
@@ -228,9 +307,18 @@ class CodeGenerationAgent:
         requirements: Dict,
         supabase_config: Dict,
         existing_files: Optional[List[Dict]] = None,
-        is_update: bool = False
+        is_update: bool = False,
+        agent_context: Optional[str] = None
     ) -> str:
-        """Build the prompt for code generation"""
+        """Build the prompt for code generation
+        
+        Args:
+            requirements: Requirements dict
+            supabase_config: Supabase configuration
+            existing_files: Existing files
+            is_update: Whether this is an update
+            agent_context: Pre-built context (includes full codebase if provided)
+        """
         
         logger.info(f"Building generation prompt with requirements type: {type(requirements)}")
         
@@ -305,9 +393,13 @@ class CodeGenerationAgent:
                 if isinstance(perm, dict):
                     permissions_info += f"- {perm.get('model', 'model')}: {perm.get('role', 'user')} can {', '.join(perm.get('actions', []))} where {perm.get('condition', 'true')}\n"
         
-        supabase_url = supabase_config.get("url", "YOUR_SUPABASE_URL")
+        # Check if Supabase is connected
+        supabase_connected = supabase_config.get("url") and supabase_config.get("url") != "YOUR_SUPABASE_URL"
+        supabase_url = supabase_config.get("url", "") if supabase_connected else ""
         
-        prompt = f"""Generate a complete React + Supabase application.
+        if supabase_connected:
+            # Full-stack mode with Supabase
+            prompt = f"""Generate a complete React + Supabase application.
 
 APP NAME: {requirements.get('app_name', 'My App')}
 DESCRIPTION: {requirements.get('app_description', '')}
@@ -335,6 +427,56 @@ Remember:
 - Use Lucide React for icons
 - Include proper error handling
 - Implement RLS policies for security
+"""
+            
+            # Add agent context (includes full codebase if provided)
+            if agent_context:
+                prompt = f"{agent_context}\n\n{prompt}"
+        else:
+            # Mock data mode - no Supabase
+            prompt = f"""Generate a complete React application with mock data.
+
+APP NAME: {requirements.get('app_name', 'My App')}
+DESCRIPTION: {requirements.get('app_description', '')}
+
+FEATURES/REQUIREMENTS:
+{features_text}
+
+{schema_info}
+{permissions_info}
+
+PAGES TO CREATE: {pages_info}
+
+IMPORTANT - MOCK DATA APPROACH:
+Since no backend is connected, you MUST use realistic mock data:
+1. Create a data/mockData.js file with realistic sample data
+2. Use useState to manage the mock data
+3. Implement full CRUD operations on the mock data (add, edit, delete work locally)
+4. Design the data structure to easily connect to a real database later
+
+MOCK DATA EXAMPLE:
+```javascript
+// In data/mockData.js
+export const initialTweets = [
+  {{ id: 1, user: '@johndoe', content: 'Hello world!', likes: 42, createdAt: '2h' }},
+  {{ id: 2, user: '@janedoe', content: 'Building amazing apps!', likes: 128, createdAt: '4h' }},
+];
+```
+
+Generate ALL necessary files including:
+1. React components with mock data (useState)
+2. data/mockData.js file with realistic sample data
+3. All UI components with Tailwind CSS styling
+4. Full CRUD operations on mock data
+
+Remember:
+- Use mock data stored in data/mockData.js
+- Use useState to manage data state
+- Implement full CRUD operations (add, edit, delete) on mock data
+- Include proper loading and error states (simulated)
+- Make responsive with Tailwind CSS
+- Use Lucide React for icons
+- Design data structure to easily migrate to a database later
 """
 
         if is_update and existing_files:

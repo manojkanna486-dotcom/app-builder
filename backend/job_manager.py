@@ -48,15 +48,40 @@ class JobStep(str, Enum):
 class JobManager:
     """
     Manages async generation jobs that persist independently of browser sessions.
-    Uses the new Orchestrator v2 architecture.
+    Uses the new Orchestrator v2 architecture with Thinking + Memory layers.
     """
-    
+
     def __init__(self, database, orchestrator):
         self.database = database
         self.orchestrator = orchestrator
         self._running_jobs: Dict[str, asyncio.Task] = {}
         self._job_locks: Dict[str, asyncio.Lock] = {}
         self._cancelled_jobs: set = set()
+        self._memory_store = None   # lazy-loaded via _get_memory()
+
+    # ── Helper: lazy access to MemoryStore ──────────────────────────────
+
+    def _get_memory(self):
+        """Return the global MemoryStore, initialising if needed."""
+        if self._memory_store is None:
+            try:
+                from agents.memory import get_memory_store, init_memory_store
+                store = get_memory_store()
+                if store is None:
+                    store = init_memory_store(self.database)
+                self._memory_store = store
+            except Exception as e:
+                logger.warning(f"MemoryStore unavailable: {e}")
+        return self._memory_store
+
+    # ── Helper: lazy access to ThinkingAgent ────────────────────────────
+
+    def _get_thinking(self):
+        """Return the ThinkingAgent from the orchestrator."""
+        try:
+            return self.orchestrator.thinking_agent
+        except AttributeError:
+            return None
         
     async def create_job(
         self,
@@ -224,7 +249,60 @@ class JobManager:
         files = job.get("files", [])
         fix_attempts = job.get("fix_attempts", 0)
         max_fix_attempts = job.get("max_fix_attempts", 3)
-        
+
+        # ==================== STEP 0: THINK + MEMORY ====================
+        # Only run for fresh builds (not resumes that already have requirements)
+        thinking_guidance = {}
+        memory_context = None
+        if not requirements or not requirements.get("is_complete"):
+            memory = self._get_memory()
+            thinking = self._get_thinking()
+
+            # 0a. Load memory context for this prompt
+            if memory:
+                try:
+                    memory_context = await memory.get_context_for_prompt(
+                        prompt, project_id=project_id
+                    )
+                    await memory.add_project_event(
+                        project_id, "build_started",
+                        f"Prompt: {prompt[:80]}"
+                    )
+                    logger.info(
+                        f"Job {job_id}: Memory loaded — "
+                        f"{len(memory_context.relevant_patterns)} patterns, "
+                        f"{len(memory_context.similar_builds)} similar builds"
+                    )
+                except Exception as e:
+                    logger.warning(f"Job {job_id}: Memory context failed (non-fatal): {e}")
+
+            # 0b. Deep thinking about the request
+            if thinking:
+                try:
+                    await self._update_job(job_id, {
+                        "current_step": "thinking",
+                        "status": "thinking",
+                        "progress": 5,
+                    })
+                    thinking_guidance = await thinking.think_about_request(
+                        user_prompt=prompt,
+                        memory_context=memory_context,
+                        project_state={
+                            "is_update": is_update,
+                            "existing_files": [f.get("path") for f in (existing_files or [])],
+                        },
+                    )
+                    logger.info(
+                        f"Job {job_id}: Thinking complete — "
+                        f"app_type={thinking_guidance.get('app_type')}, "
+                        f"confidence={thinking_guidance.get('confidence')}, "
+                        f"features={thinking_guidance.get('essential_features', [])[:3]}"
+                    )
+                    step_results["thinking"] = thinking_guidance
+                    await self._update_job(job_id, {"step_results": step_results})
+                except Exception as e:
+                    logger.warning(f"Job {job_id}: Thinking step failed (non-fatal): {e}")
+
         # ==================== STEP 1: REQUIREMENTS ====================
         if not requirements or not requirements.get("is_complete"):
             await self._update_job(job_id, {
@@ -235,14 +313,28 @@ class JobManager:
             
             try:
                 logger.info(f"Job {job_id}: Parsing requirements")
-                requirements = await self.orchestrator.parse_requirements(prompt, requirements)
+                # Create a temporary BuildContext for message history
+                from agents.context_builder import MessageHistory, build_agent_context
+                temp_history = MessageHistory()
+                
+                # Build context for requirements agent (schema + history only, no codebase)
+                agent_context = build_agent_context(
+                    agent_name="requirements",
+                    files=None,  # Requirements agent doesn't get codebase
+                    supabase_config=supabase_config,
+                    message_history=temp_history,
+                    user_prompt=prompt
+                )
+                
+                requirements = await self.orchestrator.requirements_agent.parse_prompt(prompt, requirements, agent_context)
                 
                 # For async jobs, auto-confirm requirements (skip clarification)
                 if requirements.get("ambiguities"):
                     # Auto-resolve ambiguities with defaults
                     for amb in requirements.get("ambiguities", []):
                         amb["resolved"] = True
-                        amb["answer"] = amb.get("default") or amb.get("options", [""])[0]
+                        options = amb.get("options") or [""]
+                        amb["answer"] = amb.get("default") or (options[0] if options else "")
                     requirements["ambiguities"] = []
                 
                 requirements["is_complete"] = True
@@ -277,15 +369,70 @@ class JobManager:
             "status": JobStatus.GENERATING,
             "progress": 20,
         })
-        
+
         try:
             logger.info(f"Job {job_id}: Generating code")
-            
+
+            # 2a. Think about the best code generation strategy
+            code_gen_thinking = {}
+            thinking = self._get_thinking()
+            if thinking:
+                try:
+                    code_gen_thinking = await thinking.think_before_code_gen(
+                        requirements=requirements,
+                        memory_context=memory_context,
+                        existing_files=existing_files,
+                    )
+                    logger.info(
+                        f"Job {job_id}: Code-gen thinking — "
+                        f"components={code_gen_thinking.get('component_plan', [])[:3]}, "
+                        f"warnings={code_gen_thinking.get('warnings', [])[:2]}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Job {job_id}: Code-gen thinking failed (non-fatal): {e}")
+
+            # Build context for dev agent (full codebase + schema + history + thinking)
+            from agents.context_builder import MessageHistory, build_agent_context
+            temp_history = MessageHistory()
+
+            # Enrich context with thinking guidance and memory
+            thinking_block = ""
+            if thinking_guidance:
+                thinking_block += (
+                    f"\n\nTHINKING GUIDANCE FOR THIS BUILD:\n"
+                    f"  App type: {thinking_guidance.get('app_type')}\n"
+                    f"  Architecture: {thinking_guidance.get('architecture_recommendation', '')}\n"
+                    f"  Essential features: {', '.join(thinking_guidance.get('essential_features', []))}\n"
+                    f"  Pitfalls to avoid: {', '.join(thinking_guidance.get('pitfalls_to_avoid', []))}\n"
+                )
+            if code_gen_thinking:
+                thinking_block += (
+                    f"\nCODE GENERATION PLAN:\n"
+                    f"  Components: {', '.join(code_gen_thinking.get('component_plan', []))}\n"
+                    f"  State strategy: {code_gen_thinking.get('state_strategy', '')}\n"
+                    f"  Key patterns: {', '.join(code_gen_thinking.get('key_patterns', []))}\n"
+                    f"  Warnings: {', '.join(code_gen_thinking.get('warnings', []))}\n"
+                    f"  Instructions: {code_gen_thinking.get('generation_instructions', '')}\n"
+                )
+            if memory_context and not memory_context.is_empty():
+                thinking_block += "\n" + memory_context.format_for_prompt()
+
+            enriched_prompt = prompt + thinking_block if thinking_block else prompt
+
+            agent_context = build_agent_context(
+                agent_name="dev",
+                files=existing_files,
+                supabase_config=supabase_config,
+                message_history=temp_history,
+                user_prompt=enriched_prompt,
+            )
+
             generation_result = await self.orchestrator.code_generation_agent.generate_code(
                 requirements=requirements,
                 supabase_config=supabase_config,
                 existing_files=existing_files,
                 is_update=is_update,
+                agent_context=agent_context,
             )
             
             logger.info(f"Job {job_id}: Code generation returned, parsing result...")
@@ -362,10 +509,23 @@ class JobManager:
             try:
                 logger.info(f"Job {job_id}: Running conversational tests")
                 
+                # Build context for test agent (full codebase + schema + history)
+                from agents.context_builder import MessageHistory, build_agent_context
+                temp_history = MessageHistory()
+                
+                agent_context = build_agent_context(
+                    agent_name="test",
+                    files=files,  # Test agent gets full codebase
+                    supabase_config=supabase_config,
+                    message_history=temp_history,
+                    user_prompt=prompt
+                )
+                
                 test_results = await self.orchestrator.tester_agent.run_tests(
                     files=files,
                     requirements=requirements,
                     supabase_config=supabase_config,
+                    agent_context=agent_context,
                 )
                 
                 step_results[f"test_{fix_attempts}"] = {
@@ -394,22 +554,64 @@ class JobManager:
             # --- STEP 5: FIX (if tests failed and retries remain) ---
             if fix_attempts < max_fix_attempts:
                 fix_attempts += 1
-                
+
                 await self._update_job(job_id, {
                     "current_step": JobStep.FIX,
                     "status": JobStatus.FIXING,
                     "fix_attempts": fix_attempts,
                     "progress": 70 + (fix_attempts * 5),
                 })
-                
+
                 try:
                     logger.info(f"Job {job_id}: Fix attempt {fix_attempts}/{max_fix_attempts}")
-                    
+
+                    # Think about the best fix strategy before patching
+                    fix_thinking = {}
+                    thinking = self._get_thinking()
+                    if thinking:
+                        try:
+                            fix_thinking = await thinking.think_before_fix(
+                                test_results=test_results,
+                                files=files,
+                                memory_context=memory_context,
+                                attempt=fix_attempts,
+                            )
+                            logger.info(
+                                f"Job {job_id}: Fix thinking — "
+                                f"root_cause={fix_thinking.get('root_cause','?')[:60]}, "
+                                f"confidence={fix_thinking.get('confidence','?')}"
+                            )
+                        except Exception as e:
+                            logger.warning(f"Job {job_id}: Fix thinking failed (non-fatal): {e}")
+
+                    # Build enriched context for fix agent
+                    from agents.context_builder import MessageHistory, build_agent_context
+                    temp_history = MessageHistory()
+
+                    fix_prompt = prompt
+                    if fix_thinking:
+                        fix_prompt += (
+                            f"\n\nFIX ANALYSIS:\n"
+                            f"  Root cause: {fix_thinking.get('root_cause', '')}\n"
+                            f"  Affected files: {', '.join(fix_thinking.get('affected_files', []))}\n"
+                            f"  Strategy: {fix_thinking.get('fix_strategy', '')}\n"
+                            f"  From memory: {fix_thinking.get('from_memory', '')}\n"
+                        )
+
+                    agent_context = build_agent_context(
+                        agent_name="fix",
+                        files=files,
+                        supabase_config=supabase_config,
+                        message_history=temp_history,
+                        user_prompt=fix_prompt,
+                    )
+
                     fix_result = await self.orchestrator.fix_agent.fix_issues(
                         files=files,
                         test_results=test_results,
                         requirements=requirements,
                         attempt=fix_attempts,
+                        agent_context=agent_context,
                     )
                     
                     if fix_result.get("fixes_applied"):
@@ -502,6 +704,39 @@ class JobManager:
         })
         
         logger.info(f"Job {job_id} completed ({status_text}). Version {version_number} saved with {len(files)} files")
+
+        # Save to memory so future builds learn from this outcome
+        try:
+            from agents.memory import BuildMemory
+            memory = self._get_memory()
+            if memory:
+                total_tests = job.get("test_results", {}).get("total", 0)
+                passed_tests = job.get("test_results", {}).get("passed", 0)
+                test_score = (passed_tests / total_tests) if total_tests > 0 else 1.0
+                build_record = BuildMemory(
+                    project_id=project_id,
+                    prompt=prompt[:500],
+                    app_type=job.get("step_results", {}).get("thinking", {}).get("app_type", "general"),
+                    features=job.get("step_results", {}).get("thinking", {}).get("essential_features", []),
+                    files_generated=[f.get("path", "") for f in files],
+                    test_score=test_score,
+                    fix_attempts=job.get("fix_attempts", 0),
+                    outcome="partial" if partial else "success",
+                    patterns_used=job.get("step_results", {}).get("thinking", {}).get("patterns_to_apply", []),
+                    lessons=(
+                        f"Generated {len(files)} files. "
+                        f"Tests: {passed_tests}/{total_tests}. "
+                        f"Fix attempts: {job.get('fix_attempts', 0)}."
+                    ),
+                )
+                await memory.save_build(build_record)
+                await memory.add_project_event(
+                    project_id, "build_completed",
+                    f"v{version_number} — {len(files)} files, score {int(test_score*100)}%"
+                )
+                logger.info(f"Job {job_id}: Build outcome saved to memory")
+        except Exception as e:
+            logger.warning(f"Job {job_id}: Could not save to memory (non-fatal): {e}")
     
     async def _fail_job(self, job_id: str, error: str):
         """Mark job as failed"""

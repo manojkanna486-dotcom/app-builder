@@ -33,6 +33,7 @@ from agents import (
     RequirementsAgent, 
     ConversationalTesterAgent, 
     FixAgent,
+    ThinkingAgent,
     BuildState,
     # Legacy imports for backwards compatibility
     AgentOrchestrator, 
@@ -165,7 +166,7 @@ class Project(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     current_version: int = 0
-    # Supabase integration (REQUIRED)
+    # Supabase integration (OPTIONAL - uses mock data if not connected)
     supabase_connected: bool = False
     supabase_url: Optional[str] = None
     supabase_anon_key: Optional[str] = None
@@ -1243,7 +1244,7 @@ async def call_openrouter(messages: List[Dict]):
     }
     
     payload = {
-        "model": "anthropic/claude-sonnet-4",
+        "model": "anthropic/claude-sonnet-4-5",
         "messages": messages,
         "stream": False,
         "max_tokens": 16000,
@@ -1281,7 +1282,7 @@ async def call_openrouter_stream(messages: List[Dict]):
     }
     
     payload = {
-        "model": "anthropic/claude-sonnet-4",
+        "model": "anthropic/claude-sonnet-4-5",
         "messages": messages,
         "stream": True,
         "max_tokens": 16000,
@@ -1355,7 +1356,6 @@ Since no backend is connected yet, you MUST use realistic mock data:
 2. Use useState to manage the mock data
 3. Implement full CRUD operations on the mock data (add, edit, delete work locally)
 4. Design the data structure to easily connect to a real database later
-5. Add a "Demo Mode" badge to indicate data is local/mock
 
 MOCK DATA EXAMPLE:
 ```javascript
@@ -1406,7 +1406,6 @@ UI BEST PRACTICES:
 - Use whitespace generously
 - Add subtle background patterns or gradients
 - ALWAYS use responsive Tailwind classes (sm:, md:, lg:, xl:)
-- Show "Demo Mode" indicator when using mock data
 
 COLOR PALETTE EXAMPLES (choose based on app type):
 - Professional/Corporate: Slate, Blue, White
@@ -1685,6 +1684,64 @@ IMPORTANT: Return ALL files, not just changed ones."""
 @api_router.get("/")
 async def root():
     return {"message": "App Builder API v1", "db_type": os.environ.get('DB_TYPE', 'mongodb')}
+
+
+# ── Memory endpoints ──────────────────────────────────────────────────────
+
+@api_router.get("/memory/patterns")
+async def get_memory_patterns():
+    """Return all learned patterns stored in memory."""
+    try:
+        from agents.memory import get_memory_store
+        store = get_memory_store()
+        if store is None:
+            return {"count": 0, "patterns": [], "message": "Memory not initialized"}
+        # Return all in-memory patterns directly (no keyword filtering)
+        if store._use_db and hasattr(store.database, "get_memory_entries"):
+            raw = await store.database.get_memory_entries("pattern", limit=200)
+            from agents.memory import LearnedPattern
+            patterns = [LearnedPattern.from_dict(p) for p in raw]
+        else:
+            from agents.memory import LearnedPattern
+            patterns = [LearnedPattern.from_dict(p) for p in store._patterns]
+        return {"count": len(patterns), "patterns": [p.to_dict() for p in patterns]}
+    except Exception as e:
+        logger.error(f"Memory patterns error: {e}")
+        return {"count": 0, "patterns": [], "error": str(e)}
+
+
+@api_router.get("/memory/builds")
+async def get_memory_builds(limit: int = 20):
+    """Return recent build records from memory."""
+    try:
+        from agents.memory import get_memory_store
+        store = get_memory_store()
+        if store is None:
+            return {"count": 0, "builds": [], "message": "Memory not initialized"}
+        if store._use_db and hasattr(store.database, "get_memory_entries"):
+            raw = await store.database.get_memory_entries("build", limit=limit)
+        else:
+            raw = store._builds[-limit:]
+        return {"count": len(raw), "builds": raw}
+    except Exception as e:
+        logger.error(f"Memory builds error: {e}")
+        return {"count": 0, "builds": [], "error": str(e)}
+
+
+@api_router.get("/projects/{project_id}/memory")
+async def get_project_memory(project_id: str):
+    """Return memory/event history for a specific project."""
+    try:
+        from agents.memory import get_memory_store
+        store = get_memory_store()
+        if store is None:
+            return {"history": [], "event_count": 0, "message": "Memory not initialized"}
+        history = await store.get_project_history(project_id)
+        return {"project_id": project_id, "event_count": len(history), "history": history}
+    except Exception as e:
+        logger.error(f"Project memory error: {e}")
+        return {"history": [], "event_count": 0, "error": str(e)}
+
 
 @api_router.post("/projects", response_model=Project)
 async def create_project(data: ProjectCreate):
@@ -2551,7 +2608,7 @@ async def clarify_requirements(project_id: str, request: ClarifyRequest):
     """
     Analyze user prompt and extract requirements with clarifying questions.
     Call this BEFORE generate/stream to get user confirmation.
-    REQUIRES: Supabase must be connected first.
+    Works with or without Supabase. Uses mock data if Supabase is not connected.
     """
     if not orchestrator:
         raise HTTPException(status_code=500, detail="Agent orchestrator not initialized")
@@ -2561,18 +2618,13 @@ async def clarify_requirements(project_id: str, request: ClarifyRequest):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Check Supabase connection - REQUIRED
-    if not project.get("supabase_connected"):
-        return {
-            "status": "supabase_required",
-            "message": "Please connect your Supabase project before creating an app",
-            "requires_supabase": True
-        }
+    # Check if Supabase is connected (optional)
+    supabase_connected = project.get("supabase_connected", False)
     
     # Build context
     context = {
-        "supabase_connected": True,
-        "supabase_url": project.get("supabase_url", ""),
+        "supabase_connected": supabase_connected,
+        "supabase_url": project.get("supabase_url", "") if supabase_connected else "",
         "project_name": project.get("name", ""),
         "existing_summary": project.get("summary", ""),
         "existing_requirements": project.get("requirements")
@@ -2641,7 +2693,7 @@ async def build_app(project_id: str, request: PromptRequest):
     Run the complete multi-agent pipeline to build an app.
     Flow: Clarify → Generate → Deploy → Test → Fix (max 3 retries)
     
-    REQUIRES: Supabase must be connected.
+    Works with or without Supabase. Uses mock data if Supabase is not connected.
     """
     if not orchestrator:
         raise HTTPException(status_code=500, detail="Agent orchestrator not initialized")
@@ -2651,40 +2703,32 @@ async def build_app(project_id: str, request: PromptRequest):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Check Supabase connection - REQUIRED
-    if not project.get("supabase_connected"):
-        raise HTTPException(
-            status_code=400, 
-            detail="Supabase connection required. Please connect your Supabase project first."
-        )
+    # Check if Supabase is connected (optional)
+    supabase_connected = project.get("supabase_connected", False)
     
-    # Get access token - try OAuth first, then fall back to service role key
+    # Get access token only if Supabase is connected
     access_token = None
-    oauth_state = project.get("oauth_state")
-    if oauth_state:
-        token_data = await get_valid_oauth_token(oauth_state)
-        if token_data:
-            access_token = token_data.get("access_token")
-    
-    # If no OAuth token, use service role key for direct database access
-    if not access_token:
-        service_key = project.get("supabase_service_key")
-        if service_key:
-            access_token = service_key  # Use service role key as fallback
-            logger.info(f"Using service role key for project {project_id}")
-        else:
-            raise HTTPException(
-                status_code=401,
-                detail="Supabase credentials missing. Please reconnect with service role key."
-            )
+    if supabase_connected:
+        oauth_state = project.get("oauth_state")
+        if oauth_state:
+            token_data = await get_valid_oauth_token(oauth_state)
+            if token_data:
+                access_token = token_data.get("access_token")
+        
+        # If no OAuth token, use service role key for direct database access
+        if not access_token:
+            service_key = project.get("supabase_service_key")
+            if service_key:
+                access_token = service_key
+                logger.info(f"Using service role key for project {project_id}")
     
     # Use confirmed requirements or analyze prompt
     requirements = project.get("requirements")
     if not requirements or not project.get("requirements_confirmed"):
         # Quick analysis without clarification
         requirements = await orchestrator.analyze_prompt(request.prompt, {
-            "supabase_connected": True,
-            "supabase_url": project.get("supabase_url", ""),
+            "supabase_connected": supabase_connected,
+            "supabase_url": project.get("supabase_url", "") if supabase_connected else "",
             "project_name": project.get("name", "")
         })
         requirements["is_clear"] = True  # Skip clarification for direct build
@@ -2697,13 +2741,15 @@ async def build_app(project_id: str, request: PromptRequest):
         if latest_version:
             existing_files = latest_version.get("files", [])
     
-    # Prepare Supabase config
-    supabase_config = {
-        "url": project.get("supabase_url"),
-        "anon_key": project.get("supabase_anon_key"),
-        "service_key": project.get("supabase_service_key"),
-        "project_ref": project.get("supabase_project_ref") or extract_project_ref(project.get("supabase_url", ""))
-    }
+    # Prepare Supabase config (empty if not connected - will use mock data)
+    supabase_config = {}
+    if supabase_connected:
+        supabase_config = {
+            "url": project.get("supabase_url"),
+            "anon_key": project.get("supabase_anon_key"),
+            "service_key": project.get("supabase_service_key"),
+            "project_ref": project.get("supabase_project_ref") or extract_project_ref(project.get("supabase_url", ""))
+        }
     
     async def generate_stream():
         """Stream the pipeline execution"""
@@ -3183,20 +3229,15 @@ async def start_async_build(project_id: str, request: AsyncBuildRequest):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Check Supabase connection - REQUIRED
-    if not project.get("supabase_connected"):
-        raise HTTPException(
-            status_code=400,
-            detail="Supabase connection required. Please connect your Supabase project first."
-        )
-    
-    # Prepare Supabase config
-    supabase_config = {
-        "url": project.get("supabase_url"),
-        "anon_key": project.get("supabase_anon_key"),
-        "service_key": project.get("supabase_service_key"),
-        "project_ref": project.get("supabase_project_ref") or extract_project_ref(project.get("supabase_url", "")),
-    }
+    # Prepare Supabase config (empty if not connected - will use mock data)
+    supabase_config = {}
+    if project.get("supabase_connected"):
+        supabase_config = {
+            "url": project.get("supabase_url"),
+            "anon_key": project.get("supabase_anon_key"),
+            "service_key": project.get("supabase_service_key"),
+            "project_ref": project.get("supabase_project_ref") or extract_project_ref(project.get("supabase_url", "")),
+        }
     
     # Create the job
     job_id = await job_manager_instance.create_job(
@@ -3789,20 +3830,33 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
 async def get_merged_files_for_project(project_id: str) -> List[dict]:
     """
     Get merged files from all versions of a project.
-    Later versions override earlier versions for the same file path.
+    Falls back to files from the latest job if no versions exist yet.
     """
     all_versions = await database.get_all_versions(project_id)
     
-    if not all_versions:
-        return []
+    if all_versions:
+        # Merge files - later versions override earlier ones
+        merged_files = {}
+        for version in reversed(all_versions):  # oldest first
+            for f in version.get("files", []):
+                merged_files[f.get("path")] = f
+        return list(merged_files.values())
     
-    # Merge files - later versions override earlier ones
-    merged_files = {}
-    for version in reversed(all_versions):  # oldest first
-        for f in version.get("files", []):
-            merged_files[f.get("path")] = f
+    # Fallback: use files from the latest job that has files
+    try:
+        jobs = await database.get_project_jobs(project_id)
+        if jobs:
+            # Sort by created_at descending, pick most recent job with files
+            sorted_jobs = sorted(jobs, key=lambda j: j.get("created_at", ""), reverse=True)
+            for job in sorted_jobs:
+                files = job.get("files", [])
+                if files:
+                    logger.info(f"Preview fallback: using {len(files)} files from job {job.get('id')} (status: {job.get('status')})")
+                    return files
+    except Exception as e:
+        logger.warning(f"Could not fetch job files for preview fallback: {e}")
     
-    return list(merged_files.values())
+    return []
 
 @api_router.get("/projects/{project_id}/preview")
 async def get_preview_html(project_id: str):
@@ -3814,8 +3868,11 @@ async def get_preview_html(project_id: str):
     # Get merged files from all versions
     merged_files = await get_merged_files_for_project(project_id)
     
+    logger.info(f"Preview request for project {project_id}: {len(merged_files)} files found")
+    
     if not merged_files:
         # Return placeholder
+        logger.warning(f"No files found for project {project_id}, returning placeholder")
         return {"html": get_placeholder_html()}
     
     # Get Supabase config if connected
@@ -3828,6 +3885,7 @@ async def get_preview_html(project_id: str):
     
     # Pass merged files and supabase config to the preview generator
     html = generate_preview_html_multifile(merged_files, supabase_config)
+    logger.info(f"Generated preview HTML: {len(html)} characters")
     return {"html": html}
 
 @api_router.get("/projects/{project_id}/preview/live")
@@ -4418,7 +4476,29 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
             logger.info(f"Skipping JSON file in preview: {file_path}")
             continue
         
-        cleaned = clean_component_code(f["content"])
+        # Validate code before processing
+        code_content = f.get("content", "")
+        if not code_content or len(code_content.strip()) < 10:
+            logger.warning(f"Skipping file with insufficient content: {file_path}")
+            continue
+        
+        # Check for incomplete code (common patterns)
+        if code_content.count('{') != code_content.count('}'):
+            logger.warning(f"Unbalanced braces in {file_path}, attempting to fix...")
+            # Try to fix by adding missing closing braces (basic fix)
+            missing_closes = code_content.count('{') - code_content.count('}')
+            if missing_closes > 0:
+                code_content += '\n' + '}' * missing_closes
+        
+        if code_content.count('(') != code_content.count(')'):
+            logger.warning(f"Unbalanced parentheses in {file_path}")
+        
+        cleaned = clean_component_code(code_content)
+        
+        # Skip if cleaned code is too short or appears broken
+        if len(cleaned.strip()) < 10:
+            logger.warning(f"Skipping file with insufficient cleaned content: {file_path}")
+            continue
         
         # Extract component name from file path (e.g., Header.jsx -> Header)
         component_name = None
@@ -4443,15 +4523,26 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
     # Babel standalone can't handle import.meta syntax, so we preprocess it
     all_code = all_code.replace("import.meta.env", "window.importMeta.env")
     
+    # Remove "Demo Mode" text and badges from generated code
+    # This ensures existing apps don't show Demo Mode even if it was in the code
+    import re
+    # Remove Demo Mode badges and text
+    all_code = re.sub(r'<div[^>]*>.*?Demo Mode.*?</div>', '', all_code, flags=re.IGNORECASE | re.DOTALL)
+    all_code = re.sub(r'Demo Mode', '', all_code, flags=re.IGNORECASE)
+    # Clean up any empty divs or elements left behind
+    all_code = re.sub(r'<div[^>]*>\s*</div>', '', all_code)
+    
     # Add Supabase library and config if needed
     supabase_script = ""
     supabase_init = ""
-    if has_supabase or supabase_config:
+    
+    # Only use real Supabase if actually connected
+    if supabase_config and supabase_config.get("url") and supabase_config.get("url") != "":
         supabase_script = '<script src="https://unpkg.com/@supabase/supabase-js@2"></script>'
         
-        # Get actual credentials or use placeholders
-        sb_url = supabase_config.get("url", "") if supabase_config else ""
-        sb_key = supabase_config.get("anon_key", "") if supabase_config else ""
+        # Get actual credentials
+        sb_url = supabase_config.get("url", "")
+        sb_key = supabase_config.get("anon_key", "")
         
         supabase_init = f"""
         // Supabase client setup for preview - CORRECT credentials from connected project
@@ -4535,6 +4626,93 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         // Override any variables that might be used for Supabase config
         const supabaseUrl = SUPABASE_URL;
         const supabaseAnonKey = SUPABASE_ANON_KEY;
+        """
+    elif has_supabase:
+        # Mock Supabase client for apps that reference Supabase but it's not connected
+        # This prevents "supabaseUrl is required" errors when Supabase is not connected
+        supabase_init = """
+        // Mock Supabase client for preview (Supabase not connected - using mock data)
+        // This prevents "supabaseUrl is required" errors
+        const SUPABASE_URL = '';
+        const SUPABASE_ANON_KEY = '';
+        
+        // Create a mock Supabase client that doesn't require a URL
+        const supabaseClient = {
+            auth: {
+                signUp: async () => ({ data: { user: null, session: null }, error: { message: 'Supabase not connected' } }),
+                signInWithPassword: async () => ({ data: { user: null, session: null }, error: { message: 'Supabase not connected' } }),
+                signOut: async () => ({ error: null }),
+                getUser: async () => ({ data: { user: null }, error: null }),
+                getSession: async () => ({ data: { session: null }, error: null }),
+                onAuthStateChange: () => ({ data: { subscription: null }, error: null })
+            },
+            from: () => ({
+                select: () => ({ data: [], error: { message: 'Supabase not connected' } }),
+                insert: () => ({ data: null, error: { message: 'Supabase not connected' } }),
+                update: () => ({ data: null, error: { message: 'Supabase not connected' } }),
+                delete: () => ({ data: null, error: { message: 'Supabase not connected' } })
+            })
+        };
+        
+        // CRITICAL: Also expose as 'supabase' - this is what App.jsx imports
+        const supabase = supabaseClient;
+        
+        // Mock auth helper object
+        const auth = {
+            signUp: async () => ({ data: null, error: { message: 'Supabase not connected - using mock data' } }),
+            signIn: async () => ({ data: null, error: { message: 'Supabase not connected - using mock data' } }),
+            signOut: async () => ({ error: null }),
+            getUser: async () => ({ user: null, error: null })
+        };
+        
+        // Override any variables that might be used for Supabase config
+        const supabaseUrl = '';
+        const supabaseAnonKey = '';
+        
+        // Mock import.meta.env for Vite-style env variables (without Supabase)
+        if (typeof window !== 'undefined') {
+            Object.defineProperty(window, 'importMeta', {
+                value: {
+                    env: {
+                        VITE_SUPABASE_URL: '',
+                        VITE_SUPABASE_ANON_KEY: '',
+                        MODE: 'production',
+                        DEV: false,
+                        PROD: true,
+                        BASE_URL: '/'
+                    }
+                },
+                writable: true,
+                configurable: true
+            });
+            window.importMetaEnv = window.importMeta.env;
+        }
+        """
+    else:
+        # No Supabase references at all - minimal setup
+        supabase_init = """
+        // No Supabase setup needed - app doesn't use Supabase
+        const SUPABASE_URL = '';
+        const SUPABASE_ANON_KEY = '';
+        const supabaseUrl = '';
+        const supabaseAnonKey = '';
+        
+        // Mock import.meta.env for Vite-style env variables
+        if (typeof window !== 'undefined') {
+            Object.defineProperty(window, 'importMeta', {
+                value: {
+                    env: {
+                        MODE: 'production',
+                        DEV: false,
+                        PROD: true,
+                        BASE_URL: '/'
+                    }
+                },
+                writable: true,
+                configurable: true
+            });
+            window.importMetaEnv = window.importMeta.env;
+        }
         """
     
     # Build HTML template with string concatenation to avoid f-string brace issues
@@ -4625,6 +4803,35 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         };
         
         const Route = ({ path, element, children }) => element || children;
+        
+        // React Router v5 Switch component (for backward compatibility)
+        const Switch = ({ children }) => {
+            const { path } = useContext(RouterContext);
+            const routes = React.Children.toArray(children);
+            const normalizedPath = path === '' ? '/' : path;
+            
+            // Find first matching route
+            for (const route of routes) {
+                const routePath = route.props.path;
+                if (routePath === normalizedPath || routePath === '*') {
+                    return route.props.children || route.props.component || route.props.render || null;
+                }
+                // Try partial match
+                if (routePath && routePath !== '*' && normalizedPath.startsWith(routePath) && routePath.length > 1) {
+                    return route.props.children || route.props.component || route.props.render || null;
+                }
+            }
+            return null;
+        };
+        
+        // React Router v5 Redirect component
+        const Redirect = ({ to }) => {
+            const { navigate } = useContext(RouterContext);
+            useEffect(() => {
+                navigate(to);
+            }, [to, navigate]);
+            return null;
+        };
         
         const Link = ({ to, children, className, ...props }) => {
             const { navigate } = useContext(RouterContext);
@@ -4830,23 +5037,297 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         const Clipboard = createIcon(<><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></>);
         const ClipboardCheck = createIcon(<><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="m9 14 2 2 4-4"/></>);
         
+        // Generic Icon component - handles various icon libraries
+        // This prevents "Icon is not defined" errors
+        const Icon = ({ name, className = "", size = 24, ...props }) => {
+            // Try to find a matching icon by name
+            const iconMap = {
+                'home': Home,
+                'user': User,
+                'settings': Settings,
+                'menu': Menu,
+                'search': Search,
+                'plus': Plus,
+                'minus': Minus,
+                'x': X,
+                'check': Check,
+                'trash': Trash2,
+                'edit': Edit,
+                'heart': Heart,
+                'star': Star,
+                'calendar': Calendar,
+                'clock': Clock,
+                'mail': Mail,
+                'phone': Phone,
+                'logout': LogOut,
+                'login': LogIn,
+                'sun': Sun,
+                'moon': Moon,
+                'chevron-right': ChevronRight,
+                'chevron-left': ChevronLeft,
+                'chevron-down': ChevronDown,
+                'chevron-up': ChevronUp,
+                'arrow-right': ArrowRight,
+                'arrow-left': ArrowLeft,
+                'list': List,
+                'grid': LayoutGrid,
+                'filter': Filter,
+                'tag': Tag,
+                'bookmark': Bookmark,
+                'archive': Archive,
+                'target': Target,
+                'trophy': Trophy,
+                'award': Award,
+                'gift': Gift,
+                'code': Code,
+                'download': Download,
+                'upload': Upload,
+                'eye': Eye,
+                'eye-off': EyeOff,
+                'lock': Lock,
+                'unlock': Unlock,
+                'alert-circle': AlertCircle,
+                'check-circle': CheckCircle,
+                'info': Info,
+                'refresh': RefreshCw,
+                'calculator': Calculator,
+                'zap': Zap,
+                'play': Play,
+                'pause': Pause,
+                'send': Send,
+                'message': MessageCircle,
+                'bell': Bell,
+                'share': Share2,
+                'copy': Copy,
+                'external-link': ExternalLink,
+                'link': LinkIcon,
+                'globe': Globe,
+                'map-pin': MapPin,
+                'briefcase': Briefcase,
+                'shopping-cart': ShoppingCart,
+                'credit-card': CreditCard,
+                'dollar': DollarSign,
+                'percent': Percent,
+                'layers': Layers,
+                'box': Box,
+                'package': Package,
+                'truck': Truck,
+                'activity': Activity,
+                'bar-chart': BarChart,
+                'pie-chart': PieChart,
+                'crosshair': Crosshair,
+                'compass': Compass,
+                'navigation': Navigation,
+                'bot': Bot,
+                'sparkles': Sparkles,
+                'wand': Wand2,
+                'github': Github,
+                'twitter': Twitter,
+                'linkedin': Linkedin,
+                'instagram': Instagram,
+                'facebook': Facebook,
+                'youtube': Youtube,
+                'wifi': Wifi,
+                'wifi-off': WifiOff,
+                'bluetooth': Bluetooth,
+                'battery': Battery,
+                'battery-charging': BatteryCharging,
+                'printer': Printer,
+                'mic': Mic,
+                'mic-off': MicOff,
+                'camera': Camera,
+                'camera-off': CameraOff,
+                'video': Video,
+                'video-off': VideoOff,
+                'headphones': Headphones,
+                'music': Music,
+                'radio': Radio,
+                'tv': Tv,
+                'monitor': Monitor,
+                'smartphone': Smartphone,
+                'tablet': Tablet,
+                'laptop': Laptop,
+                'server': Server,
+                'hard-drive': HardDrive,
+                'cpu': Cpu,
+                'terminal': Terminal,
+                'at-sign': AtSign,
+                'bar-chart-2': BarChart2,
+                'bar-chart-3': BarChart3,
+                'line-chart': LineChart,
+                'repeat': Repeat,
+                'share': Share,
+                'smile': Smile,
+                'frown': Frown,
+                'message-square': MessageSquare,
+                'thumbs-up': ThumbsUp,
+                'thumbs-down': ThumbsDown,
+                'users': Users,
+                'user-plus': UserPlus,
+                'user-minus': UserMinus,
+                'trash': Trash,
+                'reply': Reply,
+                'forward': Forward,
+                'corner-down-left': CornerDownLeft,
+                'list-ordered': ListOrdered,
+                'circle': Circle,
+                'square': Square,
+                'check-square': CheckSquare,
+                'x-square': XSquare,
+                'clipboard': Clipboard,
+                'clipboard-check': ClipboardCheck
+            };
+            
+            // Try to find icon by name (case-insensitive)
+            const iconName = name?.toLowerCase()?.replace(/[^a-z0-9]/g, '-');
+            const IconComponent = iconMap[iconName] || iconMap[name?.toLowerCase()] || Plus; // Default to Plus icon
+            
+            return React.createElement(IconComponent, { className, size, ...props });
+        };
+        
+        // Also export Icon as a default for common patterns
+        const DefaultIcon = Icon;
+        
+        // Make Icon available globally for direct usage (e.g., <Icon name="home" />)
+        // Also handle cases where Icon might be used without name prop
+        window.Icon = Icon;
+        
+        // Handle Icon usage patterns:
+        // 1. <Icon name="home" /> - handled by Icon component
+        // 2. Icon({ name: "home" }) - handled by Icon component
+        // 3. Direct icon usage - fallback to Plus icon
+        
+        // Handle undefined component errors gracefully by wrapping React.createElement
+        const originalCreateElement = React.createElement;
+        React.createElement = function(type, props, ...children) {
+            try {
+                // Special handling for Icon component - make it always available
+                if (type === 'Icon' || (typeof type === 'string' && type.toLowerCase() === 'icon')) {
+                    // Use our Icon component
+                    return originalCreateElement(Icon, props, ...children);
+                }
+                
+                // If type is undefined or null, provide a fallback
+                if (type === undefined || type === null) {
+                    console.warn('Attempted to render undefined component, using fallback div');
+                    return originalCreateElement('div', { 
+                        style: { padding: '10px', background: '#fef2f2', color: '#dc2626', borderRadius: '4px', fontSize: '12px' },
+                        ...props 
+                    }, '⚠️ Undefined Component');
+                }
+                
+                // If type is a string but component doesn't exist, try to handle it
+                if (typeof type === 'string' && !['div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'button', 'input', 'form', 'img', 'ul', 'ol', 'li', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'svg', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'g', 'defs', 'clipPath', 'text', 'tspan', 'section', 'article', 'header', 'footer', 'nav', 'aside', 'main', 'label', 'select', 'option', 'textarea', 'canvas', 'video', 'audio', 'source', 'track', 'iframe', 'embed', 'object', 'param', 'area', 'map', 'base', 'br', 'col', 'colgroup', 'datalist', 'fieldset', 'legend', 'optgroup', 'output', 'progress', 'script', 'style', 'template', 'title', 'meta', 'link', 'noscript'].includes(type.toLowerCase())) {
+                    // Unknown HTML element - use div as fallback
+                    console.warn('Unknown element type: ' + type + ', using div fallback');
+                    return originalCreateElement('div', { 
+                        'data-original-type': type,
+                        style: { padding: '5px', border: '1px dashed #fbbf24', borderRadius: '4px', fontSize: '11px' },
+                        ...props 
+                    }, ...children);
+                }
+                
+                return originalCreateElement.apply(this, arguments);
+            } catch (error) {
+                console.error('Error in createElement wrapper:', error);
+                // Return a safe fallback
+                return originalCreateElement('div', { 
+                    style: { padding: '10px', background: '#fef2f2', color: '#dc2626', borderRadius: '4px', fontSize: '12px' },
+                    ...props 
+                }, '⚠️ Render Error: ' + (error.message || 'Unknown error'));
+            }
+        };
+        
         """ + supabase_init + """
         
-        // Error Boundary Component
+        // Enhanced Error Boundary Component with syntax error handling
         class ErrorBoundary extends React.Component {
             constructor(props) {
                 super(props);
-                this.state = { hasError: false, error: null };
+                this.state = { 
+                    hasError: false, 
+                    error: null,
+                    errorInfo: null,
+                    syntaxError: false
+                };
             }
+            
             static getDerivedStateFromError(error) {
-                return { hasError: true, error };
+                // Check if it's a syntax error or undefined variable
+                const isSyntaxError = error.message && (
+                    error.message.includes('is not defined') ||
+                    error.message.includes('Unexpected token') ||
+                    error.message.includes('Cannot read property') ||
+                    error.message.includes('is not a function')
+                );
+                
+                return { 
+                    hasError: true, 
+                    error,
+                    syntaxError: isSyntaxError
+                };
             }
+            
+            componentDidCatch(error, errorInfo) {
+                console.error('ErrorBoundary caught an error:', error, errorInfo);
+                this.setState({
+                    errorInfo: errorInfo
+                });
+            }
+            
             render() {
                 if (this.state.hasError) {
+                    const errorMessage = this.state.error?.message || 'Unknown error';
+                    const errorStack = this.state.error?.stack || '';
+                    
                     return (
-                        <div className="error-boundary">
-                            <h3 className="font-semibold mb-2">Something went wrong</h3>
-                            <pre className="text-sm overflow-auto">{this.state.error?.message}</pre>
+                        <div className="error-boundary" style={{ padding: '20px', maxWidth: '100%', overflow: 'auto' }}>
+                            <h3 className="font-semibold mb-2" style={{ color: '#dc2626', marginBottom: '10px' }}>
+                                {this.state.syntaxError ? '⚠️ Syntax Error Detected' : '❌ Something went wrong'}
+                            </h3>
+                            <div style={{ marginBottom: '10px' }}>
+                                <strong>Error:</strong>
+                                <pre className="text-sm overflow-auto" style={{ 
+                                    background: '#f3f4f6', 
+                                    padding: '10px', 
+                                    borderRadius: '4px',
+                                    marginTop: '5px',
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-word'
+                                }}>
+                                    {errorMessage}
+                                </pre>
+                            </div>
+                            {errorStack && (
+                                <details style={{ marginTop: '10px' }}>
+                                    <summary style={{ cursor: 'pointer', color: '#6b7280' }}>Stack Trace</summary>
+                                    <pre className="text-xs overflow-auto" style={{ 
+                                        background: '#f3f4f6', 
+                                        padding: '10px', 
+                                        borderRadius: '4px',
+                                        marginTop: '5px',
+                                        maxHeight: '200px',
+                                        overflow: 'auto',
+                                        whiteSpace: 'pre-wrap',
+                                        wordBreak: 'break-word'
+                                    }}>
+                                        {errorStack}
+                                    </pre>
+                                </details>
+                            )}
+                            {this.state.syntaxError && (
+                                <div style={{ marginTop: '10px', padding: '10px', background: '#fef3c7', borderRadius: '4px' }}>
+                                    <p style={{ fontSize: '12px', color: '#92400e' }}>
+                                        💡 <strong>Tip:</strong> This looks like a syntax error. Check for:
+                                        <ul style={{ marginTop: '5px', marginLeft: '20px' }}>
+                                            <li>Undefined variables or components</li>
+                                            <li>Missing imports</li>
+                                            <li>Typos in component names</li>
+                                            <li>Missing closing brackets or parentheses</li>
+                                        </ul>
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     );
                 }
@@ -4854,17 +5335,43 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
             }
         }
         
+        // Global error handler for uncaught errors
+        window.addEventListener('error', (event) => {
+            console.error('Global error caught:', event.error);
+        });
+        
+        // Global unhandled promise rejection handler
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Unhandled promise rejection:', event.reason);
+        });
+        
         // User's Generated Components and Code
         """ + all_code + """
         
-        // Render
+        // Render with comprehensive error handling
         const container = document.getElementById('root');
-        const root = ReactDOM.createRoot(container);
-        root.render(
-            <ErrorBoundary>
-                <App />
-            </ErrorBoundary>
-        );
+        
+        try {
+            const root = ReactDOM.createRoot(container);
+            root.render(
+                <ErrorBoundary>
+                    <App />
+                </ErrorBoundary>
+            );
+        } catch (error) {
+            console.error('Failed to render app:', error);
+            container.innerHTML = `
+                <div class="error-boundary" style="padding: 20px;">
+                    <h3 style="color: #dc2626; margin-bottom: 10px;">❌ Failed to Render App</h3>
+                    <pre style="background: #f3f4f6; padding: 10px; border-radius: 4px; overflow: auto;">
+                        ${error.message || 'Unknown rendering error'}
+                    </pre>
+                    <p style="margin-top: 10px; color: #6b7280; font-size: 12px;">
+                        Check the browser console for more details.
+                    </p>
+                </div>
+            `;
+        }
     </script>
 </body>
 </html>"""
@@ -4903,7 +5410,16 @@ async def startup_db_client():
         global job_manager_instance
         job_manager_instance = init_job_manager(database, orchestrator)
         logger.info("Job Manager initialized with new Orchestrator")
-        
+
+        # Initialize memory store and seed default patterns
+        try:
+            from agents.memory import init_memory_store
+            memory_store = init_memory_store(database)
+            await memory_store.seed_default_patterns()
+            logger.info("✅ Memory store initialized and seeded with default patterns")
+        except Exception as e:
+            logger.warning(f"Memory store init failed (non-fatal): {e}")
+
         # Resume any interrupted jobs from previous server run
         await job_manager_instance.resume_incomplete_jobs()
     else:

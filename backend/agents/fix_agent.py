@@ -33,18 +33,27 @@ class FixAgent:
         error_message: str,
         user_context: Optional[str] = None,
         console_logs: Optional[str] = None,
-        requirements: Optional[Dict] = None
+        requirements: Optional[Dict] = None,
+        agent_context: Optional[str] = None
     ) -> Dict:
         """
         Fix an error reported by the user.
         This is the main entry point for user-reported issues.
+        
+        Args:
+            files: List of file dicts (full codebase)
+            error_message: Error message to fix
+            user_context: Additional user context
+            console_logs: Console logs if available
+            requirements: Requirements dict
+            agent_context: Pre-built context (full codebase + schema + message history)
         """
         
         # Step 1: Analyze the error to understand what's wrong
-        analysis = await self._analyze_error(error_message, console_logs, files)
+        analysis = await self._analyze_error(error_message, console_logs, files, agent_context)
         
         # Step 2: Generate targeted fixes
-        fixes = await self._generate_fixes(files, analysis, user_context, requirements)
+        fixes = await self._generate_fixes(files, analysis, user_context, requirements, agent_context)
         
         return fixes
     
@@ -52,18 +61,23 @@ class FixAgent:
         self,
         error_message: str,
         console_logs: Optional[str],
-        files: List[Dict]
+        files: List[Dict],
+        agent_context: Optional[str] = None
     ) -> Dict:
         """Analyze error to understand root cause"""
         
         model = get_model("fix")
         settings = get_model_settings(model)
         
-        # Build analysis prompt
-        files_summary = "\n".join([
-            f"- {f.get('path')}: {f.get('file_type', 'unknown')} ({len(f.get('content', ''))} chars)"
-            for f in files
-        ])
+        # Use agent_context if provided (includes full codebase), otherwise build summary
+        if agent_context:
+            files_info = agent_context
+        else:
+            files_summary = "\n".join([
+                f"- {f.get('path')}: {f.get('file_type', 'unknown')} ({len(f.get('content', ''))} chars)"
+                for f in files
+            ])
+            files_info = f"FILES IN PROJECT:\n{files_summary}"
         
         prompt = f"""Analyze this error and identify the root cause.
 
@@ -72,8 +86,7 @@ ERROR MESSAGE:
 
 {f"CONSOLE LOGS:{chr(10)}{console_logs}" if console_logs else ""}
 
-FILES IN PROJECT:
-{files_summary}
+{files_info}
 
 Respond in JSON format:
 {{
@@ -126,7 +139,8 @@ Respond in JSON format:
         files: List[Dict],
         analysis: Dict,
         user_context: Optional[str],
-        requirements: Optional[Dict]
+        requirements: Optional[Dict],
+        agent_context: Optional[str] = None
     ) -> Dict:
         """Generate code fixes based on analysis"""
         
@@ -141,11 +155,15 @@ Respond in JSON format:
         if not relevant_files:
             relevant_files = [f for f in files if f.get("file_type") == "frontend"][:5]
         
-        # Build the fix prompt with full context
-        files_content = "\n\n".join([
-            f"=== FILE: {f.get('path')} ===\n```\n{f.get('content', '')}\n```"
-            for f in relevant_files
-        ])
+        # Use agent_context if provided (includes full codebase), otherwise build from relevant files
+        if agent_context:
+            files_content = agent_context
+        else:
+            # Build the fix prompt with full context
+            files_content = "\n\n".join([
+                f"=== FILE: {f.get('path')} ===\n```\n{f.get('content', '')}\n```"
+                for f in relevant_files
+            ])
         
         system_prompt = """You are an expert React/JavaScript developer and debugger.
 Your job is to fix bugs in generated code.
@@ -299,11 +317,19 @@ Generate the fixed code. Return complete file contents."""
         files: List[Dict],
         test_results: Dict,
         requirements: Dict,
-        attempt: int = 1
+        attempt: int = 1,
+        agent_context: Optional[str] = None
     ) -> Dict:
         """
         Fix issues from automated test results.
         (Legacy method for compatibility with job manager)
+        
+        Args:
+            files: List of file dicts (full codebase)
+            test_results: Test results dict
+            requirements: Requirements dict
+            attempt: Fix attempt number
+            agent_context: Pre-built context (full codebase + schema + message history)
         """
         
         issues = test_results.get("issues", [])
@@ -324,7 +350,8 @@ Generate the fixed code. Return complete file contents."""
         result = await self.fix_user_error(
             files=files,
             error_message=error_message,
-            requirements=requirements
+            requirements=requirements,
+            agent_context=agent_context
         )
         
         if result.get("success"):

@@ -13,6 +13,7 @@ from .code_generation_agent import CodeGenerationAgent
 from .deployment_agent import DeploymentAgent
 from .tester_agent import ConversationalTesterAgent
 from .fix_agent import FixAgent
+from .thinking_agent import ThinkingAgent
 from .orchestrator_v2 import Orchestrator, BuildState, BuildContext
 
 # Legacy imports for backwards compatibility
@@ -29,6 +30,7 @@ __all__ = [
     'DeploymentAgent',
     'ConversationalTesterAgent',
     'FixAgent',
+    'ThinkingAgent',
     'BuildState',
     'BuildContext',
     

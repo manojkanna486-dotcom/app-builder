@@ -4,79 +4,60 @@ Model Configuration for Multi-Agent System
 Architecture:
 User Prompt → Orchestrator (Router) → Parallel Agents → Tester → Fix Loop → Deploy
 
-Agent → Model Mapping:
-├── Requirements Agent: Claude 3.5 Sonnet
-├── Dev Agent (UI): GPT-4o mini  
-├── Dev Agent (Backend): Gemini 1.5 Pro
-├── Conversational Tester: o1-mini
-├── Fix Agent: DeepSeek Coder V2
-└── Deployment Agent: Claude Haiku
+All agents use Claude claude-sonnet-4-5 (latest) for best code quality.
 """
 
 # OpenRouter model identifiers
+CLAUDE_LATEST = "anthropic/claude-sonnet-4-5"
+
 MODELS = {
-    # Requirements Agent - planning and specs (Claude 3.5 Sonnet)
-    "requirements": "anthropic/claude-3.5-sonnet",
+    # Requirements Agent - planning and specs
+    "requirements": CLAUDE_LATEST,
     
-    # Code Generation - Frontend/UI (GPT-4o mini)
-    "code_generation_frontend": "openai/gpt-4o-mini",
+    # Code Generation - Frontend/UI
+    "code_generation_frontend": CLAUDE_LATEST,
     
-    # Code Generation - Backend/API/DB (Gemini 1.5 Pro)
-    "code_generation_backend": "google/gemini-pro-1.5",
+    # Code Generation - Backend/API/DB
+    "code_generation_backend": CLAUDE_LATEST,
     
-    # Tester Agent (o1-mini -> using gemini flash for testing)
-    "tester": "google/gemini-2.5-flash",
+    # Tester Agent
+    "tester": CLAUDE_LATEST,
     
-    # Fix Agent (DeepSeek Coder V2)
-    "fix": "deepseek/deepseek-chat",
+    # Fix Agent
+    "fix": CLAUDE_LATEST,
     
-    # Deployment Agent (Claude Haiku)
-    "deployment": "anthropic/claude-3-haiku",
+    # Deployment Agent
+    "deployment": CLAUDE_LATEST,
     
-    # Orchestrator (Router - uses Claude Haiku for routing decisions)
-    "orchestrator": "anthropic/claude-3-haiku",
+    # Orchestrator / Router
+    "orchestrator": CLAUDE_LATEST,
+    
+    # Dev Agent
+    "dev": CLAUDE_LATEST,
+    
+    # Clarification Agent
+    "clarification": CLAUDE_LATEST,
+    
+    # Thinking Agent
+    "thinking": CLAUDE_LATEST,
 }
 
 # Model-specific settings
 MODEL_SETTINGS = {
-    "anthropic/claude-3.5-sonnet": {
-        "max_tokens": 8192,
-        "temperature": 0.3,  # Lower temp for precise requirements
-    },
-    "openai/gpt-4o-mini": {
+    CLAUDE_LATEST: {
         "max_tokens": 16000,
-        "temperature": 0.7,
-    },
-    "google/gemini-pro-1.5": {
-        "max_tokens": 16000,
-        "temperature": 0.5,
-    },
-    "openai/o1-mini": {
-        "max_tokens": 8192,
-        "temperature": 1.0,  # o1 models work best with temp=1
-    },
-    "deepseek/deepseek-chat": {
-        "max_tokens": 16000,
-        "temperature": 0.2,  # Low temp for precise code fixes
-    },
-    "anthropic/claude-3-haiku": {
-        "max_tokens": 4096,
-        "temperature": 0.5,
+        "temperature": 0.3,
     },
 }
 
 # Fallback models when primary is unavailable
 FALLBACK_MODELS = {
-    "anthropic/claude-3.5-sonnet": "openai/gpt-4o-mini",
-    "google/gemini-pro-1.5": "openai/gpt-4o-mini",
-    "openai/o1-mini": "openai/gpt-4o-mini",
-    "deepseek/deepseek-chat": "openai/gpt-4o-mini",
-    "anthropic/claude-3-haiku": "openai/gpt-4o-mini",
+    CLAUDE_LATEST: "openai/gpt-4o-mini",
 }
 
 def get_model(agent_type: str) -> str:
     """Get the model ID for a given agent type"""
-    return MODELS.get(agent_type, "openai/gpt-4o-mini")
+    return MODELS.get(agent_type, CLAUDE_LATEST)
 
 def get_fallback_model(model_id: str) -> str:
     """Get fallback model when primary fails"""
@@ -84,4 +65,4 @@ def get_fallback_model(model_id: str) -> str:
 
 def get_model_settings(model_id: str) -> dict:
     """Get model-specific settings"""
-    return MODEL_SETTINGS.get(model_id, {"max_tokens": 4096, "temperature": 0.7})
+    return MODEL_SETTINGS.get(model_id, {"max_tokens": 16000, "temperature": 0.3})

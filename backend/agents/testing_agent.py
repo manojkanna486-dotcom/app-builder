@@ -289,7 +289,7 @@ Answer in JSON format:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4",
+                        "model": "anthropic/claude-sonnet-4-5",
                         "messages": [{"role": "user", "content": prompt}],
                         "max_tokens": 500,
                         "temperature": 0.1

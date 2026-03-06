@@ -94,21 +94,32 @@ class ConversationalTesterAgent:
         self, 
         files: List[Dict],
         requirements: Dict,
-        supabase_config: Optional[Dict] = None
+        supabase_config: Optional[Dict] = None,
+        agent_context: Optional[str] = None
     ) -> Dict:
         """
         Run all tests against the generated code.
         Returns detailed test results.
+        
+        Args:
+            files: List of file dicts (full codebase)
+            requirements: Requirements dict
+            supabase_config: Supabase configuration
+            agent_context: Pre-built context (full codebase + schema + message history)
         """
         
         # Generate test cases from requirements
         test_cases = await self.generate_test_cases(requirements)
         
-        # Combine all code for analysis
-        all_code = "\n\n".join([
-            f"// FILE: {f.get('path', 'unknown')}\n{f.get('content', '')}" 
-            for f in files
-        ])
+        # Use agent_context if provided (includes full codebase), otherwise build from files
+        if agent_context:
+            all_code = agent_context
+        else:
+            # Fallback: combine all code for analysis
+            all_code = "\n\n".join([
+                f"// FILE: {f.get('path', 'unknown')}\n{f.get('content', '')}" 
+                for f in files
+            ])
         
         results = {
             "total": len(test_cases),
