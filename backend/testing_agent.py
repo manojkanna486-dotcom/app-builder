@@ -72,7 +72,7 @@ Return ONLY valid JSON array, no markdown:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4-5",
+                        "model": "openai/gpt-4o-mini",
                         "messages": [{"role": "user", "content": extraction_prompt}],
                         "max_tokens": 1000
                     }

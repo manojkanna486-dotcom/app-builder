@@ -32,15 +32,10 @@ class RequirementsAgent:
         self.api_key = openrouter_api_key
         self.base_url = openrouter_base_url
         
-    async def parse_prompt(self, prompt: str, existing_requirements: Optional[Dict] = None, agent_context: Optional[str] = None) -> Dict:
+    async def parse_prompt(self, prompt: str, existing_requirements: Optional[Dict] = None, agent_context: Optional[Dict] = None) -> Dict:
         """
         Parse user prompt into structured requirements.
         Returns requirements.json structure.
-        
-        Args:
-            prompt: User prompt
-            existing_requirements: Existing requirements to update
-            agent_context: Pre-built context (schema + message history, NO codebase)
         """
         
         system_prompt = """You are a Requirements Agent for a web app builder.
@@ -142,14 +137,22 @@ RULES:
 - Be thorough - missing requirements cause broken apps
 """
 
-        # Build user message with context
+        # Build context information
+        context_info = ""
+        if agent_context:
+            supabase_status = "connected" if agent_context.get("supabase", {}).get("connected") else "not connected"
+            context_info = f"""
+CONTEXT:
+- Agent: {agent_context.get('agent_name', 'requirements')}
+- Supabase: {supabase_status}
+- Existing files: {agent_context.get('codebase_size', 0)}
+"""
+
         user_message = f"""Parse this prompt into requirements.json:
 
 PROMPT: {prompt}
-
+{context_info}
 {f"EXISTING REQUIREMENTS TO UPDATE: {json.dumps(existing_requirements)}" if existing_requirements else "This is a NEW app."}
-
-{agent_context if agent_context else ""}
 
 Parse thoroughly. Flag any ambiguities."""
 

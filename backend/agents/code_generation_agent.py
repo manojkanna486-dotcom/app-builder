@@ -1,6 +1,5 @@
 """
-Code Generation Agent - Generates React + Supabase code
-Creates frontend components, backend Edge Functions, and SQL migrations
+Code Generation Agent - Generates React apps (frontend-only with mock data, or full-stack with Supabase)
 """
 
 import json
@@ -14,26 +13,91 @@ from .model_config import get_model, get_model_settings
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT_SUPABASE = """You are an expert full-stack developer specializing in React + Supabase applications.
+PREVIEW_RULES = """
+=== PREVIEW RENDERING ENVIRONMENT (CRITICAL) ===
+Your generated frontend code runs inside a browser iframe using Babel Standalone (NOT a bundler).
+If you violate these rules, the preview will crash with errors or show a blank white screen.
+
+1. NO IMPORT/EXPORT STATEMENTS in frontend files:
+   - Do NOT write import statements - they are stripped before rendering.
+   - Do NOT write export default or export - they are stripped.
+   - All components share a single global scope.
+
+2. AVAILABLE GLOBALS (already loaded, do NOT import them):
+   - React hooks: useState, useEffect, useRef, useCallback, useMemo, useContext, createContext, useReducer
+   - React Router (mocked): BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useLocation, useParams
+   - Lucide icons: Search, Home, User, Settings, Plus, Loader2, Loader, Spinner, etc. (use directly, e.g. <Loader2 className="animate-spin" />)
+   - Tailwind CSS (via CDN)
+
+3. MAIN COMPONENT MUST BE NAMED App (const App = () => { ... })
+
+4. COMPONENT NAMING - AVOID COLLISIONS WITH LUCIDE ICONS:
+   - Do NOT name components: Calculator, Calendar, Settings, Home, User, Search, Menu, Star, Heart, etc.
+   - If you need such names, prefix them: MyCalculator, AppSettings, UserProfile, etc.
+   - This is the #1 cause of preview crashes.
+
+5. DO NOT USE: import.meta.env, require(), dynamic import(), CSS modules, TypeScript in .jsx
+=== END PREVIEW RULES ===
+"""
+
+# Frontend-only: modern UI with mock data (no backend)
+FRONTEND_ONLY_SYSTEM_PROMPT = """You are an expert React developer. Generate a MODERN, BEAUTIFUL frontend-only app with MOCK DATA.
+
+MODE: FRONTEND ONLY - NO BACKEND.
+- Do NOT use Supabase, APIs, or any backend. Ignore backend/database requirements.
+- All data MUST be mock data: useState with initial arrays/objects in React.
+- Create realistic sample data (e.g. a few todos, sample users, sample items) so the UI looks fully functional.
+- Data lives only in React state; CRUD is add/update/delete in state.
+
+UI: MODERN & POLISHED.
+- Use Tailwind CSS with a cohesive, modern design (gradients, shadows, rounded corners, good spacing).
+- Prefer a clean aesthetic: clear hierarchy, readable typography, consistent spacing (p-4, gap-4, etc.).
+- Use Lucide icons for actions and navigation.
+- Include loading states with Loader2 where appropriate (e.g. simulated delay with setTimeout).
+- Mobile-first responsive: flex-col sm:flex-row, grid, responsive padding/margins.
+- Use semantic colors: primary actions (blue/indigo), success (green), danger (red), neutral (gray).
+
+FILE STRUCTURE (frontend only):
+- App.jsx: Main app with routing (const App = () => {...}). Single file or split into logical components in same file.
+- ONLY .jsx frontend files. NO lib/supabase.js, NO migrations, NO Edge Functions.
+
+OUTPUT FORMAT - Return valid JSON only:
+{
+    "files": [
+        {"path": "App.jsx", "content": "complete React code with mock data", "file_type": "frontend"}
+    ],
+    "summary": "Brief description",
+    "database_changes": [],
+    "edge_functions": []
+}
+
+RULES:
+- NEVER use import/export in frontend files.
+- NEVER name components same as Lucide icons (use AppHome, not Home; UserProfile, not User).
+- Use className (not class). Match all braces/parens.
+- For loading: <Loader2 className="animate-spin" />.
+- Keep all code in one or a few .jsx files; mock data defined in component or at top of file.
+""" + PREVIEW_RULES
+
+# Full-stack (Supabase) - used only when backend is connected
+SYSTEM_PROMPT = """You are an expert full-stack developer specializing in React + Supabase applications.
 
 TECH STACK (FIXED):
 - Frontend: React with Tailwind CSS, Lucide React icons
 - Backend: Supabase (PostgreSQL + Edge Functions + Auth)
 - No mock data - all data comes from Supabase
-
+""" + PREVIEW_RULES + """
 GENERATION RULES:
 1. Create production-ready code that connects directly to Supabase
 2. Include proper error handling and loading states
 3. Use Supabase client for all data operations
 4. Implement Row Level Security (RLS) in migrations
 5. Make UI responsive (mobile-first)
-6. Use modern React patterns (hooks, functional components)
-7. Include proper TypeScript types in Edge Functions
+6. Do NOT use import/export in frontend .jsx files
 
 FILE STRUCTURE:
-- App.jsx: Main app component with routing
+- App.jsx: Main app component with routing (const App = () => {...})
 - components/: Reusable UI components
-- hooks/: Custom React hooks for data fetching
 - lib/supabase.js: Supabase client initialization
 - supabase/migrations/: SQL migration files
 - supabase/functions/: Edge Functions (Deno/TypeScript)
@@ -41,85 +105,19 @@ FILE STRUCTURE:
 OUTPUT FORMAT - Return valid JSON:
 {
     "files": [
-        {
-            "path": "filename.jsx or folder/filename.jsx",
-            "content": "file content here",
-            "file_type": "frontend|sql|edge_function"
-        }
+        {"path": "filename.jsx or folder/filename.jsx", "content": "...", "file_type": "frontend|sql|edge_function"}
     ],
-    "summary": "Brief description of what was built",
-    "database_changes": ["List of tables/columns added or modified"],
-    "edge_functions": ["List of edge functions created"]
+    "summary": "Brief description",
+    "database_changes": [],
+    "edge_functions": []
 }
 
 IMPORTANT:
-- ALWAYS create lib/supabase.js with client initialization
-- ALWAYS create migration files for any database changes
-- Use environment variables for Supabase URL and keys
-- Include proper RLS policies in migrations
-- Make all UI components responsive with Tailwind breakpoints
+- ALWAYS create lib/supabase.js when using Supabase
+- NEVER use import/export in frontend component files
+- NEVER name components the same as Lucide icon names
+- Use className (not class). Match all braces. Use Loader2 for loading states.
 """
-
-SYSTEM_PROMPT_MOCK = """You are an elite frontend developer and UI/UX designer. Generate world-class React applications with stunning, modern interfaces.
-
-IMPORTANT - MOCK DATA APPROACH:
-Since no backend is connected, you MUST use realistic mock data:
-1. Create a data/mockData.js file with realistic sample data
-2. Use useState to manage the mock data
-3. Implement full CRUD operations on the mock data (add, edit, delete work locally)
-4. Design the data structure to easily connect to a real database later
-
-MOCK DATA EXAMPLE:
-```javascript
-// In data/mockData.js
-export const initialTweets = [
-  { id: 1, user: '@johndoe', content: 'Hello world!', likes: 42, createdAt: '2h' },
-  { id: 2, user: '@janedoe', content: 'Building amazing apps!', likes: 128, createdAt: '4h' },
-];
-```
-
-RESPONSIVE DESIGN (MANDATORY - ALL APPS MUST BE FULLY RESPONSIVE):
-1. Mobile-first approach: Design for 320px screens first, then scale up
-2. Breakpoints: sm:640px, md:768px, lg:1024px, xl:1280px
-3. Flexible layouts: Use flex/grid with responsive classes (flex-col sm:flex-row)
-4. Touch-friendly: Minimum 44px tap targets, adequate spacing between interactive elements
-5. Responsive typography: text-sm sm:text-base lg:text-lg
-6. Responsive spacing: p-4 sm:p-6 lg:p-8
-7. Hide/show elements: Use hidden sm:block or sm:hidden as needed
-8. Responsive images: Use w-full max-w-[size] object-cover
-9. Mobile navigation: Hamburger menu on mobile, full nav on desktop
-10. Test mentally: Ensure layout works on phone, tablet, and desktop
-
-DESIGN EXCELLENCE REQUIREMENTS:
-1. Use modern UI patterns (glass morphism, subtle gradients, micro-interactions)
-2. Create visually striking color schemes - avoid generic blue/gray
-3. Add thoughtful spacing, typography hierarchy, and visual rhythm
-4. Include hover states, transitions, and delightful animations
-5. Use professional-grade design like Dribbble/Behance showcase projects
-
-OUTPUT FORMAT (RAW JSON ONLY - NO MARKDOWN):
-{"files":[{"path":"App.jsx","content":"code"},{"path":"data/mockData.js","content":"code"},{"path":"components/X.jsx","content":"code"}],"summary":"description"}
-
-FILE STRUCTURE (ALWAYS MULTIPLE FILES):
-- App.jsx: Clean entry point composing components
-- data/mockData.js: Realistic sample data for the app
-- components/Header.jsx: Navigation with search, user menu (responsive hamburger)
-- components/Sidebar.jsx: Navigation sidebar (collapsible on mobile)
-- components/[Feature].jsx: Feature-specific components
-- components/Card.jsx: Reusable card component
-- components/MobileNav.jsx: Mobile navigation component (if complex nav)
-
-UI BEST PRACTICES:
-- Use Tailwind's design system consistently
-- Add shadows, rounded corners, proper padding
-- Include loading states and empty states
-- Use icons (Lucide React icons: import { Icon } from 'lucide-react')
-- Create visual hierarchy with font sizes and weights
-- Use whitespace generously
-- Add subtle background patterns or gradients
-- ALWAYS use responsive Tailwind classes (sm:, md:, lg:, xl:)
-
-CRITICAL: Return ONLY raw JSON. No markdown code blocks. ALL layouts MUST be responsive. ALL CRUD operations must work with mock data."""
 
 class CodeGenerationAgent:
     """Agent that generates React + Supabase application code"""
@@ -129,32 +127,32 @@ class CodeGenerationAgent:
         self.base_url = openrouter_base_url
         
     async def generate_code(
-        self, 
+        self,
         requirements: Dict,
         supabase_config: Dict,
         existing_files: Optional[List[Dict]] = None,
         is_update: bool = False,
+        agent_context: Optional[Dict] = None,
+        test_cases: Optional[List[Dict]] = None,
         max_retries: int = 3,
-        agent_context: Optional[str] = None
+        conversation_history: Optional[List[Dict]] = None
     ) -> Dict:
         """
         Generate complete application code based on requirements.
+        If test_cases are provided (TDD flow), build code to satisfy them.
         Returns files, summary, and metadata.
-        
-        Args:
-            requirements: Requirements dict
-            supabase_config: Supabase configuration
-            existing_files: Existing files (full codebase)
-            is_update: Whether this is an update
-            max_retries: Max retry attempts
-            agent_context: Pre-built context (full codebase + schema + message history)
         """
         import sys
         
-        # Build the generation prompt
-        prompt = self._build_generation_prompt(requirements, supabase_config, existing_files, is_update, agent_context)
+        # Frontend-only with mock data when no Supabase connected
+        use_frontend_only = not (supabase_config and supabase_config.get("url"))
+        prompt = self._build_generation_prompt(
+            requirements, supabase_config, existing_files, is_update, test_cases,
+            use_frontend_only=use_frontend_only
+        )
+        system_prompt = FRONTEND_ONLY_SYSTEM_PROMPT if use_frontend_only else SYSTEM_PROMPT
         
-        logger.info(f"Code generation: Starting, prompt length: {len(prompt)} chars")
+        logger.info(f"Code generation: Starting ({'frontend-only mock' if use_frontend_only else 'full-stack'}), prompt length: {len(prompt)} chars")
         sys.stderr.flush()
         
         last_error = None
@@ -173,9 +171,13 @@ class CodeGenerationAgent:
                     model = get_model("code_generation_frontend")
                     settings = get_model_settings(model)
                     
-                    # Choose system prompt based on Supabase connection
-                    supabase_connected = supabase_config.get("url") and supabase_config.get("url") != "YOUR_SUPABASE_URL"
-                    system_prompt = SYSTEM_PROMPT_SUPABASE if supabase_connected else SYSTEM_PROMPT_MOCK
+                    # Build messages with conversation history
+                    messages = [{"role": "system", "content": system_prompt}]
+                    # Inject conversation history for context
+                    if conversation_history:
+                        for msg in conversation_history[-20:]:  # Last 20 messages to stay within context limits
+                            messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+                    messages.append({"role": "user", "content": prompt})
                     
                     response = await client.post(
                         f"{self.base_url}/chat/completions",
@@ -185,10 +187,7 @@ class CodeGenerationAgent:
                         },
                         json={
                             "model": model,
-                            "messages": [
-                                {"role": "system", "content": system_prompt},
-                                {"role": "user", "content": prompt}
-                            ],
+                            "messages": messages,
                             "max_tokens": settings["max_tokens"],
                             "temperature": settings["temperature"]
                         }
@@ -246,25 +245,34 @@ class CodeGenerationAgent:
         raise Exception(f"Code generation failed after {max_retries} attempts: {last_error}")
     
     async def generate_code_stream(
-        self, 
+        self,
         requirements: Dict,
         supabase_config: Dict,
         existing_files: Optional[List[Dict]] = None,
         is_update: bool = False,
-        agent_context: Optional[str] = None
+        agent_context: Optional[Dict] = None,
+        conversation_history: Optional[List[Dict]] = None
     ) -> AsyncGenerator[str, None]:
         """
         Stream code generation for real-time UI updates.
         Yields chunks of generated code.
         """
-        
-        prompt = self._build_generation_prompt(requirements, supabase_config, existing_files, is_update, agent_context)
-        
-        # Choose system prompt based on Supabase connection
-        supabase_connected = supabase_config.get("url") and supabase_config.get("url") != "YOUR_SUPABASE_URL"
-        system_prompt = SYSTEM_PROMPT_SUPABASE if supabase_connected else SYSTEM_PROMPT_MOCK
+        use_frontend_only = not (supabase_config and supabase_config.get("url"))
+        prompt = self._build_generation_prompt(
+            requirements, supabase_config, existing_files, is_update,
+            test_cases=None,
+            use_frontend_only=use_frontend_only
+        )
+        system_prompt = FRONTEND_ONLY_SYSTEM_PROMPT if use_frontend_only else SYSTEM_PROMPT
         
         try:
+            # Build messages with conversation history
+            messages = [{"role": "system", "content": system_prompt}]
+            if conversation_history:
+                for msg in conversation_history[-20:]:
+                    messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+            messages.append({"role": "user", "content": prompt})
+            
             async with httpx.AsyncClient(timeout=180.0) as client:
                 async with client.stream(
                     "POST",
@@ -274,11 +282,8 @@ class CodeGenerationAgent:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4-5",
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": prompt}
-                        ],
+                        "model": "openai/gpt-4o-mini",
+                        "messages": messages,
                         "max_tokens": 16000,
                         "temperature": 0.7,
                         "stream": True
@@ -308,19 +313,12 @@ class CodeGenerationAgent:
         supabase_config: Dict,
         existing_files: Optional[List[Dict]] = None,
         is_update: bool = False,
-        agent_context: Optional[str] = None
+        test_cases: Optional[List[Dict]] = None,
+        use_frontend_only: bool = True,
     ) -> str:
-        """Build the prompt for code generation
+        """Build the prompt for code generation. use_frontend_only=True => modern UI with mock data, no backend."""
         
-        Args:
-            requirements: Requirements dict
-            supabase_config: Supabase configuration
-            existing_files: Existing files
-            is_update: Whether this is an update
-            agent_context: Pre-built context (includes full codebase if provided)
-        """
-        
-        logger.info(f"Building generation prompt with requirements type: {type(requirements)}")
+        logger.info(f"Building generation prompt (frontend_only={use_frontend_only}), requirements type: {type(requirements)}")
         
         # Handle case where requirements might be stored differently
         if isinstance(requirements, str):
@@ -393,12 +391,42 @@ class CodeGenerationAgent:
                 if isinstance(perm, dict):
                     permissions_info += f"- {perm.get('model', 'model')}: {perm.get('role', 'user')} can {', '.join(perm.get('actions', []))} where {perm.get('condition', 'true')}\n"
         
-        # Check if Supabase is connected
-        supabase_connected = supabase_config.get("url") and supabase_config.get("url") != "YOUR_SUPABASE_URL"
-        supabase_url = supabase_config.get("url", "") if supabase_connected else ""
+        supabase_url = supabase_config.get("url", "") if supabase_config else ""
+
+        # Build acceptance test cases section (TDD - build to pass these tests)
+        test_cases_block = ""
+        if test_cases and len(test_cases) > 0:
+            test_cases_block = "\nACCEPTANCE TESTS (Your code MUST satisfy these):\n"
+            for i, tc in enumerate(test_cases[:15], 1):
+                desc = tc.get("description", "")
+                steps = tc.get("steps", [])
+                expected = tc.get("expected", "")
+                cat = tc.get("category", "")
+                steps_str = " → ".join(steps) if steps else "See description"
+                test_cases_block += f"{i}. [{cat}] {desc}\n   Steps: {steps_str}\n   Expected: {expected}\n"
+            test_cases_block += "\nEnsure your implementation allows these user flows to succeed.\n"
         
-        if supabase_connected:
-            # Full-stack mode with Supabase
+        if use_frontend_only:
+            # Modern UI, mock data only - no backend
+            prompt = f"""Generate a MODERN, BEAUTIFUL frontend-only React app with MOCK DATA.
+
+APP NAME: {requirements.get('app_name', 'My App')}
+DESCRIPTION: {requirements.get('app_description', '')}
+
+FEATURES TO IMPLEMENT (use mock data in React state - no backend):
+{features_text}
+
+PAGES/SCREENS: {pages_info}
+{test_cases_block}
+
+REQUIREMENTS:
+- Use ONLY React state (useState) for all data. Create realistic mock data (e.g. sample list items, sample user) so the app looks fully functional.
+- Modern UI: Tailwind with gradients, shadows, rounded corners, clear typography. Mobile-first responsive.
+- Single App.jsx or App.jsx + a few component files. NO lib/supabase.js, NO SQL, NO Edge Functions.
+- CRUD = add/update/delete in state. No API calls.
+- Use Lucide icons (Loader2 for loading). No import/export in frontend files.
+"""
+        else:
             prompt = f"""Generate a complete React + Supabase application.
 
 APP NAME: {requirements.get('app_name', 'My App')}
@@ -412,8 +440,8 @@ FEATURES/REQUIREMENTS:
 
 PAGES TO CREATE: {pages_info}
 
-SUPABASE PROJECT URL: {supabase_url}
-
+SUPABASE PROJECT URL: {supabase_url or 'YOUR_SUPABASE_URL'}
+{test_cases_block}
 Generate ALL necessary files including:
 1. React components with Supabase data fetching
 2. SQL migrations for the database schema (with RLS policies)
@@ -427,56 +455,6 @@ Remember:
 - Use Lucide React for icons
 - Include proper error handling
 - Implement RLS policies for security
-"""
-            
-            # Add agent context (includes full codebase if provided)
-            if agent_context:
-                prompt = f"{agent_context}\n\n{prompt}"
-        else:
-            # Mock data mode - no Supabase
-            prompt = f"""Generate a complete React application with mock data.
-
-APP NAME: {requirements.get('app_name', 'My App')}
-DESCRIPTION: {requirements.get('app_description', '')}
-
-FEATURES/REQUIREMENTS:
-{features_text}
-
-{schema_info}
-{permissions_info}
-
-PAGES TO CREATE: {pages_info}
-
-IMPORTANT - MOCK DATA APPROACH:
-Since no backend is connected, you MUST use realistic mock data:
-1. Create a data/mockData.js file with realistic sample data
-2. Use useState to manage the mock data
-3. Implement full CRUD operations on the mock data (add, edit, delete work locally)
-4. Design the data structure to easily connect to a real database later
-
-MOCK DATA EXAMPLE:
-```javascript
-// In data/mockData.js
-export const initialTweets = [
-  {{ id: 1, user: '@johndoe', content: 'Hello world!', likes: 42, createdAt: '2h' }},
-  {{ id: 2, user: '@janedoe', content: 'Building amazing apps!', likes: 128, createdAt: '4h' }},
-];
-```
-
-Generate ALL necessary files including:
-1. React components with mock data (useState)
-2. data/mockData.js file with realistic sample data
-3. All UI components with Tailwind CSS styling
-4. Full CRUD operations on mock data
-
-Remember:
-- Use mock data stored in data/mockData.js
-- Use useState to manage data state
-- Implement full CRUD operations (add, edit, delete) on mock data
-- Include proper loading and error states (simulated)
-- Make responsive with Tailwind CSS
-- Use Lucide React for icons
-- Design data structure to easily migrate to a database later
 """
 
         if is_update and existing_files:
@@ -547,12 +525,12 @@ Remember:
                 else:
                     f["file_type"] = "frontend"
         
-        # Check for required files
-        has_supabase_client = any("supabase" in f["path"].lower() for f in files)
-        has_app = any(f["path"] in ["App.jsx", "App.tsx", "app.jsx", "app.tsx"] for f in files)
+        # Only add Supabase client if this is a full-stack build (has SQL or Edge Functions)
+        has_backend = any(f.get("file_type") in ("sql", "edge_function") for f in files)
+        has_supabase_client = any("supabase" in f.get("path", "").lower() for f in files)
         
-        if not has_supabase_client:
-            # Add default Supabase client
+        if has_backend and not has_supabase_client:
+            # Add default Supabase client only when backend is used
             files.append({
                 "path": "lib/supabase.js",
                 "content": """import { createClient } from '@supabase/supabase-js';

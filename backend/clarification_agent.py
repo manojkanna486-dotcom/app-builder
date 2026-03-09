@@ -137,7 +137,7 @@ class ClarificationAgent:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4-5",
+                        "model": "openai/gpt-4o-mini",
                         "messages": [{"role": "user", "content": prompt}],
                         "max_tokens": 2000
                     }

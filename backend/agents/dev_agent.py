@@ -15,12 +15,23 @@ FIX_SYSTEM_PROMPT = """You are an expert code fixer for React + Supabase applica
 
 Your job is to fix issues in generated code based on test failures.
 
+PREVIEW RENDERING ENVIRONMENT:
+The frontend code runs in a browser iframe using Babel Standalone (NOT a bundler).
+- All import/export statements are STRIPPED before rendering - do NOT include them in frontend files.
+- React hooks (useState, useEffect, etc.) and 160+ Lucide icons are available as globals.
+- React Router is mocked (BrowserRouter, Routes, Route, Link, useNavigate, etc. are globals).
+- The main component MUST be named App.
+- Do NOT name components the same as Lucide icons (Calculator, Calendar, Home, Settings, User, etc.).
+- import.meta.env is NOT supported.
+
 RULES:
 1. Only fix the issues reported - don't change working code
 2. Maintain the existing code style and patterns
 3. Ensure all Supabase connections work properly
 4. Keep UI responsive and accessible
 5. Fix syntax errors precisely
+6. Do NOT include import/export statements in frontend files
+7. Do NOT name components the same as Lucide icon names
 
 OUTPUT FORMAT - Return ONLY the fixed files in JSON:
 {
@@ -39,6 +50,7 @@ IMPORTANT:
 - Return complete file content, not just diffs
 - Only include files that were actually modified
 - Preserve all existing functionality
+- Do NOT use import/export in frontend component files
 """
 
 
@@ -54,19 +66,11 @@ class DevAgent:
         files: List[Dict],
         test_results: Dict,
         requirements: Dict,
-        attempt: int = 1,
-        agent_context: Optional[str] = None
+        attempt: int = 1
     ) -> Dict:
         """
         Fix issues identified in test results.
         Returns updated files and fix summary.
-        
-        Args:
-            files: List of file dicts (full codebase)
-            test_results: Test results dict
-            requirements: Requirements dict
-            attempt: Fix attempt number
-            agent_context: Pre-built context (full codebase + schema + message history)
         """
         
         issues = test_results.get("issues", [])
@@ -78,7 +82,7 @@ class DevAgent:
             }
         
         # Build fix prompt
-        prompt = self._build_fix_prompt(files, issues, requirements, attempt, agent_context)
+        prompt = self._build_fix_prompt(files, issues, requirements, attempt)
         
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
@@ -89,7 +93,7 @@ class DevAgent:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4-5",
+                        "model": "openai/gpt-4o-mini",
                         "messages": [
                             {"role": "system", "content": FIX_SYSTEM_PROMPT},
                             {"role": "user", "content": prompt}
@@ -146,7 +150,7 @@ class DevAgent:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4-5",
+                        "model": "openai/gpt-4o-mini",
                         "messages": [
                             {"role": "system", "content": FIX_SYSTEM_PROMPT},
                             {"role": "user", "content": prompt}
@@ -179,8 +183,7 @@ class DevAgent:
         files: List[Dict],
         issues: List[Dict],
         requirements: Dict,
-        attempt: int,
-        agent_context: Optional[str] = None
+        attempt: int
     ) -> str:
         """Build the prompt for fixing issues"""
         
@@ -190,15 +193,11 @@ class DevAgent:
             for issue in issues
         ])
         
-        # Use agent_context if provided (includes full codebase), otherwise build from files
-        if agent_context:
-            files_text = agent_context
-        else:
-            # Format current files
-            files_text = "\n\n".join([
-                f"=== FILE: {f.get('path', 'unknown')} ===\n{f.get('content', '')}"
-                for f in files
-            ])
+        # Format current files
+        files_text = "\n\n".join([
+            f"=== FILE: {f.get('path', 'unknown')} ===\n{f.get('content', '')}"
+            for f in files
+        ])
         
         # Format requirements for context
         req_text = "\n".join([

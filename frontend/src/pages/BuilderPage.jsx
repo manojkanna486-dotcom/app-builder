@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -28,6 +28,7 @@ import {
   Bug,
   Wrench,
   Plus,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
@@ -171,6 +172,7 @@ export default function BuilderPage() {
   const [streamingCode, setStreamingCode] = useState("");
   const [previewHtml, setPreviewHtml] = useState("");
   const [previewKey, setPreviewKey] = useState(0); // increments to force iframe remount
+  const [previewError, setPreviewError] = useState(null);
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState("App.jsx");
   const [viewMode, setViewMode] = useState("preview");
@@ -269,6 +271,24 @@ export default function BuilderPage() {
     }
   };
 
+  // Listen for error/ok messages from preview iframe
+  useEffect(() => {
+    const handler = (event) => {
+      if (event.data?.type === 'preview-error') {
+        setPreviewError(event.data.error || 'Unknown error in preview');
+      } else if (event.data?.type === 'preview-ok') {
+        setPreviewError(null);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  // Clear preview error when new preview HTML is loaded
+  useEffect(() => {
+    if (previewHtml) setPreviewError(null);
+  }, [previewHtml, previewKey]);
+
   // Check for OAuth callback
   useEffect(() => {
     const authState = searchParams.get('supabase_auth');
@@ -282,10 +302,6 @@ export default function BuilderPage() {
   }, [searchParams, projectId]);
 
   useEffect(() => {
-    fetchProjectData();
-  }, [projectId]);
-
-  useEffect(() => {
     scrollToBottom();
   }, [messages, clarificationQuestions]);
 
@@ -293,7 +309,7 @@ export default function BuilderPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const fetchProjectData = async () => {
+  const fetchProjectData = useCallback(async () => {
     try {
       const [projectRes, messagesRes, previewRes, versionsRes] = await Promise.all([
         axios.get(`${API}/projects/${projectId}`),
@@ -333,7 +349,11 @@ export default function BuilderPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate, projectId]);
+
+  useEffect(() => {
+    fetchProjectData();
+  }, [fetchProjectData]);
 
   const getSelectedFileContent = () => {
     const file = files.find((f) => f.path === selectedFile);
@@ -553,10 +573,13 @@ export default function BuilderPage() {
         const statusMap = {
           pending: "⏳ Job queued...",
           running: "🚀 Starting...",
+          parsing_requirements: "📋 Parsing requirements...",
+          awaiting_clarification: "💬 Waiting for clarification...",
+          generating_tests: "🧪 Writing test cases...",
           clarifying: "📋 Analyzing requirements...",
           generating: "💻 Generating code...",
           deploying: "📦 Deploying to Supabase...",
-          testing: "🧪 Running tests...",
+          testing: "🧪 Testing the app...",
           fixing: `🔧 Fixing issues (attempt ${job.fix_attempts || 0}/3)...`,
           completed: "✅ Completed!",
           failed: "❌ Failed",
@@ -755,10 +778,17 @@ export default function BuilderPage() {
     }
   };
 
-  // Update iframe when previewHtml changes (fallback)
+  // Force iframe refresh when previewHtml changes without a key bump
   useEffect(() => {
     if (previewHtml && previewHtml.length > 100 && iframeRef.current) {
-      iframeRef.current.srcdoc = previewHtml;
+      try {
+        const iframeDoc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
+        if (iframeDoc && (!iframeDoc.body || iframeDoc.body.innerHTML.trim() === '')) {
+          iframeRef.current.srcdoc = previewHtml;
+        }
+      } catch (e) {
+        // Cross-origin or security error - srcdoc should handle it via key prop
+      }
     }
   }, [previewHtml]);
 
@@ -1706,6 +1736,21 @@ export default function BuilderPage() {
             </div>
           </div>
 
+          {/* Preview error banner */}
+          {previewError && viewMode === "preview" && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate flex-1 font-medium">Error in preview: {previewError.length > 120 ? previewError.substring(0, 120) + '...' : previewError}</span>
+              <button
+                onClick={() => setPreviewError(null)}
+                className="ml-auto text-red-400 hover:text-red-600 dark:hover:text-red-300 flex-shrink-0"
+                title="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* Preview Content */}
           <div className="flex-1 overflow-hidden">
             {viewMode === "preview" ? (
@@ -1718,19 +1763,30 @@ export default function BuilderPage() {
                     title="App Preview"
                     srcDoc={previewHtml}
                     className="w-full h-full border-0"
-                    sandbox="allow-scripts allow-same-origin allow-modals allow-forms allow-popups allow-popups-to-escape-sandbox"
+                    sandbox="allow-scripts allow-same-origin allow-modals allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-top-navigation-by-user-activation"
+                    referrerPolicy="no-referrer-when-downgrade"
                     style={{ 
                       width: '100%', 
                       height: '100%',
                       display: 'block',
-                      border: 'none'
+                      border: 'none',
+                      backgroundColor: '#ffffff'
                     }}
                     onError={(e) => {
                       console.error("Preview iframe error:", e);
-                      toast.error("Preview failed to load. Check console for details.");
                     }}
-                    onLoad={() => {
-                      console.log("Preview iframe loaded successfully");
+                    onLoad={(e) => {
+                      try {
+                        const iframeDoc = e.target.contentDocument || e.target.contentWindow?.document;
+                        if (iframeDoc && iframeDoc.body) {
+                          const errorBoundary = iframeDoc.querySelector('.error-boundary');
+                          if (errorBoundary) {
+                            console.warn("Preview loaded with errors:", errorBoundary.textContent?.substring(0, 200));
+                          }
+                        }
+                      } catch (err) {
+                        // Cross-origin access blocked - normal for sandboxed iframes
+                      }
                     }}
                   />
                   {/* Error overlay if iframe fails */}

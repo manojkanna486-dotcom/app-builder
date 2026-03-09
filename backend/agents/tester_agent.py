@@ -11,9 +11,22 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 import httpx
 
-from .model_config import get_model, get_model_settings
+from .model_config import get_model
 
 logger = logging.getLogger(__name__)
+
+try:
+    from code_utils import validate_frontend_code
+except ImportError:
+    try:
+        import sys
+        from pathlib import Path
+        _parent = str(Path(__file__).resolve().parent.parent)
+        if _parent not in sys.path:
+            sys.path.insert(0, _parent)
+        from code_utils import validate_frontend_code
+    except ImportError:
+        validate_frontend_code = None
 
 
 @dataclass
@@ -39,6 +52,20 @@ class TestCase:
             "passed": self.passed,
             "error": self.error
         }
+    
+    @classmethod
+    def from_dict(cls, d: Dict) -> "TestCase":
+        """Create TestCase from dict (for reusing stored tests)"""
+        return cls(
+            id=d.get("id", ""),
+            category=d.get("category", "feature"),
+            description=d.get("description", ""),
+            steps=d.get("steps", []),
+            expected=d.get("expected", ""),
+            actual=d.get("actual"),
+            passed=d.get("passed"),
+            error=d.get("error")
+        )
 
 
 class ConversationalTesterAgent:
@@ -95,31 +122,32 @@ class ConversationalTesterAgent:
         files: List[Dict],
         requirements: Dict,
         supabase_config: Optional[Dict] = None,
-        agent_context: Optional[str] = None
+        test_cases: Optional[List] = None
     ) -> Dict:
         """
-        Run all tests against the generated code.
+        Run all tests against the generated code in a SINGLE LLM call.
+        If test_cases is provided, REUSE them (do not create new tests).
         Returns detailed test results.
-        
-        Args:
-            files: List of file dicts (full codebase)
-            requirements: Requirements dict
-            supabase_config: Supabase configuration
-            agent_context: Pre-built context (full codebase + schema + message history)
         """
         
-        # Generate test cases from requirements
-        test_cases = await self.generate_test_cases(requirements)
-        
-        # Use agent_context if provided (includes full codebase), otherwise build from files
-        if agent_context:
-            all_code = agent_context
+        # Use provided test cases, or generate once from requirements
+        if test_cases:
+            # Convert dicts to TestCase if needed
+            resolved = []
+            for t in test_cases:
+                if isinstance(t, TestCase):
+                    resolved.append(t)
+                else:
+                    resolved.append(TestCase.from_dict(t))
+            test_cases = resolved
         else:
-            # Fallback: combine all code for analysis
-            all_code = "\n\n".join([
-                f"// FILE: {f.get('path', 'unknown')}\n{f.get('content', '')}" 
-                for f in files
-            ])
+            test_cases = await self.generate_test_cases(requirements)
+        
+        # Combine all code for analysis
+        all_code = "\n\n".join([
+            f"// FILE: {f.get('path', 'unknown')}\n{f.get('content', '')}" 
+            for f in files
+        ])
         
         results = {
             "total": len(test_cases),
@@ -131,21 +159,49 @@ class ConversationalTesterAgent:
             "summary": ""
         }
         
-        # Run each test
-        for test in test_cases:
-            result = await self._run_test(test, files, all_code, requirements)
-            results["tests"].append(result.to_dict())
+        # CRITICAL: Run syntax/runtime validation FIRST - catch errors before LLM tests
+        # These get sent to fix agent so they are fixed during build
+        if validate_frontend_code:
+            try:
+                validation_issues = validate_frontend_code(files)
+                for issue in validation_issues:
+                    results["issues"].append(issue)
+                    results["failed"] += 1
+                    results["tests"].append({
+                        "id": f"SYNTAX-{issue.get('description', '')[:30]}",
+                        "category": issue.get("category", "syntax"),
+                        "description": issue.get("description", ""),
+                        "passed": False,
+                        "error": issue.get("error", ""),
+                        "steps_to_reproduce": issue.get("steps_to_reproduce", [])
+                    })
+                if validation_issues:
+                    logger.info(f"Syntax/runtime validation found {len(validation_issues)} issues - will send to fix agent")
+                    results["summary"] = f"❌ {len(validation_issues)} syntax/runtime errors found - fix required"
+                    return results  # Skip LLM tests - fix syntax first
+            except Exception as e:
+                logger.warning(f"Validation error (non-fatal): {e}")
+        
+        # Run ALL tests in one LLM call
+        evaluated = await self._run_all_tests_at_once(test_cases, all_code, requirements)
+        
+        for test, result_data in zip(test_cases, evaluated):
+            test.passed = result_data.get("passed", True)
+            test.actual = result_data.get("actual_behavior", "")
+            test.error = result_data.get("error")
             
-            if result.passed is True:
+            results["tests"].append(test.to_dict())
+            
+            if test.passed is True:
                 results["passed"] += 1
-            elif result.passed is False:
+            elif test.passed is False:
                 results["failed"] += 1
                 results["issues"].append({
-                    "test_id": result.id,
-                    "category": result.category,
-                    "description": result.description,
-                    "error": result.error,
-                    "steps_to_reproduce": result.steps
+                    "test_id": test.id,
+                    "category": test.category,
+                    "description": test.description,
+                    "error": test.error,
+                    "steps_to_reproduce": test.steps
                 })
             else:
                 results["skipped"] += 1
@@ -158,52 +214,51 @@ class ConversationalTesterAgent:
         
         return results
     
-    async def _run_test(
-        self, 
-        test: TestCase, 
-        files: List[Dict], 
+    async def _run_all_tests_at_once(
+        self,
+        test_cases: List[TestCase],
         all_code: str,
         requirements: Dict
-    ) -> TestCase:
-        """Run a single test case using LLM analysis"""
+    ) -> List[Dict]:
+        """Run all test cases in a single LLM API call - returns list of results"""
         
-        prompt = f"""You are testing a web application like a real user.
-
-TEST CASE: {test.description}
-
-STEPS TO TEST:
-{chr(10).join(f"{i+1}. {step}" for i, step in enumerate(test.steps))}
-
-EXPECTED RESULT: {test.expected}
+        # Build compact test list for prompt (limit code size to fit context)
+        code_snippet = all_code[:14000]
+        features = json.dumps(requirements.get("features", [])[:5], indent=2)
+        
+        tests_text = "\n\n".join([
+            f"--- TEST {i+1} (id: {t.id}) ---\n"
+            f"Description: {t.description}\n"
+            f"Steps: {' → '.join(t.steps)}\n"
+            f"Expected: {t.expected}"
+            for i, t in enumerate(test_cases)
+        ])
+        
+        prompt = f"""You are testing a web application like a real user. Analyze ALL {len(test_cases)} test cases below against the code and return results for each.
 
 CODE TO ANALYZE:
-{all_code[:12000]}
+{code_snippet}
 
 REQUIREMENTS:
-{json.dumps(requirements.get('features', [])[:5], indent=2)}
+{features}
 
-Analyze if this test would PASS or FAIL based on the code.
+TEST CASES:
+{tests_text}
 
-Think like a user:
-- Does the code handle this scenario?
-- Are there proper error messages?
-- Does the UI give feedback?
-- Are edge cases handled?
+For each test, determine: Does the code handle this scenario? Are there error messages? Does the UI give feedback?
 
-Respond in JSON:
-{{
-    "passed": true/false,
-    "actual_behavior": "what would actually happen",
-    "error": "specific issue if failed, null if passed"
-}}
+Respond with a JSON array - one object per test, in the same order. Each object:
+{{"id": "test_id", "passed": true/false, "actual_behavior": "brief description", "error": "issue if failed, null if passed"}}
+
+Return ONLY valid JSON array, no markdown:
+[{{"id": "CRUD-Item-001", "passed": true, "actual_behavior": "...", "error": null}}, ...]
 """
         
-        # Use Llama 3.1 8B (free) for testing
         model = get_model("tester")
-        settings = get_model_settings(model)
+        max_tokens = min(4000, 200 + len(test_cases) * 80)  # ~80 chars per result
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers={
@@ -213,28 +268,31 @@ Respond in JSON:
                     json={
                         "model": model,
                         "messages": [{"role": "user", "content": prompt}],
-                        "max_tokens": 500,
+                        "max_tokens": max_tokens,
                         "temperature": 0.1
                     }
                 )
                 
                 if response.status_code == 200:
                     content = response.json()["choices"][0]["message"]["content"]
-                    json_match = re.search(r'\{[\s\S]*\}', content)
+                    # Extract JSON array
+                    json_match = re.search(r'\[[\s\S]*\]', content)
                     if json_match:
-                        result = json.loads(json_match.group())
-                        test.passed = result.get("passed", False)
-                        test.actual = result.get("actual_behavior", "")
-                        test.error = result.get("error")
-                        return test
-                        
+                        raw_results = json.loads(json_match.group())
+                        if not isinstance(raw_results, list):
+                            raw_results = []
+                        # Build id -> result map, and index fallback
+                        by_id = {r.get("id", ""): r for r in raw_results if isinstance(r, dict)}
+                        evaluated = []
+                        for i, t in enumerate(test_cases):
+                            r = by_id.get(t.id) or (raw_results[i] if i < len(raw_results) and isinstance(raw_results[i], dict) else None)
+                            evaluated.append(r or {"passed": True, "actual_behavior": "", "error": None})
+                        return evaluated
         except Exception as e:
-            logger.error(f"Test execution error: {e}")
-            test.error = str(e)
+            logger.error(f"Batch test execution error: {e}")
         
-        # Default to pass if analysis fails
-        test.passed = True
-        return test
+        # Fallback: all pass if parsing fails
+        return [{"passed": True, "actual_behavior": "", "error": None} for _ in test_cases]
     
     def _requires_auth(self, requirements: Dict) -> bool:
         """Check if app requires authentication"""

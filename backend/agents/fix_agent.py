@@ -34,11 +34,12 @@ class FixAgent:
         user_context: Optional[str] = None,
         console_logs: Optional[str] = None,
         requirements: Optional[Dict] = None,
-        agent_context: Optional[str] = None
+        agent_context: Optional[str] = None,
+        chat_history: Optional[List[Dict]] = None
     ) -> Dict:
         """
         Fix an error reported by the user.
-        This is the main entry point for user-reported issues.
+        Receives entire codebase, errors, and chat history for full context.
         
         Args:
             files: List of file dicts (full codebase)
@@ -47,13 +48,14 @@ class FixAgent:
             console_logs: Console logs if available
             requirements: Requirements dict
             agent_context: Pre-built context (full codebase + schema + message history)
+            chat_history: Conversation history [{"role": "user"|"assistant", "content": "..."}]
         """
         
         # Step 1: Analyze the error to understand what's wrong
         analysis = await self._analyze_error(error_message, console_logs, files, agent_context)
         
-        # Step 2: Generate targeted fixes
-        fixes = await self._generate_fixes(files, analysis, user_context, requirements, agent_context)
+        # Step 2: Generate targeted fixes (sends entire codebase + errors + chat history)
+        fixes = await self._generate_fixes(files, analysis, user_context, requirements, agent_context, chat_history)
         
         return fixes
     
@@ -69,15 +71,11 @@ class FixAgent:
         model = get_model("fix")
         settings = get_model_settings(model)
         
-        # Use agent_context if provided (includes full codebase), otherwise build summary
-        if agent_context:
-            files_info = agent_context
-        else:
-            files_summary = "\n".join([
-                f"- {f.get('path')}: {f.get('file_type', 'unknown')} ({len(f.get('content', ''))} chars)"
-                for f in files
-            ])
-            files_info = f"FILES IN PROJECT:\n{files_summary}"
+        # Build analysis prompt
+        files_summary = "\n".join([
+            f"- {f.get('path')}: {f.get('file_type', 'unknown')} ({len(f.get('content', ''))} chars)"
+            for f in files
+        ])
         
         prompt = f"""Analyze this error and identify the root cause.
 
@@ -86,7 +84,8 @@ ERROR MESSAGE:
 
 {f"CONSOLE LOGS:{chr(10)}{console_logs}" if console_logs else ""}
 
-{files_info}
+FILES IN PROJECT:
+{files_summary}
 
 Respond in JSON format:
 {{
@@ -98,7 +97,7 @@ Respond in JSON format:
 }}"""
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=45.0) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers={
@@ -140,33 +139,41 @@ Respond in JSON format:
         analysis: Dict,
         user_context: Optional[str],
         requirements: Optional[Dict],
-        agent_context: Optional[str] = None
+        agent_context: Optional[str] = None,
+        chat_history: Optional[List[Dict]] = None
     ) -> Dict:
-        """Generate code fixes based on analysis"""
+        """Generate code fixes - sends ENTIRE codebase, errors, and chat history"""
         
         model = get_model("fix")
         settings = get_model_settings(model)
         
-        # Get only relevant files for fixing
-        likely_files = analysis.get("likely_files", [])
-        relevant_files = [f for f in files if f.get("path") in likely_files]
+        # Include ENTIRE codebase (all frontend files) for full context
+        frontend_files = [f for f in files if f.get("file_type") == "frontend"]
+        if not frontend_files:
+            frontend_files = [f for f in files if f.get("path", "").endswith((".jsx", ".js", ".tsx"))]
         
-        # If no specific files identified, include all frontend files
-        if not relevant_files:
-            relevant_files = [f for f in files if f.get("file_type") == "frontend"][:5]
-        
-        # Use agent_context if provided (includes full codebase), otherwise build from relevant files
-        if agent_context:
-            files_content = agent_context
-        else:
-            # Build the fix prompt with full context
-            files_content = "\n\n".join([
-                f"=== FILE: {f.get('path')} ===\n```\n{f.get('content', '')}\n```"
-                for f in relevant_files
-            ])
+        files_content = "\n\n".join([
+            f"=== FILE: {f.get('path')} ===\n```\n{f.get('content', '')}\n```"
+            for f in frontend_files
+        ])
         
         system_prompt = """You are an expert React/JavaScript developer and debugger.
-Your job is to fix bugs in generated code.
+Your job is to fix bugs in generated code. When multiple test failures are reported, you MUST fix ALL of them in a single pass - do not fix only one and leave others broken.
+
+PREVIEW RENDERING ENVIRONMENT:
+The frontend code runs in a browser iframe using Babel Standalone (NOT a bundler).
+- All import/export statements are STRIPPED before rendering - do NOT include them.
+- React hooks (useState, useEffect, etc.) and 160+ Lucide icons are available as globals.
+- React Router is mocked (BrowserRouter, Routes, Route, Link, useNavigate, etc. are globals).
+- The main component MUST be named App.
+- Do NOT name components the same as Lucide icons (Calculator, Calendar, Home, Settings, User, etc.) - prefix them instead (MyCalculator, AppSettings, etc.).
+- import.meta.env is NOT supported.
+- All components share a single global scope (no module isolation).
+
+COMMON PREVIEW ERRORS:
+- "Identifier 'X' has already been declared" → Component named same as a Lucide icon. Rename it.
+- White screen with no error → Check for import/export statements that shouldn't be there.
+- "X is not defined" → Missing global or typo. All React hooks and Lucide icons are globals.
 
 RULES:
 1. Fix the SPECIFIC error mentioned - don't rewrite everything
@@ -174,7 +181,8 @@ RULES:
 3. Preserve all existing functionality that works
 4. Use the same coding style as the original
 5. Add error handling where needed
-6. Make sure imports are correct
+6. Do NOT include import/export statements in frontend files
+7. Do NOT name components the same as Lucide icon names
 
 OUTPUT FORMAT (JSON only, no markdown):
 {
@@ -189,6 +197,17 @@ OUTPUT FORMAT (JSON only, no markdown):
     "changes_made": ["List of specific changes"]
 }"""
 
+        # Build chat history section
+        chat_section = ""
+        if chat_history and len(chat_history) > 0:
+            recent = chat_history[-10:]  # Last 10 messages
+            chat_section = "\n\nCONVERSATION HISTORY (user requests and prior context):\n"
+            for m in recent:
+                role = m.get("role", "user")
+                content = (m.get("content", "") or "")[:800]  # Truncate long messages
+                if content and not content.startswith("✅"):
+                    chat_section += f"\n{role.upper()}: {content}\n"
+
         user_prompt = f"""FIX THIS ERROR:
 
 ERROR ANALYSIS:
@@ -197,16 +216,27 @@ ERROR ANALYSIS:
 - Fix Strategy: {analysis.get('fix_strategy', 'Fix the error')}
 
 {f"USER CONTEXT: {user_context}" if user_context else ""}
+{chat_section}
 
-FILES TO FIX:
+ENTIRE CODEBASE (fix the relevant files, return ALL modified files):
 {files_content}
 
-{f"APP REQUIREMENTS:{chr(10)}{json.dumps(requirements, indent=2)[:1000]}" if requirements else ""}
+{f"APP REQUIREMENTS:{chr(10)}{json.dumps(requirements, indent=2)[:1500]}" if requirements else ""}
 
-Generate the fixed code. Return complete file contents."""
+Generate the fixed code. Return complete file contents for ALL files you modify."""
+
+        # Build messages with chat history for context
+        messages = [{"role": "system", "content": system_prompt}]
+        if chat_history and len(chat_history) > 0:
+            for m in chat_history[-6:]:  # Last 6 for context (3 exchanges)
+                role = m.get("role", "user")
+                content = m.get("content", "")
+                if content and role in ("user", "assistant"):
+                    messages.append({"role": role, "content": content[:1500]})
+        messages.append({"role": "user", "content": user_prompt})
 
         try:
-            async with httpx.AsyncClient(timeout=180.0) as client:
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers={
@@ -215,10 +245,7 @@ Generate the fixed code. Return complete file contents."""
                     },
                     json={
                         "model": model,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
-                        ],
+                        "messages": messages,
                         "max_tokens": settings["max_tokens"],
                         "temperature": 0.2
                     }
@@ -318,18 +345,12 @@ Generate the fixed code. Return complete file contents."""
         test_results: Dict,
         requirements: Dict,
         attempt: int = 1,
-        agent_context: Optional[str] = None
+        chat_history: Optional[List[Dict]] = None
     ) -> Dict:
         """
-        Fix issues from automated test results.
-        (Legacy method for compatibility with job manager)
-        
-        Args:
-            files: List of file dicts (full codebase)
-            test_results: Test results dict
-            requirements: Requirements dict
-            attempt: Fix attempt number
-            agent_context: Pre-built context (full codebase + schema + message history)
+        Fix ALL issues from automated test results.
+        Receives entire codebase, errors, and chat history for full context.
+        Skips the separate analysis LLM call - we already have structured errors (faster).
         """
         
         issues = test_results.get("issues", [])
@@ -341,17 +362,33 @@ Generate the fixed code. Return complete file contents."""
                 "summary": "No issues to fix"
             }
         
-        # Convert test issues to error format
-        error_message = "\n".join([
-            f"- {issue.get('description', '')}: {issue.get('error', '')}"
-            for issue in issues
-        ])
+        # Build error text for the fix prompt
+        error_message = (
+            f"FIX ALL {len(issues)} FAILING TESTS (attempt {attempt}/3). Address every issue below:\n\n"
+            + "\n".join([
+                f"{i+1}. [{issue.get('category', '')}] {issue.get('description', '')}: {issue.get('error', '')}"
+                + (f"\n   Steps: {' → '.join(issue.get('steps_to_reproduce', []))}" if issue.get('steps_to_reproduce') else "")
+                for i, issue in enumerate(issues)
+            ])
+        )
         
-        result = await self.fix_user_error(
+        # Skip _analyze_error LLM call - use synthetic analysis from structured issues (saves ~30-60s per fix)
+        categories = [i.get("category", "unknown") for i in issues]
+        analysis = {
+            "error_type": "syntax" if "syntax" in categories else ("runtime" if "runtime" in categories else "logic"),
+            "root_cause": error_message[:1500],
+            "likely_files": list({f.get("path") for f in files if f.get("file_type") == "frontend"})[:5],
+            "fix_strategy": "Fix each reported issue in the code; return complete file contents for all modified files.",
+            "severity": "high"
+        }
+        
+        result = await self._generate_fixes(
             files=files,
-            error_message=error_message,
+            analysis=analysis,
+            user_context=None,
             requirements=requirements,
-            agent_context=agent_context
+            agent_context=None,
+            chat_history=chat_history
         )
         
         if result.get("success"):

@@ -19,12 +19,16 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
+# Fix loop: max 3 fix attempts after test failures
+MAX_FIX_ATTEMPTS = 3
+
 
 class JobStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
     PARSING_REQUIREMENTS = "parsing_requirements"
     AWAITING_CLARIFICATION = "awaiting_clarification"
+    GENERATING_TESTS = "generating_tests"
     GENERATING = "generating"
     DEPLOYING = "deploying"
     TESTING = "testing"
@@ -37,6 +41,7 @@ class JobStatus(str, Enum):
 class JobStep(str, Enum):
     INIT = "init"
     REQUIREMENTS = "requirements"
+    TEST_PLAN = "test_plan"
     GENERATE = "generate"
     DEPLOY = "deploy"
     TEST = "test"
@@ -108,7 +113,7 @@ class JobManager:
             "test_results": None,
             "error": None,
             "fix_attempts": 0,
-            "max_fix_attempts": 3,
+            "max_fix_attempts": MAX_FIX_ATTEMPTS,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "started_at": None,
@@ -217,8 +222,7 @@ class JobManager:
         1. Requirements Agent: Parse prompt → requirements.json
         2. Dev Agent: Generate code from requirements
         3. Deployment Agent: Deploy to Supabase
-        4. Tester Agent: Conversational testing
-        5. Fix Agent: Fix issues (max 3 retries)
+        4. Save and complete job
         """
         
         project_id = job["project_id"]
@@ -248,7 +252,7 @@ class JobManager:
         requirements = job.get("requirements")
         files = job.get("files", [])
         fix_attempts = job.get("fix_attempts", 0)
-        max_fix_attempts = job.get("max_fix_attempts", 3)
+        max_fix_attempts = MAX_FIX_ATTEMPTS  # Fix done max 3 times
 
         # ==================== STEP 0: THINK + MEMORY ====================
         # Only run for fresh builds (not resumes that already have requirements)
@@ -362,6 +366,42 @@ class JobManager:
         # Check cancellation
         if job_id in self._cancelled_jobs:
             return
+
+        # ==================== STEP 1.5: GENERATE TEST CASES (TDD) ====================
+        test_cases = job.get("test_cases")
+        if not test_cases:
+            await self._update_job(job_id, {
+                "current_step": JobStep.TEST_PLAN,
+                "status": JobStatus.GENERATING_TESTS,
+                "progress": 17,
+            })
+
+            try:
+                logger.info(f"Job {job_id}: Generating test cases from requirements (TDD)")
+                test_cases = await self.orchestrator.tester_agent.generate_test_cases(requirements)
+                test_cases_dict = [t.to_dict() if hasattr(t, "to_dict") else t for t in test_cases]
+
+                step_results["test_plan"] = {
+                    "success": True,
+                    "test_count": len(test_cases_dict),
+                }
+
+                await self._update_job(job_id, {
+                    "test_cases": test_cases_dict,
+                    "step_results": step_results,
+                    "progress": 18,
+                })
+                logger.info(f"Job {job_id}: Generated {len(test_cases_dict)} test cases")
+            except Exception as e:
+                logger.warning(f"Job {job_id}: Test case generation failed (non-fatal): {e}")
+                test_cases = []
+                test_cases_dict = []
+        else:
+            test_cases_dict = test_cases if isinstance(test_cases[0], dict) else [t.to_dict() for t in test_cases]
+
+        # Check cancellation
+        if job_id in self._cancelled_jobs:
+            return
         
         # ==================== STEP 2: CODE GENERATION ====================
         await self._update_job(job_id, {
@@ -371,7 +411,7 @@ class JobManager:
         })
 
         try:
-            logger.info(f"Job {job_id}: Generating code")
+            logger.info(f"Job {job_id}: Generating code (with {len(test_cases_dict)} acceptance test cases)")
 
             # 2a. Think about the best code generation strategy
             code_gen_thinking = {}
@@ -433,6 +473,7 @@ class JobManager:
                 existing_files=existing_files,
                 is_update=is_update,
                 agent_context=agent_context,
+                test_cases=test_cases_dict,
             )
             
             logger.info(f"Job {job_id}: Code generation returned, parsing result...")
@@ -455,7 +496,14 @@ class JobManager:
                 "progress": 40,
             })
             
-            logger.info(f"Job {job_id}: Generated {len(files)} files - proceeding to deploy")
+            logger.info(f"Job {job_id}: Generated {len(files)} files - sanitizing and proceeding to deploy")
+            
+            # Sanitize to fix common syntax errors before deploy/test/fix loop
+            try:
+                from code_utils import sanitize_frontend_files
+                sanitize_frontend_files(files)
+            except Exception as e:
+                logger.warning(f"Job {job_id}: Sanitize warning: {e}")
             
         except Exception as e:
             logger.error(f"Job {job_id}: Code generation failed: {e}")
@@ -465,6 +513,7 @@ class JobManager:
             return
         
         # ==================== STEP 3-5: DEPLOY → TEST → FIX LOOP ====================
+        # Run up to 3 fix loops: Test → Fix → Test → Fix → Test → Fix → Test
         while fix_attempts <= max_fix_attempts:
             
             # Check cancellation
@@ -503,144 +552,105 @@ class JobManager:
             await self._update_job(job_id, {
                 "current_step": JobStep.TEST,
                 "status": JobStatus.TESTING,
-                "progress": 60 + (fix_attempts * 10),
+                "progress": 60 + (fix_attempts * 8),
+                "fix_attempts": fix_attempts,
             })
-            
+
             try:
-                logger.info(f"Job {job_id}: Running conversational tests")
-                
-                # Build context for test agent (full codebase + schema + history)
-                from agents.context_builder import MessageHistory, build_agent_context
-                temp_history = MessageHistory()
-                
-                agent_context = build_agent_context(
-                    agent_name="test",
-                    files=files,  # Test agent gets full codebase
-                    supabase_config=supabase_config,
-                    message_history=temp_history,
-                    user_prompt=prompt
-                )
-                
+                logger.info(f"Job {job_id}: Running tests (attempt {fix_attempts + 1}/{max_fix_attempts + 1}) - reusing same {len(test_cases_dict)} test cases")
                 test_results = await self.orchestrator.tester_agent.run_tests(
                     files=files,
                     requirements=requirements,
                     supabase_config=supabase_config,
-                    agent_context=agent_context,
+                    test_cases=test_cases_dict,
                 )
-                
-                step_results[f"test_{fix_attempts}"] = {
-                    "passed": test_results.get("passed", 0),
-                    "failed": test_results.get("failed", 0),
-                    "total": test_results.get("total", 0),
-                }
-                
+                step_results[f"test_{fix_attempts}"] = test_results
                 await self._update_job(job_id, {
                     "test_results": test_results,
                     "step_results": step_results,
                 })
-                
-                logger.info(f"Job {job_id}: Tests - {test_results.get('passed')}/{test_results.get('total')} passed")
-                
-                # All tests passed!
-                if test_results.get("failed", 0) == 0:
+
+                failed = test_results.get("failed", 0)
+                passed = test_results.get("passed", 0)
+                total = test_results.get("total", 0)
+                logger.info(f"Job {job_id}: Tests {passed}/{total} passed, {failed} failed")
+
+                if failed == 0:
                     await self._complete_job(job_id, files, requirements, prompt)
                     return
-                    
+
             except Exception as e:
-                logger.error(f"Job {job_id}: Testing error: {e}")
-                test_results = {"failed": 1, "passed": 0, "total": 1, "issues": [{"error": str(e)}]}
-                step_results[f"test_{fix_attempts}"] = {"error": str(e)}
-            
+                logger.warning(f"Job {job_id}: Testing error: {e}")
+                test_results = {
+                    "failed": 1,
+                    "passed": 0,
+                    "total": 1,
+                    "issues": [{"error": str(e), "description": "Test execution failed"}],
+                    "summary": f"Testing error: {e}",
+                }
+                step_results[f"test_{fix_attempts}"] = test_results
+                await self._update_job(job_id, {"test_results": test_results, "step_results": step_results})
+
             # --- STEP 5: FIX (if tests failed and retries remain) ---
-            if fix_attempts < max_fix_attempts:
-                fix_attempts += 1
-
-                await self._update_job(job_id, {
-                    "current_step": JobStep.FIX,
-                    "status": JobStatus.FIXING,
-                    "fix_attempts": fix_attempts,
-                    "progress": 70 + (fix_attempts * 5),
-                })
-
-                try:
-                    logger.info(f"Job {job_id}: Fix attempt {fix_attempts}/{max_fix_attempts}")
-
-                    # Think about the best fix strategy before patching
-                    fix_thinking = {}
-                    thinking = self._get_thinking()
-                    if thinking:
-                        try:
-                            fix_thinking = await thinking.think_before_fix(
-                                test_results=test_results,
-                                files=files,
-                                memory_context=memory_context,
-                                attempt=fix_attempts,
-                            )
-                            logger.info(
-                                f"Job {job_id}: Fix thinking — "
-                                f"root_cause={fix_thinking.get('root_cause','?')[:60]}, "
-                                f"confidence={fix_thinking.get('confidence','?')}"
-                            )
-                        except Exception as e:
-                            logger.warning(f"Job {job_id}: Fix thinking failed (non-fatal): {e}")
-
-                    # Build enriched context for fix agent
-                    from agents.context_builder import MessageHistory, build_agent_context
-                    temp_history = MessageHistory()
-
-                    fix_prompt = prompt
-                    if fix_thinking:
-                        fix_prompt += (
-                            f"\n\nFIX ANALYSIS:\n"
-                            f"  Root cause: {fix_thinking.get('root_cause', '')}\n"
-                            f"  Affected files: {', '.join(fix_thinking.get('affected_files', []))}\n"
-                            f"  Strategy: {fix_thinking.get('fix_strategy', '')}\n"
-                            f"  From memory: {fix_thinking.get('from_memory', '')}\n"
-                        )
-
-                    agent_context = build_agent_context(
-                        agent_name="fix",
-                        files=files,
-                        supabase_config=supabase_config,
-                        message_history=temp_history,
-                        user_prompt=fix_prompt,
-                    )
-
-                    fix_result = await self.orchestrator.fix_agent.fix_issues(
-                        files=files,
-                        test_results=test_results,
-                        requirements=requirements,
-                        attempt=fix_attempts,
-                        agent_context=agent_context,
-                    )
-                    
-                    if fix_result.get("fixes_applied"):
-                        files = fix_result.get("files", files)
-                        step_results[f"fix_{fix_attempts}"] = {
-                            "fixes_count": len(fix_result.get("fixes_applied", [])),
-                            "files_modified": fix_result.get("files_modified", []),
-                        }
-                        await self._update_job(job_id, {
-                            "files": files,
-                            "step_results": step_results,
-                        })
-                        logger.info(f"Job {job_id}: Applied {len(fix_result.get('fixes_applied', []))} fixes")
-                    else:
-                        step_results[f"fix_{fix_attempts}"] = {"status": "no_changes"}
-                        logger.warning(f"Job {job_id}: No fixes could be applied")
-                        
-                except Exception as e:
-                    logger.error(f"Job {job_id}: Fix error: {e}")
-                    step_results[f"fix_{fix_attempts}"] = {"status": "error", "error": str(e)}
-            else:
-                # Max retries reached - complete with partial success
-                logger.warning(f"Job {job_id}: Max fix attempts reached")
+            if fix_attempts >= max_fix_attempts:
+                logger.warning(f"Job {job_id}: Max fix attempts ({max_fix_attempts}) reached")
                 await self._complete_job(
                     job_id, files, requirements, prompt,
                     partial=True,
-                    remaining_issues=test_results.get("issues", [])
+                    remaining_issues=test_results.get("issues", []),
                 )
                 return
+
+            fix_attempts += 1
+            await self._update_job(job_id, {
+                "current_step": JobStep.FIX,
+                "status": JobStatus.FIXING,
+                "progress": 70 + (fix_attempts * 8),
+                "fix_attempts": fix_attempts,
+            })
+
+            try:
+                logger.info(f"Job {job_id}: Fixing issues (attempt {fix_attempts}/{max_fix_attempts})")
+                # Get chat history for full context (entire codebase + errors + chat sent to fix agent)
+                chat_history = []
+                try:
+                    raw_messages = await self.database.get_messages(project_id)
+                    chat_history = [
+                        {"role": m.get("role", "user"), "content": m.get("content", "")}
+                        for m in (raw_messages or [])[-20:]
+                    ]
+                except Exception as e:
+                    logger.warning(f"Job {job_id}: Could not load chat history for fix: {e}")
+                fix_result = await self.orchestrator.fix_agent.fix_issues(
+                    files=files,
+                    test_results=test_results,
+                    requirements=requirements,
+                    attempt=fix_attempts,
+                    chat_history=chat_history,
+                )
+                step_results[f"fix_{fix_attempts}"] = fix_result
+                await self._update_job(job_id, {"step_results": step_results})
+
+                fixed_files = fix_result.get("files")
+                if fixed_files:
+                    files = fixed_files
+                    # Sanitize fixed code before re-testing
+                    try:
+                        from code_utils import sanitize_frontend_files
+                        sanitize_frontend_files(files)
+                    except Exception as e:
+                        logger.warning(f"Job {job_id}: Sanitize after fix: {e}")
+                    logger.info(f"Job {job_id}: Applied fixes, re-testing...")
+                else:
+                    logger.warning(f"Job {job_id}: No fixes applied: {fix_result.get('summary', '')}")
+
+            except Exception as e:
+                logger.warning(f"Job {job_id}: Fix error: {e}")
+                step_results[f"fix_{fix_attempts}"] = {"error": str(e)}
+                await self._update_job(job_id, {"step_results": step_results})
+
+        # Fallback: complete if we exit the loop without returning
+        await self._complete_job(job_id, files, requirements, prompt)
     
     async def _complete_job(
         self,
@@ -652,7 +662,11 @@ class JobManager:
         remaining_issues: List = None
     ):
         """Complete the job and save the version"""
-        
+        from code_utils import sanitize_frontend_files
+
+        # Sanitize to fix common syntax errors before saving
+        sanitize_frontend_files(files)
+
         job = await self.database.get_job(job_id)
         if not job:
             return

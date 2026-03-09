@@ -67,9 +67,18 @@ class TestingAgent:
             for f in files
         ])
         
-        # Run syntax validation
+        # Run syntax validation - add failures to issues so fix agent gets them
         syntax_results = self._validate_syntax(files)
         results["tests"].extend(syntax_results)
+        for t in syntax_results:
+            if not t.get("passed", True) and t.get("error"):
+                results["issues"].append({
+                    "req_id": t.get("req_id", ""),
+                    "category": "syntax",
+                    "description": t.get("description", ""),
+                    "error": t.get("error", ""),
+                    "steps_to_reproduce": ["Fix syntax error in file"]
+                })
         
         # Run requirement-based tests
         for req in all_requirements:
@@ -289,7 +298,7 @@ Answer in JSON format:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-sonnet-4-5",
+                        "model": "openai/gpt-4o-mini",
                         "messages": [{"role": "user", "content": prompt}],
                         "max_tokens": 500,
                         "temperature": 0.1

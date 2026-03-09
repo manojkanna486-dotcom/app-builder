@@ -67,7 +67,8 @@ class AgentOrchestrator:
         access_token: str,
         existing_files: Optional[List[Dict]] = None,
         is_update: bool = False,
-        max_fix_retries: int = MAX_FIX_RETRIES
+        max_fix_retries: int = MAX_FIX_RETRIES,
+        conversation_history: Optional[List[Dict]] = None
     ) -> AsyncGenerator[Dict, None]:
         """
         Run the complete pipeline: Generate → Deploy → Test → Fix
@@ -85,7 +86,8 @@ class AgentOrchestrator:
                 requirements=requirements,
                 supabase_config=supabase_config,
                 existing_files=existing_files,
-                is_update=is_update
+                is_update=is_update,
+                conversation_history=conversation_history,
             )
             current_files = generation_result.get("files", [])
             yield {
@@ -177,7 +179,8 @@ class AgentOrchestrator:
                         files=current_files,
                         test_results=test_results,
                         requirements=requirements,
-                        attempt=fix_attempt
+                        attempt=fix_attempt,
+                        conversation_history=conversation_history,
                     )
                     
                     if fix_result.get("fixes_applied"):
@@ -225,7 +228,8 @@ class AgentOrchestrator:
         access_token: str,
         existing_files: Optional[List[Dict]] = None,
         is_update: bool = False,
-        max_fix_retries: int = MAX_FIX_RETRIES
+        max_fix_retries: int = MAX_FIX_RETRIES,
+        conversation_history: Optional[List[Dict]] = None
     ) -> AsyncGenerator[str, None]:
         """
         Run pipeline with streaming code generation for UI.
@@ -244,7 +248,8 @@ class AgentOrchestrator:
                 requirements=requirements,
                 supabase_config=supabase_config,
                 existing_files=existing_files,
-                is_update=is_update
+                is_update=is_update,
+                conversation_history=conversation_history,
             ):
                 full_content += chunk
                 yield f"data: {json.dumps({'type': 'code', 'content': chunk})}\n\n"
@@ -252,6 +257,13 @@ class AgentOrchestrator:
             # Parse the complete response
             generation_result = self.code_generation_agent._parse_generation_response(full_content)
             current_files = generation_result.get("files", [])
+            
+            # Sanitize to fix common syntax errors before deploy/test/fix
+            try:
+                from code_utils import sanitize_frontend_files
+                sanitize_frontend_files(current_files)
+            except Exception as e:
+                logger.warning(f"Sanitize warning: {e}")
             
             yield f"data: {json.dumps({'type': 'status', 'stage': STAGE_GENERATE, 'message': f'✅ Generated {len(current_files)} files'})}\n\n"
             
@@ -283,30 +295,23 @@ class AgentOrchestrator:
         fix_attempt = 0
         
         while fix_attempt <= max_fix_retries:
-            # Deploy (skip if no Supabase)
-            supabase_connected = supabase_config.get("url") and supabase_config.get("url") != "YOUR_SUPABASE_URL"
+            # Deploy
+            yield {"type": "status", "stage": STAGE_DEPLOY, "message": "📦 Deploying to Supabase..."}
             
-            if supabase_connected:
-                yield {"type": "status", "stage": STAGE_DEPLOY, "message": "📦 Deploying to Supabase..."}
+            try:
+                deploy_result = await self.deployment_agent.deploy(
+                    files=current_files,
+                    supabase_config=supabase_config,
+                    access_token=access_token
+                )
                 
-                try:
-                    deploy_result = await self.deployment_agent.deploy(
-                        files=current_files,
-                        supabase_config=supabase_config,
-                        access_token=access_token
-                    )
+                if deploy_result.get("status") == "error":
+                    yield {"type": "deploy_result", "status": "error", "errors": deploy_result.get("errors", [])}
+                else:
+                    yield {"type": "deploy_result", "status": "success", "result": deploy_result}
                     
-                    if deploy_result.get("status") == "error":
-                        yield {"type": "deploy_result", "status": "error", "errors": deploy_result.get("errors", [])}
-                    else:
-                        yield {"type": "deploy_result", "status": "success", "result": deploy_result}
-                        
-                except Exception as e:
-                    yield {"type": "deploy_result", "status": "error", "message": str(e)}
-            else:
-                # Mock data mode - skip deployment
-                yield {"type": "status", "stage": STAGE_DEPLOY, "message": "⏭️ Skipping deployment (using mock data)"}
-                yield {"type": "deploy_result", "status": "skipped", "message": "Using mock data - no deployment needed"}
+            except Exception as e:
+                yield {"type": "deploy_result", "status": "error", "message": str(e)}
             
             # Test
             yield {"type": "status", "stage": STAGE_TEST, "message": "🧪 Running tests..."}

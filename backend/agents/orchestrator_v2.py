@@ -16,8 +16,6 @@ from .code_generation_agent import CodeGenerationAgent
 from .deployment_agent import DeploymentAgent
 from .tester_agent import ConversationalTesterAgent
 from .fix_agent import FixAgent
-from .thinking_agent import ThinkingAgent
-from .context_builder import MessageHistory, AgentMessage, build_agent_context
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +43,7 @@ class BuildContext:
     files: Optional[List[Dict]] = None
     test_results: Optional[Dict] = None
     supabase_config: Optional[Dict] = None
+    conversation_history: Optional[List[Dict]] = None
     state: BuildState = BuildState.PENDING
     current_agent: Optional[str] = None
     fix_attempts: int = 0
@@ -52,19 +51,9 @@ class BuildContext:
     error: Optional[str] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
-    message_history: Optional[MessageHistory] = None
-    
-    def __post_init__(self):
-        """Initialize message history if not provided"""
-        if self.message_history is None:
-            self.message_history = MessageHistory()
     
     def to_dict(self) -> Dict:
-        result = asdict(self)
-        # Convert message_history to list of dicts for serialization
-        if self.message_history:
-            result["message_history"] = self.message_history.get_messages()
-        return result
+        return asdict(self)
 
 
 class Orchestrator:
@@ -93,7 +82,6 @@ class Orchestrator:
         self.deployment_agent = DeploymentAgent()
         self.tester_agent = ConversationalTesterAgent(openrouter_api_key, openrouter_base_url)
         self.fix_agent = FixAgent(openrouter_api_key, openrouter_base_url)
-        self.thinking_agent = ThinkingAgent(openrouter_api_key, openrouter_base_url)
         
         # Track active builds for cancellation
         self._active_builds: Dict[str, BuildContext] = {}
@@ -106,7 +94,8 @@ class Orchestrator:
         project_id: str,
         prompt: str,
         supabase_config: Dict,
-        existing_files: Optional[List[Dict]] = None
+        existing_files: Optional[List[Dict]] = None,
+        conversation_history: Optional[List[Dict]] = None
     ) -> AsyncGenerator[Dict, None]:
         """
         Start a new build.
@@ -119,6 +108,7 @@ class Orchestrator:
             prompt=prompt,
             supabase_config=supabase_config,
             files=existing_files,
+            conversation_history=conversation_history or [],
             started_at=datetime.now(timezone.utc).isoformat()
         )
         
@@ -159,23 +149,12 @@ class Orchestrator:
     
     # ==================== REQUIREMENTS PHASE ====================
     
-    async def parse_requirements(self, prompt: str, existing: Optional[Dict] = None) -> Dict:
+    async def parse_requirements(self, prompt: str, existing: Optional[Dict] = None, conversation_history: Optional[List[Dict]] = None) -> Dict:
         """
         Phase 1: Parse prompt into requirements.json
         """
-        # Build context for requirements agent (schema + history only, no codebase)
-        from .context_builder import MessageHistory, build_agent_context
-        temp_history = MessageHistory()
-        
-        agent_context = build_agent_context(
-            agent_name="requirements",
-            files=None,  # Requirements agent doesn't get codebase
-            supabase_config={},
-            message_history=temp_history,
-            user_prompt=prompt
-        )
-        
-        return await self.requirements_agent.parse_prompt(prompt, existing, agent_context)
+        agent_context = {"conversation_history": conversation_history} if conversation_history else None
+        return await self.requirements_agent.parse_prompt(prompt, existing, agent_context=agent_context)
     
     async def resolve_ambiguities(self, requirements: Dict, answers: Dict[str, str]) -> Dict:
         """
@@ -188,74 +167,16 @@ class Orchestrator:
     async def _run_build_pipeline(self, context: BuildContext) -> AsyncGenerator[Dict, None]:
         """Run the complete build pipeline"""
         
-        # Phase 0: Think about the request
-        context.current_agent = "thinking"
-        yield self._status("thinking", "🤔 Thinking about your request...")
-        
-        try:
-            # Build context for thinking
-            project_state = {
-                "project_id": context.project_id,
-                "has_existing_files": context.files is not None and len(context.files) > 0,
-                "supabase_connected": context.supabase_config.get("url", "") != "" and context.supabase_config.get("url") != "YOUR_SUPABASE_URL"
-            }
-            
-            thinking_result = await self.thinking_agent.think_about_request(
-                user_prompt=context.prompt,
-                context=context.message_history.format_for_context() if context.message_history else None,
-                project_state=project_state
-            )
-            
-            # Record thinking in message history
-            if context.message_history:
-                context.message_history.add_message(AgentMessage(
-                    agent_name="Thinking Agent",
-                    plan="Analyzed user request",
-                    reasoning=thinking_result.get("thinking", "Analyzed request"),
-                    affected_files=[]
-                ))
-            
-            # Yield thinking result
-            yield {
-                "type": "thinking",
-                "thinking": thinking_result.get("thinking", ""),
-                "analysis": thinking_result.get("analysis", ""),
-                "recommendation": thinking_result.get("recommendation", ""),
-                "confidence": thinking_result.get("confidence", "medium")
-            }
-            
-        except Exception as e:
-            logger.warning(f"Thinking phase error: {e}")
-            # Continue anyway
-        
         # Phase 1: Parse Requirements
         context.state = BuildState.PARSING_REQUIREMENTS
         context.current_agent = "requirements"
         yield self._status("parsing", "📋 Parsing requirements...")
         
         try:
-            # Build context for requirements agent (schema + history only, no codebase)
-            agent_context = build_agent_context(
-                agent_name="requirements",
-                files=None,  # Requirements agent doesn't get codebase
-                supabase_config=context.supabase_config,
-                message_history=context.message_history,
-                user_prompt=context.prompt
-            )
-            
             requirements = await self.requirements_agent.parse_prompt(
-                context.prompt,
-                agent_context=agent_context
+                context.prompt, conversation_history=context.conversation_history
             )
             context.requirements = requirements
-            
-            # Record message in history
-            context.message_history.add_message(AgentMessage(
-                agent_name="Requirements Agent",
-                plan=f"Parsed requirements: {requirements.get('app_name', 'App')}",
-                reasoning="Extracted features, pages, data models, and permissions from user prompt",
-                affected_files=[]
-            ))
             
             # Check for ambiguities
             if not requirements.get("is_complete", False):
@@ -284,32 +205,14 @@ class Orchestrator:
         yield self._status("generating", "💻 Generating code...")
         
         try:
-            # Build context for dev agent (full codebase + schema + history)
-            agent_context = build_agent_context(
-                agent_name="dev",
-                files=context.files,  # Dev agent gets full codebase
-                supabase_config=context.supabase_config,
-                message_history=context.message_history,
-                user_prompt=context.prompt
-            )
-            
             generation_result = await self.code_generation_agent.generate_code(
                 requirements=context.requirements,
                 supabase_config=context.supabase_config,
                 existing_files=context.files,
                 is_update=context.files is not None and len(context.files) > 0,
-                agent_context=agent_context
+                conversation_history=context.conversation_history,
             )
             context.files = generation_result.get("files", [])
-            
-            # Record message in history
-            affected_files = [f.get("path") for f in generation_result.get("files", [])]
-            context.message_history.add_message(AgentMessage(
-                agent_name="Dev Agent",
-                plan=f"Generated {len(affected_files)} files",
-                reasoning=generation_result.get("summary", "Code generation completed"),
-                affected_files=affected_files
-            ))
             
             yield self._status("code_generated", f"✅ Generated {len(context.files)} files", {
                 "files": context.files,
@@ -335,37 +238,31 @@ class Orchestrator:
             if context.project_id in self._cancelled_builds:
                 return
             
-            # Phase 3: Deploy (skip if no Supabase)
-            supabase_connected = context.supabase_config.get("url") and context.supabase_config.get("url") != "YOUR_SUPABASE_URL"
+            # Phase 3: Deploy
+            context.state = BuildState.DEPLOYING
+            context.current_agent = "deployment"
+            yield self._status("deploying", "📦 Deploying to Supabase...")
             
-            if supabase_connected:
-                context.state = BuildState.DEPLOYING
-                context.current_agent = "deployment"
-                yield self._status("deploying", "📦 Deploying to Supabase...")
+            try:
+                deploy_result = await self.deployment_agent.deploy(
+                    files=context.files,
+                    supabase_config=context.supabase_config,
+                    access_token=context.supabase_config.get("service_key")
+                )
                 
-                try:
-                    deploy_result = await self.deployment_agent.deploy(
-                        files=context.files,
-                        supabase_config=context.supabase_config,
-                        access_token=context.supabase_config.get("service_key")
-                    )
+                if deploy_result.get("status") == "error":
+                    yield self._status("deploy_warning", "⚠️ Deployment had errors", {
+                        "errors": deploy_result.get("errors", [])
+                    })
+                else:
+                    yield self._status("deployed", "✅ Deployed successfully", {
+                        "migrations": len(deploy_result.get("migrations", [])),
+                        "edge_functions": len(deploy_result.get("edge_functions", []))
+                    })
                     
-                    if deploy_result.get("status") == "error":
-                        yield self._status("deploy_warning", "⚠️ Deployment had errors", {
-                            "errors": deploy_result.get("errors", [])
-                        })
-                    else:
-                        yield self._status("deployed", "✅ Deployed successfully", {
-                            "migrations": len(deploy_result.get("migrations", [])),
-                            "edge_functions": len(deploy_result.get("edge_functions", []))
-                        })
-                        
-                except Exception as e:
-                    logger.warning(f"Deployment error: {e}")
-                    yield self._status("deploy_warning", f"⚠️ Deployment error: {e}")
-            else:
-                # Mock data mode - skip deployment
-                yield self._status("deploy_skipped", "⏭️ Skipping deployment (using mock data)")
+            except Exception as e:
+                logger.warning(f"Deployment error: {e}")
+                yield self._status("deploy_warning", f"⚠️ Deployment error: {e}")
             
             # Phase 4: Test
             context.state = BuildState.TESTING
@@ -373,30 +270,12 @@ class Orchestrator:
             yield self._status("testing", "🧪 Running tests...")
             
             try:
-                # Build context for test agent (full codebase + schema + history)
-                agent_context = build_agent_context(
-                    agent_name="test",
-                    files=context.files,  # Test agent gets full codebase
-                    supabase_config=context.supabase_config,
-                    message_history=context.message_history,
-                    user_prompt=context.prompt
-                )
-                
                 test_results = await self.tester_agent.run_tests(
                     files=context.files,
                     requirements=context.requirements,
-                    supabase_config=context.supabase_config,
-                    agent_context=agent_context
+                    supabase_config=context.supabase_config
                 )
                 context.test_results = test_results
-                
-                # Record message in history
-                context.message_history.add_message(AgentMessage(
-                    agent_name="Test Agent",
-                    plan=f"Ran {test_results.get('total', 0)} tests",
-                    reasoning=f"Test results: {test_results.get('passed', 0)} passed, {test_results.get('failed', 0)} failed",
-                    affected_files=[]
-                ))
                 
                 yield self._status("tested", test_results.get("summary", ""), {
                     "passed": test_results.get("passed", 0),
@@ -431,34 +310,16 @@ class Orchestrator:
                 yield self._status("fixing", f"🔧 Fixing issues (attempt {context.fix_attempts}/{context.max_fix_attempts})...")
                 
                 try:
-                    # Build context for fix agent (full codebase + schema + history)
-                    agent_context = build_agent_context(
-                        agent_name="fix",
-                        files=context.files,  # Fix agent gets full codebase
-                        supabase_config=context.supabase_config,
-                        message_history=context.message_history,
-                        user_prompt=context.prompt
-                    )
-                    
                     fix_result = await self.fix_agent.fix_issues(
                         files=context.files,
                         test_results=context.test_results,
                         requirements=context.requirements,
                         attempt=context.fix_attempts,
-                        agent_context=agent_context
+                        chat_history=context.conversation_history or [],
                     )
                     
                     if fix_result.get("fixes_applied"):
                         context.files = fix_result.get("files", context.files)
-                        
-                        # Record message in history
-                        fixed_files = fix_result.get("files_modified", [])
-                        context.message_history.add_message(AgentMessage(
-                            agent_name="Fix Agent",
-                            plan=f"Fixed {len(fixed_files)} files (attempt {context.fix_attempts})",
-                            reasoning=fix_result.get("summary", "Fixes applied"),
-                            affected_files=fixed_files
-                        ))
                         yield self._status("fixed", fix_result.get("summary", ""), {
                             "fixes": fix_result.get("fixes_applied", []),
                             "files_modified": fix_result.get("files_modified", [])
@@ -487,7 +348,8 @@ class Orchestrator:
         project_id: str,
         requirements: Dict,
         supabase_config: Dict,
-        existing_files: Optional[List[Dict]] = None
+        existing_files: Optional[List[Dict]] = None,
+        conversation_history: Optional[List[Dict]] = None
     ) -> AsyncGenerator[Dict, None]:
         """
         Continue build after clarification.
@@ -500,6 +362,7 @@ class Orchestrator:
             requirements=requirements,
             supabase_config=supabase_config,
             files=existing_files,
+            conversation_history=conversation_history or [],
             started_at=datetime.now(timezone.utc).isoformat()
         )
         
@@ -511,32 +374,14 @@ class Orchestrator:
             context.current_agent = "dev"
             yield self._status("generating", "💻 Generating code...")
             
-            # Build context for dev agent (full codebase + schema + history)
-            agent_context = build_agent_context(
-                agent_name="dev",
-                files=existing_files,  # Dev agent gets full codebase
-                supabase_config=supabase_config,
-                message_history=context.message_history,
-                user_prompt=""
-            )
-            
             generation_result = await self.code_generation_agent.generate_code(
                 requirements=requirements,
                 supabase_config=supabase_config,
                 existing_files=existing_files,
                 is_update=existing_files is not None and len(existing_files) > 0,
-                agent_context=agent_context
+                conversation_history=conversation_history,
             )
             context.files = generation_result.get("files", [])
-            
-            # Record message in history
-            affected_files = [f.get("path") for f in generation_result.get("files", [])]
-            context.message_history.add_message(AgentMessage(
-                agent_name="Dev Agent",
-                plan=f"Generated {len(affected_files)} files",
-                reasoning=generation_result.get("summary", "Code generation completed"),
-                affected_files=affected_files
-            ))
             
             yield self._status("code_generated", f"✅ Generated {len(context.files)} files", {
                 "files": context.files

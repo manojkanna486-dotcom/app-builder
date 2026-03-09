@@ -4,6 +4,9 @@
 .idea/
 .vscode/
 
+# Generated React apps (build_react_app.py)
+generated-apps/
+
 # Dependencies
 node_modules/
 /node_modules

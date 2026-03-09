@@ -227,7 +227,10 @@ class MongoDatabase(DatabaseInterface):
     async def get_incomplete_jobs(self) -> List[dict]:
         """Get all jobs that were running but not completed (for recovery)"""
         return await self.db.async_jobs.find(
-            {"status": {"$in": ["running", "pending", "generating", "deploying", "testing", "fixing"]}},
+            {"status": {"$in": [
+                "running", "pending", "parsing_requirements", "awaiting_clarification",
+                "generating_tests", "generating", "deploying", "testing", "fixing", "clarifying",
+            ]}},
             {"_id": 0}
         ).to_list(100)
 

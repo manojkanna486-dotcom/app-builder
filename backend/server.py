@@ -33,7 +33,6 @@ from agents import (
     RequirementsAgent, 
     ConversationalTesterAgent, 
     FixAgent,
-    ThinkingAgent,
     BuildState,
     # Legacy imports for backwards compatibility
     AgentOrchestrator, 
@@ -1244,11 +1243,11 @@ async def call_openrouter(messages: List[Dict]):
     }
     
     payload = {
-        "model": "anthropic/claude-sonnet-4-5",
+        "model": "openai/gpt-4o-mini",
         "messages": messages,
         "stream": False,
-        "max_tokens": 16000,
-        "temperature": 0.7
+        "max_tokens": 8192,
+        "temperature": 0.5
     }
     
     try:
@@ -1256,7 +1255,10 @@ async def call_openrouter(messages: List[Dict]):
             response = await http_client.post(f"{OPENROUTER_BASE_URL}/chat/completions", json=payload, headers=headers)
             logger.info(f"call_openrouter: status={response.status_code}")
             if response.status_code != 200:
-                logger.error(f"OpenRouter error: {response.text}")
+                error_text = response.text
+                logger.error(f"OpenRouter error: {error_text}")
+                if response.status_code == 402:
+                    logger.error("OpenRouter 402: Insufficient credits. Add credits at https://openrouter.ai/settings/credits")
                 return None
             
             data = response.json()
@@ -1282,11 +1284,11 @@ async def call_openrouter_stream(messages: List[Dict]):
     }
     
     payload = {
-        "model": "anthropic/claude-sonnet-4-5",
+        "model": "openai/gpt-4o-mini",
         "messages": messages,
         "stream": True,
-        "max_tokens": 16000,
-        "temperature": 0.7
+        "max_tokens": 8192,
+        "temperature": 0.5
     }
     
     async with httpx.AsyncClient(timeout=180.0) as http_client:
@@ -1348,23 +1350,55 @@ EXAMPLES:
 - "Create an app for my business" → Needs clarification on business type, features
 - "Build a dashboard" → Needs clarification on data type, metrics, audience"""
 
+PREVIEW_RENDERING_RULES = """
+=== PREVIEW RENDERING ENVIRONMENT (CRITICAL - READ CAREFULLY) ===
+Your code runs inside a browser iframe using Babel Standalone (NOT a bundler like Webpack/Vite).
+If you violate these rules, the preview will show a blank white screen or crash with errors.
+
+1. NO IMPORT/EXPORT STATEMENTS:
+   - Do NOT write import statements. They are stripped before rendering.
+   - Do NOT write export default or export. They are stripped.
+   - All components share a single global scope.
+
+2. AVAILABLE GLOBALS (already loaded, do NOT import them):
+   - React hooks: useState, useEffect, useRef, useCallback, useMemo, useContext, createContext, useReducer
+   - React Router (mocked): BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useLocation, useParams, Navigate, Switch, Redirect
+   - Lucide icons: Plus, Minus, X, Check, Trash2, Edit, Search, Menu, Home, User, Settings, Heart, Star, Calendar, Clock, Mail, Phone, LogOut, LogIn, Sun, Moon, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, ArrowRight, ArrowLeft, Loader2, Eye, EyeOff, Lock, AlertCircle, CheckCircle, BookOpen, Code, Download, Upload, Filter, Tag, Hash, Bookmark, Archive, Calculator, Bell, Camera, Image, Music, Video, Map, MapPin, Globe, Wifi, Cloud, Database, Server, Shield, Key, Zap, Coffee, Gift, Briefcase, Folder, File, FileText, Save, Copy, Clipboard, Share, ExternalLink, RefreshCw, RotateCcw, MoreVertical, MoreHorizontal, Grip, Move, Maximize, Minimize, Layout, Grid, List, Table, BarChart, PieChart, TrendingUp, DollarSign, CreditCard, ShoppingCart, ShoppingBag, Package, Truck, Users, UserPlus, MessageSquare, MessageCircle, Send, Inbox, AtSign, Link2, Paperclip, Smile, ThumbsUp, ThumbsDown, Award, Trophy, Target, Flag, Sparkles, Wand2, Palette, Brush, Pen, Type, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Heading, ListOrdered, CheckSquare, Circle, Square, Triangle, Hexagon, Octagon, Activity, Flame, Droplet, Wind, Thermometer, Compass, Layers, GitBranch, GitCommit, GitMerge, Terminal, Monitor, Smartphone, Tablet, Laptop, Watch, Speaker, Headphones, Radio, Tv, Power, Battery, PlugZap, Signal, Bluetooth, Cast, Printer, HardDrive, Cpu, MemoryStick
+   - Tailwind CSS (via CDN): Use Tailwind classes directly
+   - Supabase client: Available if backend is connected
+
+3. MAIN COMPONENT MUST BE NAMED App:
+   - The entry point component MUST be: const App = () => { ... }
+   - It is rendered as <App /> automatically.
+
+4. COMPONENT NAMING - AVOID ICON NAME COLLISIONS:
+   - Do NOT name your components the same as Lucide icon names (e.g., Calculator, Calendar, Settings, Home, User, etc.)
+   - If your app needs a component with such a name, prefix it: MyCalculator, AppHome, UserProfile, SettingsPage, etc.
+   - This is the #1 cause of preview crashes.
+
+5. DEFINE MOCK DATA INLINE:
+   - Since there are no modules, define mock data directly in the same file or as variables in the global scope.
+   - Do NOT create separate mockData.js files - put mock data inside the component file or at the top of App.jsx.
+
+6. DO NOT USE:
+   - import.meta.env (not supported; use window.ENV or hardcoded values)
+   - require() calls
+   - Dynamic import()
+   - CSS modules or styled-components
+   - TypeScript syntax in .jsx files
+   - Async component definitions
+=== END PREVIEW RENDERING RULES ===
+"""
+
 BEST_UI_SYSTEM_PROMPT = """You are an elite frontend developer and UI/UX designer. Generate world-class React applications with stunning, modern interfaces.
+""" + PREVIEW_RENDERING_RULES + """
 
 IMPORTANT - MOCK DATA APPROACH:
 Since no backend is connected yet, you MUST use realistic mock data:
-1. Create a mockData.js file with realistic sample data
+1. Define mock data as variables at the top of your component file (NOT in a separate file)
 2. Use useState to manage the mock data
 3. Implement full CRUD operations on the mock data (add, edit, delete work locally)
 4. Design the data structure to easily connect to a real database later
-
-MOCK DATA EXAMPLE:
-```javascript
-// In mockData.js
-export const initialTweets = [
-  { id: 1, user: '@johndoe', content: 'Hello world!', likes: 42, createdAt: '2h' },
-  { id: 2, user: '@janedoe', content: 'Building amazing apps!', likes: 128, createdAt: '4h' },
-];
-```
 
 RESPONSIVE DESIGN (MANDATORY - ALL APPS MUST BE FULLY RESPONSIVE):
 1. Mobile-first approach: Design for 320px screens first, then scale up
@@ -1386,11 +1420,10 @@ DESIGN EXCELLENCE REQUIREMENTS:
 5. Use professional-grade design like Dribbble/Behance showcase projects
 
 OUTPUT FORMAT (RAW JSON ONLY - NO MARKDOWN):
-{"files":[{"path":"App.jsx","content":"code"},{"path":"data/mockData.js","content":"code"},{"path":"components/X.jsx","content":"code"}],"summary":"description"}
+{"files":[{"path":"App.jsx","content":"code"},{"path":"components/X.jsx","content":"code"}],"summary":"description"}
 
 FILE STRUCTURE (ALWAYS MULTIPLE FILES):
-- App.jsx: Clean entry point composing components
-- data/mockData.js: Realistic sample data for the app
+- App.jsx: Main entry point composing components (MUST define const App = () => {...})
 - components/Header.jsx: Navigation with search, user menu (responsive hamburger)
 - components/Sidebar.jsx: Navigation sidebar (collapsible on mobile)
 - components/[Feature].jsx: Feature-specific components
@@ -1401,7 +1434,7 @@ UI BEST PRACTICES:
 - Use Tailwind's design system consistently
 - Add shadows, rounded corners, proper padding
 - Include loading states and empty states
-- Use icons (Lucide React icons: import { Icon } from 'lucide-react')
+- Use Lucide icons directly (they are global variables, e.g., just use <Search /> not import { Search } from 'lucide-react')
 - Create visual hierarchy with font sizes and weights
 - Use whitespace generously
 - Add subtle background patterns or gradients
@@ -1421,7 +1454,7 @@ CRITICAL: Return ONLY raw JSON. No markdown code blocks. ALL layouts MUST be res
 SYSTEM_PROMPT = BEST_UI_SYSTEM_PROMPT
 
 UPDATE_SYSTEM_PROMPT = """You are an elite frontend developer. Update existing React code while maintaining design excellence.
-
+""" + PREVIEW_RENDERING_RULES + """
 CURRENT FILES:
 {current_code}
 
@@ -1435,6 +1468,9 @@ RULES:
 4. Use Tailwind CSS for styling
 5. Return ALL files (modified and unmodified)
 6. You can add new files if needed
+7. Do NOT add import/export statements (they are stripped by the preview renderer)
+8. The main component MUST be named App
+9. Do NOT name components the same as Lucide icon names (e.g., Calculator, Home, Settings)
 
 OUTPUT FORMAT:
 Return a JSON object with this exact structure:
@@ -1456,7 +1492,7 @@ Return a JSON object with this exact structure:
 IMPORTANT:
 - Return ALL files, not just changed ones
 - Keep file paths consistent with existing structure
-- Components import other components using: import X from './components/X'"""
+- Do NOT use import/export statements - all components are in global scope"""
 
 INTENT_DIFF_PROMPT = """Analyze this update request and identify what needs to change.
 
@@ -1481,7 +1517,7 @@ RULES:
 
 # Diff-based update prompt - only sends affected files
 DIFF_UPDATE_PROMPT = """You are an elite developer. Make ONLY the requested changes.
-
+""" + PREVIEW_RENDERING_RULES + """
 FILES TO MODIFY:
 {affected_files_content}
 
@@ -1492,20 +1528,22 @@ RULES:
 2. Return complete file content for each modified file
 3. You can add new files if needed
 4. Keep changes minimal and focused
+5. Do NOT add import/export statements (they are stripped by the preview renderer)
+6. Do NOT name components the same as Lucide icon names
 
 OUTPUT FORMAT (JSON only):
-{{
+{
   "files": [
-    {{"path": "filename", "content": "complete file content", "file_type": "frontend|edge_function|sql", "action": "modified|created"}}
+    {"path": "filename", "content": "complete file content", "file_type": "frontend|edge_function|sql", "action": "modified|created"}
   ],
   "summary": "Brief description of changes",
   "changes": ["List of specific changes made"]
-}}
+}
 
 IMPORTANT: Only return files you actually modified or created. Unchanged files should NOT be included."""
 
 DIFF_UPDATE_FULLSTACK_PROMPT = """You are an elite full-stack developer. Make ONLY the requested changes.
-
+""" + PREVIEW_RENDERING_RULES + """
 SUPABASE PROJECT URL: {supabase_url}
 
 FILES TO MODIFY:
@@ -1518,6 +1556,8 @@ RULES:
 2. Return complete file content for each modified file
 3. Add new Edge Functions or SQL migrations only if needed
 4. Keep changes minimal and focused
+5. Do NOT add import/export statements (they are stripped by the preview renderer)
+6. Do NOT name components the same as Lucide icon names
 
 OUTPUT FORMAT (JSON only):
 {{
@@ -1537,7 +1577,7 @@ FULLSTACK_SYSTEM_PROMPT = """You are an elite full-stack developer. Generate com
 - React frontend (JSX with Tailwind CSS) - MUST BE FULLY RESPONSIVE
 - Supabase Edge Functions backend (TypeScript/Deno)
 - PostgreSQL database schema (SQL)
-
+""" + PREVIEW_RENDERING_RULES + """
 IMPORTANT - BACKEND IS CONNECTED!
 The user has connected their Supabase project. This means:
 1. Generate real database schema (SQL migrations)
@@ -1651,7 +1691,7 @@ SQL MIGRATION RULES:
 CRITICAL: Return ONLY raw JSON. No markdown code blocks. ALL layouts MUST be responsive."""
 
 FULLSTACK_UPDATE_PROMPT = """You are an elite full-stack developer. Update the existing application.
-
+""" + PREVIEW_RENDERING_RULES + """
 SUPABASE PROJECT URL: {supabase_url}
 
 CURRENT FILES:
@@ -1666,6 +1706,8 @@ RULES:
 3. Return ALL files (modified and unmodified)
 4. Add new Edge Functions or SQL migrations if needed
 5. Update frontend to integrate with any new backend features
+6. Do NOT add import/export statements (they are stripped by the preview renderer)
+7. Do NOT name components the same as Lucide icon names
 
 OUTPUT FORMAT (JSON only):
 {
@@ -1854,6 +1896,9 @@ async def get_supabase_status(project_id: str):
     }
 
 # ==================== CODE VALIDATION & AUTO-FIX ====================
+
+from code_utils import sanitize_frontend_files
+
 
 def validate_react_code(files: List[dict]) -> List[str]:
     """
@@ -2125,6 +2170,17 @@ async def fix_user_reported_error(project_id: str, request: FixErrorRequest):
     files = version.get("files", [])
     requirements = version.get("requirements") or project.get("requirements")
     
+    # Load chat history for full context (entire codebase + errors + chat sent to fix agent)
+    chat_history = []
+    try:
+        raw_messages = await database.get_messages(project_id)
+        chat_history = [
+            {"role": m.get("role", "user"), "content": m.get("content", "")}
+            for m in (raw_messages or [])[-20:]
+        ]
+    except Exception as e:
+        logger.warning(f"Could not load chat history for fix: {e}")
+    
     # Use the improved Fix Agent
     fix_agent = FixAgent(OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
     
@@ -2136,7 +2192,8 @@ async def fix_user_reported_error(project_id: str, request: FixErrorRequest):
             error_message=request.error_message,
             user_context=request.user_context,
             console_logs=request.console_logs,
-            requirements=requirements
+            requirements=requirements,
+            chat_history=chat_history,
         )
         
         if result.get("success"):
@@ -2395,13 +2452,10 @@ async def generate_code(project_id: str, request: PromptRequest):
         response = await call_openrouter(messages)
         
         if not response:
-            logger.error("Clarification: No response from LLM")
-            return ClarificationResponse(
-                requirements={},
-                clarifying_questions=[],
-                suggested_features=[],
-                is_clear=True,
-                original_prompt=request.prompt
+            logger.error("Code generation: No response from LLM (possible credit/quota issue)")
+            raise HTTPException(
+                status_code=503,
+                detail="Code generation failed: The AI service is currently unavailable. This may be due to insufficient API credits or a temporary outage. Please try again later."
             )
         
         # Parse response
@@ -2578,6 +2632,8 @@ async def generate_code(project_id: str, request: PromptRequest):
             "summary": summary
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Generation error: {str(e)}")
         
@@ -2610,8 +2666,9 @@ async def clarify_requirements(project_id: str, request: ClarifyRequest):
     Call this BEFORE generate/stream to get user confirmation.
     Works with or without Supabase. Uses mock data if Supabase is not connected.
     """
-    if not orchestrator:
-        raise HTTPException(status_code=500, detail="Agent orchestrator not initialized")
+    clarification_orchestrator = legacy_orchestrator
+    if not clarification_orchestrator:
+        raise HTTPException(status_code=500, detail="Clarification orchestrator not initialized")
     
     # Get project for context
     project = await database.get_project(project_id)
@@ -2630,8 +2687,8 @@ async def clarify_requirements(project_id: str, request: ClarifyRequest):
         "existing_requirements": project.get("requirements")
     }
     
-    # Analyze prompt using orchestrator
-    analysis = await orchestrator.analyze_prompt(request.prompt, context)
+    # Clarification still uses the legacy orchestrator API shape expected by the frontend.
+    analysis = await clarification_orchestrator.analyze_prompt(request.prompt, context)
     
     # Store requirements in project (not confirmed yet)
     await database.update_project(project_id, {
@@ -2657,8 +2714,9 @@ async def confirm_requirements(project_id: str, request: ConfirmRequirementsRequ
     Refine requirements based on user's answers to clarifying questions.
     Returns final requirements ready for code generation.
     """
-    if not orchestrator:
-        raise HTTPException(status_code=500, detail="Agent orchestrator not initialized")
+    clarification_orchestrator = legacy_orchestrator
+    if not clarification_orchestrator:
+        raise HTTPException(status_code=500, detail="Clarification orchestrator not initialized")
     
     # Get project
     project = await database.get_project(project_id)
@@ -2666,7 +2724,7 @@ async def confirm_requirements(project_id: str, request: ConfirmRequirementsRequ
         raise HTTPException(status_code=404, detail="Project not found")
     
     # Refine requirements with user answers
-    refined = await orchestrator.refine_requirements(
+    refined = await clarification_orchestrator.refine_requirements(
         request.analysis, 
         request.user_answers
     )
@@ -2722,16 +2780,12 @@ async def build_app(project_id: str, request: PromptRequest):
                 access_token = service_key
                 logger.info(f"Using service role key for project {project_id}")
     
-    # Use confirmed requirements or analyze prompt
+    # Use confirmed requirements or parse prompt (v2 uses parse_requirements; legacy uses analyze_prompt)
     requirements = project.get("requirements")
     if not requirements or not project.get("requirements_confirmed"):
-        # Quick analysis without clarification
-        requirements = await orchestrator.analyze_prompt(request.prompt, {
-            "supabase_connected": supabase_connected,
-            "supabase_url": project.get("supabase_url", "") if supabase_connected else "",
-            "project_name": project.get("name", "")
-        })
-        requirements["is_clear"] = True  # Skip clarification for direct build
+        # Quick analysis without clarification - use requirements agent via orchestrator
+        requirements = await orchestrator.parse_requirements(request.prompt, conversation_history=[])
+        requirements["is_complete"] = True  # Skip clarification for direct build
     
     # Get existing files for updates
     existing_files = None
@@ -2751,13 +2805,18 @@ async def build_app(project_id: str, request: PromptRequest):
             "project_ref": project.get("supabase_project_ref") or extract_project_ref(project.get("supabase_url", ""))
         }
     
+    # Use legacy orchestrator for build - it has run_pipeline_stream with SSE format
+    build_orchestrator = legacy_orchestrator
+    if not build_orchestrator or not hasattr(build_orchestrator, 'run_pipeline_stream'):
+        raise HTTPException(status_code=500, detail="Build pipeline not available")
+    
     async def generate_stream():
         """Stream the pipeline execution"""
         current_files = []
         final_summary = ""
-        
+
         try:
-            async for update in orchestrator.run_pipeline_stream(
+            async for update in build_orchestrator.run_pipeline_stream(
                 requirements=requirements,
                 supabase_config=supabase_config,
                 access_token=access_token,
@@ -2949,7 +3008,7 @@ async def run_background_generation(task_id: str, project_id: str, prompt: str, 
         if not result:
             await database.update_generation_task(task_id, {
                 "status": "failed",
-                "error": "Failed to generate code from LLM"
+                "error": "Failed to generate code. The AI service may be unavailable or out of credits. Please check your OpenRouter API credits and try again."
             })
             return
         
@@ -2989,7 +3048,10 @@ async def run_background_generation(task_id: str, project_id: str, prompt: str, 
             "progress": 60,
             "current_step": "Validating code..."
         })
-        
+
+        # Sanitize to fix common syntax errors before validation
+        sanitize_frontend_files(files)
+
         # Validate code
         validation_errors = validate_react_code(files)
         if validation_errors:
@@ -3282,8 +3344,11 @@ async def get_active_job(project_id: str):
     
     jobs = await job_manager_instance.get_project_jobs(project_id)
     
-    # Find any running job
-    active_statuses = ["pending", "running", "generating", "deploying", "testing", "fixing", "clarifying"]
+    # Find any running job (must match all non-terminal JobStatus values)
+    active_statuses = [
+        "pending", "running", "parsing_requirements", "awaiting_clarification",
+        "generating_tests", "generating", "deploying", "testing", "fixing", "clarifying",
+    ]
     active_job = next((j for j in jobs if j.get("status") in active_statuses), None)
     
     return {"active_job": active_job}
@@ -3552,7 +3617,10 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
                     f["file_type"] = "frontend"
             
             yield f"data: {json.dumps({'type': 'status', 'message': f'Validating {len(files)} file(s)...'})}\n\n"
-            
+
+            # Sanitize to fix common syntax errors before validation
+            sanitize_frontend_files(files)
+
             # Validate and potentially auto-fix
             validation_errors = validate_react_code(files)
             if validation_errors:
@@ -3830,52 +3898,85 @@ async def generate_code_stream(project_id: str, request: PromptRequest):
 async def get_merged_files_for_project(project_id: str) -> List[dict]:
     """
     Get merged files from all versions of a project.
-    Falls back to files from the latest job if no versions exist yet.
+    Falls back to async jobs and legacy generation tasks for older projects.
     """
-    all_versions = await database.get_all_versions(project_id)
-    
-    if all_versions:
-        # Merge files - later versions override earlier ones
-        merged_files = {}
-        for version in reversed(all_versions):  # oldest first
-            for f in version.get("files", []):
-                merged_files[f.get("path")] = f
-        return list(merged_files.values())
-    
-    # Fallback: use files from the latest job that has files
+    versions = []
+
+    # Newer projects usually persist code in versions.
     try:
-        jobs = await database.get_project_jobs(project_id)
-        if jobs:
-            # Sort by created_at descending, pick most recent job with files
-            sorted_jobs = sorted(jobs, key=lambda j: j.get("created_at", ""), reverse=True)
-            for job in sorted_jobs:
-                files = job.get("files", [])
-                if files:
-                    logger.info(f"Preview fallback: using {len(files)} files from job {job.get('id')} (status: {job.get('status')})")
-                    return files
+        get_all_versions = getattr(database, "get_all_versions", None)
+        if callable(get_all_versions):
+            versions = await get_all_versions(project_id)
+        else:
+            versions = await database.get_versions(project_id)
+    except Exception as e:
+        logger.warning(f"Could not fetch versions for preview: {e}")
+
+    if versions:
+        # Merge files - later versions override earlier ones.
+        merged_files = {}
+        for version in reversed(versions):  # oldest first
+            for f in version.get("files", []) or []:
+                file_path = f.get("path")
+                if file_path:
+                    merged_files[file_path] = f
+
+        if merged_files:
+            logger.info(
+                f"Preview source: using {len(merged_files)} merged files from {len(versions)} version(s)"
+            )
+            return list(merged_files.values())
+
+    # Fallback: use files from the latest async job that has files.
+    try:
+        get_project_jobs = getattr(database, "get_project_jobs", None)
+        if callable(get_project_jobs):
+            jobs = await get_project_jobs(project_id)
+            if jobs:
+                sorted_jobs = sorted(jobs, key=lambda j: j.get("created_at", ""), reverse=True)
+                for job in sorted_jobs:
+                    files = job.get("files", []) or []
+                    if files:
+                        logger.info(
+                            f"Preview fallback: using {len(files)} files from job {job.get('id')} "
+                            f"(status: {job.get('status')})"
+                        )
+                        return files
     except Exception as e:
         logger.warning(f"Could not fetch job files for preview fallback: {e}")
-    
+
+    # Legacy fallback: older projects may only have files on generation_tasks.
+    try:
+        get_latest_task_for_project = getattr(database, "get_latest_task_for_project", None)
+        if callable(get_latest_task_for_project):
+            latest_task = await get_latest_task_for_project(project_id)
+            if latest_task:
+                files = latest_task.get("files", []) or []
+                if files:
+                    logger.info(
+                        f"Preview legacy fallback: using {len(files)} files from generation task "
+                        f"{latest_task.get('id')} (status: {latest_task.get('status')})"
+                    )
+                    return files
+    except Exception as e:
+        logger.warning(f"Could not fetch generation task files for preview fallback: {e}")
+
     return []
 
 @api_router.get("/projects/{project_id}/preview")
 async def get_preview_html(project_id: str):
     """Generate HTML for iframe preview (returns JSON with html field)"""
+    from fastapi.responses import JSONResponse
     
-    # Get project for Supabase credentials
     project = await database.get_project(project_id)
-    
-    # Get merged files from all versions
     merged_files = await get_merged_files_for_project(project_id)
     
     logger.info(f"Preview request for project {project_id}: {len(merged_files)} files found")
     
     if not merged_files:
-        # Return placeholder
         logger.warning(f"No files found for project {project_id}, returning placeholder")
-        return {"html": get_placeholder_html()}
+        return JSONResponse(content={"html": get_placeholder_html()})
     
-    # Get Supabase config if connected
     supabase_config = None
     if project and project.get("supabase_connected"):
         supabase_config = {
@@ -3883,26 +3984,22 @@ async def get_preview_html(project_id: str):
             "anon_key": project.get("supabase_anon_key", "")
         }
     
-    # Pass merged files and supabase config to the preview generator
     html = generate_preview_html_multifile(merged_files, supabase_config)
     logger.info(f"Generated preview HTML: {len(html)} characters")
-    return {"html": html}
+    
+    return JSONResponse(content={"html": html})
 
 @api_router.get("/projects/{project_id}/preview/live")
 async def get_preview_live(project_id: str):
     """Serve the preview as a standalone HTML page (for opening in new tab)"""
     from fastapi.responses import HTMLResponse
     
-    # Get project for Supabase credentials
     project = await database.get_project(project_id)
-    
-    # Get merged files from all versions
     merged_files = await get_merged_files_for_project(project_id)
     
     if not merged_files:
         return HTMLResponse(content=get_placeholder_html(), status_code=200)
     
-    # Get Supabase config if connected
     supabase_config = None
     if project and project.get("supabase_connected"):
         supabase_config = {
@@ -3910,7 +4007,6 @@ async def get_preview_live(project_id: str):
             "anon_key": project.get("supabase_anon_key", "")
         }
     
-    # Generate and return HTML directly
     html = generate_preview_html_multifile(merged_files, supabase_config)
     return HTMLResponse(content=html, status_code=200)
 
@@ -4356,12 +4452,20 @@ def get_placeholder_html():
 </html>"""
 
 def clean_component_code(code: str) -> str:
-    """Clean a single component's code for embedding"""
+    """Clean a single component's code for embedding in preview"""
     import re
-    
-    # Remove import statements (general)
-    cleaned = re.sub(r'^import\s+.*?[\'"].*?[\'"];?\s*$', '', code, flags=re.MULTILINE)
-    cleaned = re.sub(r'^import\s+\{[^}]*\}\s+from\s+[\'"].*?[\'"];?\s*$', '', cleaned, flags=re.MULTILINE)
+
+    # Remove import statements - handle various formats
+    # import X from '...'
+    cleaned = re.sub(r"^import\s+[\w{}\s,*]+\s+from\s+['\"][^'\"]+['\"];?\s*$", "", code, flags=re.MULTILINE)
+    # import '...' or import "..." (side-effect imports)
+    cleaned = re.sub(r"^import\s+['\"][^'\"]+['\"];?\s*$", "", cleaned, flags=re.MULTILINE)
+    # import * as X from '...'
+    cleaned = re.sub(r"^import\s+\*\s+as\s+\w+\s+from\s+['\"][^'\"]+['\"];?\s*$", "", cleaned, flags=re.MULTILINE)
+    # Single-line import { A, B } from '...'
+    cleaned = re.sub(r"^import\s+\{[^}]*\}\s+from\s+['\"][^'\"]+['\"];?\s*$", "", cleaned, flags=re.MULTILINE)
+    # Multi-line import { A,\n  B } from '...'
+    cleaned = re.sub(r"^import\s+\{[\s\S]*?\}\s+from\s+['\"][^'\"]+['\"];?\s*$", "", cleaned, flags=re.MULTILINE)
     
     # Remove export statements but keep the content
     cleaned = re.sub(r'^export\s+default\s+', '', cleaned, flags=re.MULTILINE)
@@ -4385,8 +4489,11 @@ def clean_component_code(code: str) -> str:
     return cleaned.strip()
 
 def is_supabase_client_file(file_path: str, content: str) -> bool:
-    """Check if a file is the supabaseClient configuration file"""
+    """Check if a file is the supabaseClient configuration file - skip in preview, we provide our own"""
     if 'supabaseClient' in file_path.lower():
+        return True
+    # lib/supabase.js, lib/supabase.ts - common Supabase client config locations
+    if ('lib/supabase' in file_path.lower() or file_path.endswith('supabase.js') or file_path.endswith('supabase.ts')) and 'createClient' in content:
         return True
     # Check content for patterns like export const supabase = createClient
     if 'createClient' in content and ('export const supabase' in content or 'export const supabaseClient' in content):
@@ -4395,7 +4502,9 @@ def is_supabase_client_file(file_path: str, content: str) -> bool:
 
 def generate_preview_html_multifile(files: list, supabase_config: dict = None) -> str:
     """Generate HTML with multiple React components for preview"""
-    
+    # Sanitize frontend files to prevent syntax errors in built apps
+    sanitize_frontend_files(files)
+
     # Check if this is a full-stack app (has Supabase files)
     has_supabase = any('supabase' in f.get('path', '').lower() or '@supabase' in f.get('content', '') for f in files)
     
@@ -4518,6 +4627,19 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         all_code_parts.append(f"// === File: {f['path']} ===\n{cleaned}")
     
     all_code = "\n\n".join(all_code_parts)
+    
+    # CRITICAL: Ensure Loader/Spinner are in scope - generated code often uses them after import stripping
+    # Prepend fallbacks so components like ProtectedRoute can use <Loader /> without ReferenceError
+    loader_fallback = "var Loader = typeof Loader2 !== 'undefined' ? Loader2 : (function(){return null;}); var Spinner = typeof Loader2 !== 'undefined' ? Loader2 : (function(){return null;});\n\n"
+    all_code = loader_fallback + all_code
+    
+    # CRITICAL: Convert const/let component declarations to var to avoid collisions
+    # with Lucide icon names (e.g., Calculator, Home, Settings, etc.) defined in the
+    # preview template. Babel treats const as block-scoped and will throw
+    # "Identifier 'X' has already been declared" if an icon var and a user const share a name.
+    import re as _re
+    all_code = _re.sub(r'^(const|let)\s+(\w+)\s*=\s*\(', r'var \2 = (', all_code, flags=_re.MULTILINE)
+    all_code = _re.sub(r'^(const|let)\s+(\w+)\s*=\s*function', r'var \2 = function', all_code, flags=_re.MULTILINE)
     
     # CRITICAL: Transform import.meta.env to window.importMeta.env
     # Babel standalone can't handle import.meta syntax, so we preprocess it
@@ -4721,9 +4843,9 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"></script>
     """ + supabase_script + """
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -4742,6 +4864,82 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
 </head>
 <body>
     <div id="root"></div>
+    <script>
+        // ---- Error display helper (plain JS, always available even if Babel fails) ----
+        function _showError(title, message, stack) {
+            var container = document.getElementById('root');
+            if (!container) return;
+            var escapedMsg = String(message || 'Unknown error').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            var escapedStack = stack ? String(stack).replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
+
+            container.innerHTML = '<div style="font-family:Inter,system-ui,sans-serif;max-width:720px;margin:40px auto;padding:24px;">'
+                + '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:24px;">'
+                + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">'
+                + '<span style="font-size:24px;">&#10060;</span>'
+                + '<h3 style="color:#dc2626;margin:0;font-size:18px;font-weight:600;">' + title + '</h3>'
+                + '</div>'
+                + '<pre style="background:#fff;border:1px solid #fecaca;padding:16px;border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.5;color:#b91c1c;white-space:pre-wrap;word-break:break-word;margin:0;">'
+                + escapedMsg
+                + '</pre>'
+                + (escapedStack ? '<details style="margin-top:12px;"><summary style="cursor:pointer;color:#6b7280;font-size:13px;">Stack Trace</summary>'
+                + '<pre style="background:#f9fafb;padding:12px;border-radius:6px;font-size:11px;line-height:1.4;overflow-x:auto;margin-top:8px;white-space:pre-wrap;word-break:break-word;color:#6b7280;max-height:240px;overflow-y:auto;">'
+                + escapedStack + '</pre></details>' : '')
+                + '<p style="margin-top:16px;color:#9ca3af;font-size:12px;">This error is in the generated code. Use the chat to describe the issue and regenerate.</p>'
+                + '</div></div>';
+
+            try { window.parent.postMessage({ type: 'preview-error', error: message }, '*'); } catch(e) {}
+        }
+
+        // Global error handler - shows errors in the preview UI
+        window.addEventListener('error', function(event) {
+            var msg = event.message || (event.error && event.error.message) || '';
+            var stack = event.error && event.error.stack;
+            console.error('Global error caught:', event.error || event.message);
+            var root = document.getElementById('root');
+            if (root && (!root.innerHTML || root.innerHTML.trim() === '')) {
+                // "Script error" = browser sanitized cross-origin/eval error - show helpful guidance
+                if (!msg || msg === 'Script error.' || msg === 'Script error') {
+                    msg = 'A JavaScript error occurred (browser hides details for security). Common causes: '
+                        + 'component name conflicts with icons (Calculator, Home, User, etc. - rename to MyCalculator, AppHome), '
+                        + 'undefined variables, syntax errors, or import/export in preview. Describe the error in chat to fix it.';
+                }
+                _showError('Runtime Error', msg, stack);
+            }
+        });
+
+        // Global unhandled promise rejection handler
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+        });
+
+        // Intercept console.error to catch Babel compilation errors
+        (function() {
+            var _origConsoleError = console.error;
+            var _errorShown = false;
+            console.error = function() {
+                _origConsoleError.apply(console, arguments);
+                if (_errorShown) return;
+                var msg = Array.from(arguments).map(function(a) { return typeof a === 'string' ? a : (a && a.message ? a.message : ''); }).join(' ');
+                if (msg && (msg.indexOf('SyntaxError') !== -1 || msg.indexOf('has already been declared') !== -1 || msg.indexOf('Unexpected token') !== -1 || msg.indexOf('is not defined') !== -1 || msg.indexOf('Script error') !== -1)) {
+                    _errorShown = true;
+                    var displayMsg = (msg.indexOf('Script error') !== -1) ? 'A JavaScript error occurred. Common causes: component name conflicts with icons (Calculator, Home, User - rename to MyCalculator, AppHome), undefined variables, or syntax errors. Describe the error in chat to fix it.' : msg;
+                    setTimeout(function() {
+                        var root = document.getElementById('root');
+                        if (root && (!root.innerHTML || root.innerHTML.trim() === '')) {
+                            _showError('Compilation Error', displayMsg);
+                        }
+                    }, 100);
+                }
+            };
+            // Fallback: if after 5 seconds root is still empty, show a generic error
+            setTimeout(function() {
+                var root = document.getElementById('root');
+                if (root && (!root.innerHTML || root.innerHTML.trim() === '')) {
+                    _showError('Preview Failed', 'The app could not be rendered. There may be a syntax error in the generated code. Check the browser console for details.');
+                }
+            }, 5000);
+        })();
+    </script>
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback, useMemo, useContext, createContext, useReducer } = React;
         
@@ -4769,56 +4967,68 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         const BrowserRouter = Router;
         const HashRouter = Router;
         
+        // Safe route element extractor - never return undefined so router never crashes
+        const getRouteElement = (route) => {
+            if (!route || !route.props) return React.createElement('div', { style: { padding: '1rem', color: '#6b7280', fontSize: '14px' } }, 'Page not implemented');
+            const el = route.props.element || route.props.children;
+            return el != null ? el : React.createElement('div', { style: { padding: '1rem', color: '#6b7280', fontSize: '14px' } }, 'Page not implemented');
+        };
+        
         const Routes = ({ children }) => {
             const { path } = useContext(RouterContext);
-            const routes = React.Children.toArray(children);
+            const raw = React.Children.toArray(children);
+            // Filter invalid: undefined, null, or missing props. Require path to be string or wildcard.
+            const routes = raw.filter(r => r != null && r.props != null && (typeof (r.props && r.props.path) === 'string' || (r.props && r.props.path) === '*'));
             
-            // Normalize path
-            const normalizedPath = path === '' ? '/' : path;
+            const normalizedPath = (path === '' ? '/' : path) || '/';
             
-            // Try exact match first
+            // Try exact match first (only read path from validated route)
             for (const route of routes) {
-                const routePath = route.props.path;
+                const routePath = route && route.props ? route.props.path : undefined;
+                if (routePath === undefined) continue;
                 if (routePath === normalizedPath) {
-                    return route.props.element || route.props.children;
+                    return getRouteElement(route);
                 }
             }
             
             // Try partial match (e.g., /feed matches /)
             for (const route of routes) {
-                const routePath = route.props.path;
-                if (routePath && routePath !== '*' && normalizedPath.startsWith(routePath) && routePath.length > 1) {
-                    return route.props.element || route.props.children;
+                const routePath = route && route.props ? route.props.path : undefined;
+                if (routePath && routePath !== '*' && typeof routePath === 'string' && normalizedPath.startsWith(routePath) && routePath.length > 1) {
+                    return getRouteElement(route);
                 }
             }
             
             // Check wildcard route
-            const wildcardRoute = routes.find(r => r.props.path === '*');
+            const wildcardRoute = routes.find(r => r && r.props && r.props.path === '*');
             if (wildcardRoute) {
-                return wildcardRoute.props.element || wildcardRoute.props.children;
+                return getRouteElement(wildcardRoute);
             }
             
-            // Default to first route
-            return routes[0]?.props?.element || routes[0]?.props?.children || children;
+            // Default to first route or fallback
+            if (routes.length > 0) return getRouteElement(routes[0]);
+            return React.createElement('div', { style: { padding: '1rem', color: '#9ca3af', fontSize: '14px' } }, 'No routes defined');
         };
         
         const Route = ({ path, element, children }) => element || children;
         
-        // React Router v5 Switch component (for backward compatibility)
+        // React Router v5 Switch component (for backward compatibility) - defensive
         const Switch = ({ children }) => {
             const { path } = useContext(RouterContext);
-            const routes = React.Children.toArray(children);
-            const normalizedPath = path === '' ? '/' : path;
+            const raw = React.Children.toArray(children);
+            const routes = raw.filter(r => r != null && r.props != null && (typeof (r.props && r.props.path) === 'string' || (r.props && r.props.path) === '*'));
+            const normalizedPath = (path === '' ? '/' : path) || '/';
             
-            // Find first matching route
             for (const route of routes) {
-                const routePath = route.props.path;
+                const routePath = route && route.props ? route.props.path : undefined;
+                if (routePath === undefined) continue;
                 if (routePath === normalizedPath || routePath === '*') {
-                    return route.props.children || route.props.component || route.props.render || null;
+                    const el = (route.props && (route.props.children || route.props.component || route.props.render)) || null;
+                    return el != null ? el : React.createElement('div', { style: { padding: '1rem', color: '#6b7280' } }, 'Page not implemented');
                 }
-                // Try partial match
-                if (routePath && routePath !== '*' && normalizedPath.startsWith(routePath) && routePath.length > 1) {
-                    return route.props.children || route.props.component || route.props.render || null;
+                if (routePath && routePath !== '*' && typeof routePath === 'string' && normalizedPath.startsWith(routePath) && routePath.length > 1) {
+                    const el = (route.props && (route.props.children || route.props.component || route.props.render)) || null;
+                    return el != null ? el : React.createElement('div', { style: { padding: '1rem', color: '#6b7280' } }, 'Page not implemented');
                 }
             }
             return null;
@@ -4861,6 +5071,7 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
         const Outlet = () => null;
         
         // Mock Lucide Icons (common icons used in generated code)
+        // Icons are stored on window._lucide so user components can freely use the same names
         const createIcon = (path) => ({ className = "", size = 24, ...props }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" 
                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
@@ -4868,174 +5079,179 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
                 {path}
             </svg>
         );
+        window._lucide = {};
         
-        // Common Lucide icons
-        const Plus = createIcon(<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>);
-        const Minus = createIcon(<line x1="5" y1="12" x2="19" y2="12"/>);
-        const X = createIcon(<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>);
-        const Check = createIcon(<polyline points="20 6 9 17 4 12"/>);
-        const Trash2 = createIcon(<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>);
-        const Edit = createIcon(<><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>);
-        const Edit2 = createIcon(<><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></>);
-        const Edit3 = createIcon(<><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></>);
-        const ListTodo = createIcon(<><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></>);
-        const LayoutList = createIcon(<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 4h7"/><path d="M14 9h7"/><path d="M14 15h7"/><path d="M14 20h7"/></>);
-        const LayoutGrid = createIcon(<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></>);
-        const Filter = createIcon(<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>);
-        const Flag = createIcon(<><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></>);
-        const Tag = createIcon(<><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></>);
-        const Hash = createIcon(<><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></>);
-        const Bookmark = createIcon(<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>);
-        const Archive = createIcon(<><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></>);
-        const Target = createIcon(<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></>);
-        const Trophy = createIcon(<><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></>);
-        const Award = createIcon(<><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></>);
-        const Gift = createIcon(<><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></>);
-        const Search = createIcon(<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>);
-        const Menu = createIcon(<><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></>);
-        const Home = createIcon(<><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>);
-        const User = createIcon(<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>);
-        const Settings = createIcon(<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></>);
-        const Heart = createIcon(<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>);
-        const Star = createIcon(<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>);
-        const Calendar = createIcon(<><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>);
-        const Clock = createIcon(<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>);
-        const Mail = createIcon(<><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></>);
-        const Phone = createIcon(<><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></>);
-        const LogOut = createIcon(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>);
-        const LogIn = createIcon(<><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></>);
-        const Sun = createIcon(<><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>);
-        const Moon = createIcon(<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>);
-        const ChevronRight = createIcon(<polyline points="9 18 15 12 9 6"/>);
-        const ChevronLeft = createIcon(<polyline points="15 18 9 12 15 6"/>);
-        const ChevronDown = createIcon(<polyline points="6 9 12 15 18 9"/>);
-        const ChevronUp = createIcon(<polyline points="18 15 12 9 6 15"/>);
-        const ArrowRight = createIcon(<><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>);
-        const ArrowLeft = createIcon(<><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>);
-        const Loader2 = createIcon(<><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></>);
-        const RefreshCw = createIcon(<><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>);
-        const Calculator = createIcon(<><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="8" y2="18"/><line x1="12" y1="18" x2="12" y2="18"/><line x1="16" y1="18" x2="16" y2="18"/><line x1="8" y1="10" x2="16" y2="10"/></>);
-        const Code = createIcon(<><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></>);
-        const Download = createIcon(<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>);
-        const Upload = createIcon(<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>);
-        const Eye = createIcon(<><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>);
-        const EyeOff = createIcon(<><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>);
-        const Lock = createIcon(<><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>);
-        const Unlock = createIcon(<><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></>);
-        const AlertCircle = createIcon(<><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>);
-        const CheckCircle = createIcon(<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>);
-        const BookOpen = createIcon(<><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>);
-        const Book = createIcon(<><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>);
-        const Notebook = createIcon(<><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><rect x="4" y="2" width="16" height="20" rx="2"/></>);
-        const StickyNote = createIcon(<><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/></>);
-        const NotebookPen = createIcon(<><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M18.4 2.6a2.17 2.17 0 0 1 3 3L16 11l-4 1 1-4Z"/></>);
-        const PenLine = createIcon(<><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></>);
-        const Pencil = createIcon(<><line x1="18" y1="2" x2="22" y2="6"/><path d="M7.5 20.5 19 9l-4-4L3.5 16.5 2 22z"/></>);
-        const FilePlus = createIcon(<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></>);
-        const FileMinus = createIcon(<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></>);
-        const FileEdit = createIcon(<><path d="M4 13.5V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2h-5.5"/><polyline points="14 2 14 8 20 8"/><path d="M10.42 12.61a2.1 2.1 0 1 1 2.97 2.97L7.95 21 4 22l.99-3.95 5.43-5.44Z"/></>);
-        const ClipboardList = createIcon(<><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></>);
-        const SquarePen = createIcon(<><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4Z"/></>);
-        const Info = createIcon(<><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></>);
-        const RotateCcw = createIcon(<><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></>);
-        const MousePointer = createIcon(<><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></>);
-        const TrendingUp = createIcon(<><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>);
-        const TrendingDown = createIcon(<><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></>);
-        const Database = createIcon(<><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></>);
-        const Zap = createIcon(<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>);
-        const Play = createIcon(<polygon points="5 3 19 12 5 21 5 3"/>);
-        const Pause = createIcon(<><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>);
-        const SkipForward = createIcon(<><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></>);
-        const SkipBack = createIcon(<><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></>);
-        const Volume2 = createIcon(<><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></>);
-        const VolumeX = createIcon(<><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></>);
-        const FileText = createIcon(<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>);
-        const Folder = createIcon(<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>);
-        const Image = createIcon(<><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>);
-        const Send = createIcon(<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>);
-        const MessageCircle = createIcon(<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>);
-        const Bell = createIcon(<><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>);
-        const Share2 = createIcon(<><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></>);
-        const Copy = createIcon(<><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>);
-        const ExternalLink = createIcon(<><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>);
-        const LinkIcon = createIcon(<><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></>);
-        const Link2 = createIcon(<><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></>);
-        const Globe = createIcon(<><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></>);
-        const MapPin = createIcon(<><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></>);
-        const Briefcase = createIcon(<><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></>);
-        const ShoppingCart = createIcon(<><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></>);
-        const CreditCard = createIcon(<><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></>);
-        const DollarSign = createIcon(<><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></>);
-        const Percent = createIcon(<><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></>);
-        const Layers = createIcon(<><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>);
-        const Box = createIcon(<><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></>);
-        const Package = createIcon(<><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></>);
-        const Truck = createIcon(<><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></>);
-        const Activity = createIcon(<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>);
-        const BarChart = createIcon(<><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></>);
-        const PieChart = createIcon(<><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></>);
-        const Crosshair = createIcon(<><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></>);
-        const Compass = createIcon(<><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></>);
-        const Navigation = createIcon(<polygon points="3 11 22 2 13 21 11 13 3 11"/>);
-        const Bot = createIcon(<><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></>);
-        const Sparkles = createIcon(<><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></>);
-        const Wand2 = createIcon(<><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></>);
-        const Github = createIcon(<><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></>);
-        const Twitter = createIcon(<path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/>);
-        const Linkedin = createIcon(<><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></>);
-        const Instagram = createIcon(<><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></>);
-        const Facebook = createIcon(<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>);
-        const Youtube = createIcon(<><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></>);
-        const Wifi = createIcon(<><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>);
-        const WifiOff = createIcon(<><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>);
-        const Bluetooth = createIcon(<><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/></>);
-        const Battery = createIcon(<><rect x="1" y="6" width="18" height="12" rx="2" ry="2"/><line x1="23" y1="13" x2="23" y2="11"/></>);
-        const BatteryCharging = createIcon(<><path d="M5 18H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3.19M15 6h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-3.19"/><line x1="23" y1="13" x2="23" y2="11"/><polyline points="11 6 7 12 13 12 9 18"/></>);
-        const Printer = createIcon(<><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></>);
-        const Mic = createIcon(<><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>);
-        const MicOff = createIcon(<><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>);
-        const Camera = createIcon(<><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>);
-        const CameraOff = createIcon(<><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34m-7.72-2.06a4 4 0 1 1-5.56-5.56"/></>);
-        const Video = createIcon(<><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></>);
-        const VideoOff = createIcon(<><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></>);
-        const Headphones = createIcon(<><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></>);
-        const Music = createIcon(<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>);
-        const Radio = createIcon(<><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></>);
-        const Tv = createIcon(<><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></>);
-        const Monitor = createIcon(<><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></>);
-        const Smartphone = createIcon(<><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></>);
-        const Tablet = createIcon(<><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></>);
-        const Laptop = createIcon(<><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></>);
-        const Server = createIcon(<><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></>);
-        const HardDrive = createIcon(<><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></>);
-        const Cpu = createIcon(<><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></>);
-        const Terminal = createIcon(<><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></>);
-        const AtSign = createIcon(<><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/></>);
-        const BarChart2 = createIcon(<><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></>);
-        const BarChart3 = createIcon(<><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></>);
-        const LineChart = createIcon(<><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></>);
-        const Repeat = createIcon(<><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></>);
-        const Share = createIcon(<><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></>);
-        const Smile = createIcon(<><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></>);
-        const Frown = createIcon(<><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></>);
-        const MessageSquare = createIcon(<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>);
-        const ThumbsUp = createIcon(<><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></>);
-        const ThumbsDown = createIcon(<><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></>);
-        const Users = createIcon(<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>);
-        const UserPlus = createIcon(<><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></>);
-        const UserMinus = createIcon(<><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></>);
-        const Trash = createIcon(<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>);
-        const Reply = createIcon(<><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></>);
-        const Forward = createIcon(<><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></>);
-        const CornerDownLeft = createIcon(<><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></>);
-        const List = createIcon(<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></>);
-        const ListOrdered = createIcon(<><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></>);
-        const Circle = createIcon(<circle cx="12" cy="12" r="10"/>);
-        const Square = createIcon(<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>);
-        const CheckSquare = createIcon(<><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></>);
-        const XSquare = createIcon(<><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></>);
-        const Clipboard = createIcon(<><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></>);
-        const ClipboardCheck = createIcon(<><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="m9 14 2 2 4-4"/></>);
+        // Common Lucide icons (stored on window._lucide to avoid name collisions)
+        var Plus = window._lucide.Plus = createIcon(<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>);
+        var Minus = createIcon(<line x1="5" y1="12" x2="19" y2="12"/>);
+        var X = createIcon(<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>);
+        var Check = createIcon(<polyline points="20 6 9 17 4 12"/>);
+        var Trash2 = createIcon(<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>);
+        var Edit = createIcon(<><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>);
+        var Edit2 = createIcon(<><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></>);
+        var Edit3 = createIcon(<><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></>);
+        var ListTodo = createIcon(<><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></>);
+        var LayoutList = createIcon(<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 4h7"/><path d="M14 9h7"/><path d="M14 15h7"/><path d="M14 20h7"/></>);
+        var LayoutGrid = createIcon(<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></>);
+        var Filter = createIcon(<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>);
+        var Flag = createIcon(<><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></>);
+        var Tag = createIcon(<><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></>);
+        var Hash = createIcon(<><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></>);
+        var Bookmark = createIcon(<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>);
+        var Archive = createIcon(<><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></>);
+        var Target = createIcon(<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></>);
+        var Trophy = createIcon(<><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></>);
+        var Award = createIcon(<><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></>);
+        var Gift = createIcon(<><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></>);
+        var Search = createIcon(<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>);
+        var Menu = createIcon(<><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></>);
+        var Home = createIcon(<><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>);
+        var User = createIcon(<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>);
+        var Settings = createIcon(<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></>);
+        var Heart = createIcon(<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>);
+        var Star = createIcon(<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>);
+        var Calendar = createIcon(<><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>);
+        var Clock = createIcon(<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>);
+        var Mail = createIcon(<><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></>);
+        var Phone = createIcon(<><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></>);
+        var LogOut = createIcon(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>);
+        var LogIn = createIcon(<><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></>);
+        var Sun = createIcon(<><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>);
+        var Moon = createIcon(<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>);
+        var ChevronRight = createIcon(<polyline points="9 18 15 12 9 6"/>);
+        var ChevronLeft = createIcon(<polyline points="15 18 9 12 15 6"/>);
+        var ChevronDown = createIcon(<polyline points="6 9 12 15 18 9"/>);
+        var ChevronUp = createIcon(<polyline points="18 15 12 9 6 15"/>);
+        var ArrowRight = createIcon(<><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>);
+        var ArrowLeft = createIcon(<><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>);
+        var Loader2 = createIcon(<><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></>);
+        var Loader = Loader2;
+        var Spinner = Loader2;
+        // Explicitly expose on window - generated code often uses Loader/Spinner after import stripping
+        window.Loader = Loader; window.Loader2 = Loader2; window.Spinner = Spinner;
+        var RefreshCw = createIcon(<><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>);
+        var Calculator = createIcon(<><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="8" y2="18"/><line x1="12" y1="18" x2="12" y2="18"/><line x1="16" y1="18" x2="16" y2="18"/><line x1="8" y1="10" x2="16" y2="10"/></>);
+        var Code = createIcon(<><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></>);
+        var Download = createIcon(<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>);
+        var Upload = createIcon(<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>);
+        var Eye = createIcon(<><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>);
+        var EyeOff = createIcon(<><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>);
+        var Lock = createIcon(<><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>);
+        var Unlock = createIcon(<><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></>);
+        var AlertCircle = createIcon(<><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>);
+        var CheckCircle = createIcon(<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>);
+        var BookOpen = createIcon(<><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>);
+        var Book = createIcon(<><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>);
+        var Notebook = createIcon(<><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><rect x="4" y="2" width="16" height="20" rx="2"/></>);
+        var StickyNote = createIcon(<><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/></>);
+        var NotebookPen = createIcon(<><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M18.4 2.6a2.17 2.17 0 0 1 3 3L16 11l-4 1 1-4Z"/></>);
+        var PenLine = createIcon(<><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></>);
+        var Pencil = createIcon(<><line x1="18" y1="2" x2="22" y2="6"/><path d="M7.5 20.5 19 9l-4-4L3.5 16.5 2 22z"/></>);
+        var FilePlus = createIcon(<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></>);
+        var FileMinus = createIcon(<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></>);
+        var FileEdit = createIcon(<><path d="M4 13.5V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2h-5.5"/><polyline points="14 2 14 8 20 8"/><path d="M10.42 12.61a2.1 2.1 0 1 1 2.97 2.97L7.95 21 4 22l.99-3.95 5.43-5.44Z"/></>);
+        var ClipboardList = createIcon(<><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></>);
+        var SquarePen = createIcon(<><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4Z"/></>);
+        var Info = createIcon(<><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></>);
+        var RotateCcw = createIcon(<><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></>);
+        var MousePointer = createIcon(<><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></>);
+        var TrendingUp = createIcon(<><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>);
+        var TrendingDown = createIcon(<><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></>);
+        var Database = createIcon(<><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></>);
+        var Zap = createIcon(<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>);
+        var Play = createIcon(<polygon points="5 3 19 12 5 21 5 3"/>);
+        var Pause = createIcon(<><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>);
+        var SkipForward = createIcon(<><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></>);
+        var SkipBack = createIcon(<><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></>);
+        var Volume2 = createIcon(<><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></>);
+        var VolumeX = createIcon(<><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></>);
+        var FileText = createIcon(<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>);
+        var Folder = createIcon(<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>);
+        var Image = createIcon(<><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>);
+        var Send = createIcon(<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>);
+        var MessageCircle = createIcon(<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>);
+        var Bell = createIcon(<><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>);
+        var Share2 = createIcon(<><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></>);
+        var Copy = createIcon(<><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>);
+        var ExternalLink = createIcon(<><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>);
+        var LinkIcon = createIcon(<><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></>);
+        var Link2 = createIcon(<><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></>);
+        var Globe = createIcon(<><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></>);
+        var MapPin = createIcon(<><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></>);
+        var Briefcase = createIcon(<><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></>);
+        var ShoppingCart = createIcon(<><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></>);
+        var CreditCard = createIcon(<><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></>);
+        var DollarSign = createIcon(<><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></>);
+        var Percent = createIcon(<><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></>);
+        var Layers = createIcon(<><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>);
+        var Box = createIcon(<><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></>);
+        var Package = createIcon(<><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></>);
+        var Truck = createIcon(<><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></>);
+        var Activity = createIcon(<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>);
+        var BarChart = createIcon(<><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></>);
+        var PieChart = createIcon(<><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></>);
+        var Crosshair = createIcon(<><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></>);
+        var Compass = createIcon(<><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></>);
+        var Navigation = createIcon(<polygon points="3 11 22 2 13 21 11 13 3 11"/>);
+        var Bot = createIcon(<><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></>);
+        var Sparkles = createIcon(<><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></>);
+        var Wand2 = createIcon(<><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></>);
+        var Github = createIcon(<><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></>);
+        var Twitter = createIcon(<path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/>);
+        var Linkedin = createIcon(<><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></>);
+        var Instagram = createIcon(<><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></>);
+        var Facebook = createIcon(<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>);
+        var Youtube = createIcon(<><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></>);
+        var Wifi = createIcon(<><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>);
+        var WifiOff = createIcon(<><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>);
+        var Bluetooth = createIcon(<><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/></>);
+        var Battery = createIcon(<><rect x="1" y="6" width="18" height="12" rx="2" ry="2"/><line x1="23" y1="13" x2="23" y2="11"/></>);
+        var BatteryCharging = createIcon(<><path d="M5 18H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3.19M15 6h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-3.19"/><line x1="23" y1="13" x2="23" y2="11"/><polyline points="11 6 7 12 13 12 9 18"/></>);
+        var Printer = createIcon(<><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></>);
+        var Mic = createIcon(<><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>);
+        var MicOff = createIcon(<><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>);
+        var Camera = createIcon(<><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>);
+        var CameraOff = createIcon(<><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34m-7.72-2.06a4 4 0 1 1-5.56-5.56"/></>);
+        var Video = createIcon(<><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></>);
+        var VideoOff = createIcon(<><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></>);
+        var Headphones = createIcon(<><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></>);
+        var Music = createIcon(<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>);
+        var Radio = createIcon(<><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></>);
+        var Tv = createIcon(<><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></>);
+        var Monitor = createIcon(<><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></>);
+        var Smartphone = createIcon(<><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></>);
+        var Tablet = createIcon(<><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></>);
+        var Laptop = createIcon(<><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></>);
+        var Server = createIcon(<><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></>);
+        var HardDrive = createIcon(<><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></>);
+        var Cpu = createIcon(<><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></>);
+        var Terminal = createIcon(<><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></>);
+        var AtSign = createIcon(<><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/></>);
+        var BarChart2 = createIcon(<><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></>);
+        var BarChart3 = createIcon(<><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></>);
+        var LineChart = createIcon(<><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></>);
+        var Repeat = createIcon(<><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></>);
+        var Share = createIcon(<><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></>);
+        var Smile = createIcon(<><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></>);
+        var Frown = createIcon(<><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></>);
+        var MessageSquare = createIcon(<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>);
+        var ThumbsUp = createIcon(<><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></>);
+        var ThumbsDown = createIcon(<><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></>);
+        var Users = createIcon(<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>);
+        var UserPlus = createIcon(<><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></>);
+        var UserMinus = createIcon(<><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></>);
+        var Trash = createIcon(<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>);
+        var Reply = createIcon(<><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></>);
+        var Forward = createIcon(<><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></>);
+        var CornerDownLeft = createIcon(<><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></>);
+        var List = createIcon(<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></>);
+        var ListOrdered = createIcon(<><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></>);
+        var Circle = createIcon(<circle cx="12" cy="12" r="10"/>);
+        var Square = createIcon(<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>);
+        var CheckSquare = createIcon(<><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></>);
+        var XSquare = createIcon(<><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></>);
+        var Clipboard = createIcon(<><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></>);
+        var ClipboardCheck = createIcon(<><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="m9 14 2 2 4-4"/></>);
         
         // Generic Icon component - handles various icon libraries
         // This prevents "Icon is not defined" errors
@@ -5090,6 +5306,9 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
                 'check-circle': CheckCircle,
                 'info': Info,
                 'refresh': RefreshCw,
+                'loader': Loader2,
+                'loader2': Loader2,
+                'spinner': Loader2,
                 'calculator': Calculator,
                 'zap': Zap,
                 'play': Play,
@@ -5275,75 +5494,55 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
                 });
             }
             
+            componentDidMount() {
+                try { window.parent.postMessage({ type: 'preview-ok' }, '*'); } catch(e) {}
+            }
+
             render() {
                 if (this.state.hasError) {
                     const errorMessage = this.state.error?.message || 'Unknown error';
                     const errorStack = this.state.error?.stack || '';
+                    const title = this.state.syntaxError ? 'Syntax Error' : 'Runtime Error';
                     
+                    try { window.parent.postMessage({ type: 'preview-error', error: errorMessage }, '*'); } catch(e) {}
+
                     return (
-                        <div className="error-boundary" style={{ padding: '20px', maxWidth: '100%', overflow: 'auto' }}>
-                            <h3 className="font-semibold mb-2" style={{ color: '#dc2626', marginBottom: '10px' }}>
-                                {this.state.syntaxError ? '⚠️ Syntax Error Detected' : '❌ Something went wrong'}
-                            </h3>
-                            <div style={{ marginBottom: '10px' }}>
-                                <strong>Error:</strong>
-                                <pre className="text-sm overflow-auto" style={{ 
-                                    background: '#f3f4f6', 
-                                    padding: '10px', 
-                                    borderRadius: '4px',
-                                    marginTop: '5px',
-                                    whiteSpace: 'pre-wrap',
-                                    wordBreak: 'break-word'
+                        <div className="error-boundary" style={{ fontFamily: 'Inter, system-ui, sans-serif', maxWidth: '720px', margin: '40px auto', padding: '24px' }}>
+                            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '24px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                                    <span style={{ fontSize: '24px' }}>{this.state.syntaxError ? '\u26A0\uFE0F' : '\u274C'}</span>
+                                    <h3 style={{ color: '#dc2626', margin: 0, fontSize: '18px', fontWeight: 600 }}>{title}</h3>
+                                </div>
+                                <pre style={{ 
+                                    background: '#fff', border: '1px solid #fecaca', padding: '16px', borderRadius: '8px',
+                                    overflowX: 'auto', fontSize: '13px', lineHeight: '1.5', color: '#b91c1c',
+                                    whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0
                                 }}>
                                     {errorMessage}
                                 </pre>
+                                {errorStack && (
+                                    <details style={{ marginTop: '12px' }}>
+                                        <summary style={{ cursor: 'pointer', color: '#6b7280', fontSize: '13px' }}>Stack Trace</summary>
+                                        <pre style={{ 
+                                            background: '#f9fafb', padding: '12px', borderRadius: '6px',
+                                            fontSize: '11px', lineHeight: '1.4', overflowX: 'auto', marginTop: '8px',
+                                            whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#6b7280',
+                                            maxHeight: '240px', overflowY: 'auto'
+                                        }}>
+                                            {errorStack}
+                                        </pre>
+                                    </details>
+                                )}
+                                <p style={{ marginTop: '16px', color: '#9ca3af', fontSize: '12px' }}>
+                                    This error is in the generated code. Use the chat to describe the issue and regenerate.
+                                </p>
                             </div>
-                            {errorStack && (
-                                <details style={{ marginTop: '10px' }}>
-                                    <summary style={{ cursor: 'pointer', color: '#6b7280' }}>Stack Trace</summary>
-                                    <pre className="text-xs overflow-auto" style={{ 
-                                        background: '#f3f4f6', 
-                                        padding: '10px', 
-                                        borderRadius: '4px',
-                                        marginTop: '5px',
-                                        maxHeight: '200px',
-                                        overflow: 'auto',
-                                        whiteSpace: 'pre-wrap',
-                                        wordBreak: 'break-word'
-                                    }}>
-                                        {errorStack}
-                                    </pre>
-                                </details>
-                            )}
-                            {this.state.syntaxError && (
-                                <div style={{ marginTop: '10px', padding: '10px', background: '#fef3c7', borderRadius: '4px' }}>
-                                    <p style={{ fontSize: '12px', color: '#92400e' }}>
-                                        💡 <strong>Tip:</strong> This looks like a syntax error. Check for:
-                                        <ul style={{ marginTop: '5px', marginLeft: '20px' }}>
-                                            <li>Undefined variables or components</li>
-                                            <li>Missing imports</li>
-                                            <li>Typos in component names</li>
-                                            <li>Missing closing brackets or parentheses</li>
-                                        </ul>
-                                    </p>
-                                </div>
-                            )}
                         </div>
                     );
                 }
                 return this.props.children;
             }
         }
-        
-        // Global error handler for uncaught errors
-        window.addEventListener('error', (event) => {
-            console.error('Global error caught:', event.error);
-        });
-        
-        // Global unhandled promise rejection handler
-        window.addEventListener('unhandledrejection', (event) => {
-            console.error('Unhandled promise rejection:', event.reason);
-        });
         
         // User's Generated Components and Code
         """ + all_code + """
@@ -5360,17 +5559,7 @@ def generate_preview_html_multifile(files: list, supabase_config: dict = None) -
             );
         } catch (error) {
             console.error('Failed to render app:', error);
-            container.innerHTML = `
-                <div class="error-boundary" style="padding: 20px;">
-                    <h3 style="color: #dc2626; margin-bottom: 10px;">❌ Failed to Render App</h3>
-                    <pre style="background: #f3f4f6; padding: 10px; border-radius: 4px; overflow: auto;">
-                        ${error.message || 'Unknown rendering error'}
-                    </pre>
-                    <p style="margin-top: 10px; color: #6b7280; font-size: 12px;">
-                        Check the browser console for more details.
-                    </p>
-                </div>
-            `;
+            _showError('Render Error', error.message, error.stack);
         }
     </script>
 </body>
